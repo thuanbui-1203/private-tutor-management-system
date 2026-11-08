@@ -111,7 +111,8 @@ package "schedule_db" #FFF5F5 {
     * date : DATE
     * start_time : TIME
     * end_time : TIME
-    * status : ENUM(SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, RESCHEDULED)
+    * status : ENUM(SCHEDULED, IN_PROGRESS, COMPLETED,
+ CANCELLED, RESCHEDULED, MISSED)
     makeup_of : UUID <<FK sessions>>
   }
   entity attendances {
