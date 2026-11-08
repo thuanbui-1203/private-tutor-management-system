@@ -1,0 +1,137 @@
+@startuml 09-state-student
+' State diagram - Vòng đời học sinh trong hệ thống
+' Bỏ dòng pragma nếu máy đã cài Graphviz
+!pragma layout smetana
+title State Diagram - Vòng đời Học sinh (Student Service)
+
+[*] --> ACTIVE : Giáo viên tạo hồ sơ\n/ publish StudentCreated
+
+state ACTIVE {
+  [*] --> ChuaGhiDanh
+  ChuaGhiDanh : Chưa thuộc lớp nào
+  DangHoc : Có >= 1 enrollment ACTIVE
+  ChuaGhiDanh --> DangHoc : StudentEnrolled
+  DangHoc --> ChuaGhiDanh : StudentWithdrawn\n[không còn lớp nào]
+}
+
+ACTIVE --> PAUSED : Tạm nghỉ (ốm, thi cử...)\n/ tạm dừng mọi enrollment
+PAUSED --> ACTIVE : Học lại
+ACTIVE --> GRADUATED : Hoàn thành mục tiêu\n/ rút khỏi mọi lớp
+ACTIVE --> DROPPED : Nghỉ học
+PAUSED --> DROPPED : Nghỉ quá 60 ngày\n(job tự động)
+
+GRADUATED --> [*]
+DROPPED --> ACTIVE : Quay lại học
+DROPPED --> [*] : Xóa / ẩn danh dữ liệu\n(sau khi tất toán công nợ)
+
+note right of DROPPED
+  Không cho xóa nếu còn
+  hóa đơn ISSUED / OVERDUE
+end note
+@enduml
+
+@startuml 09-state-enrollment
+' Bỏ dòng pragma nếu máy đã cài Graphviz
+!pragma layout smetana
+title State Diagram - Vòng đời Ghi danh (Class Service)
+
+[*] --> PENDING : POST /enrollments\n[Student Service chưa xác nhận]
+[*] --> ACTIVE : POST /enrollments\n[học sinh hợp lệ]
+
+PENDING --> ACTIVE : Xác nhận học sinh hợp lệ\n/ publish StudentEnrolled
+PENDING --> REJECTED : Học sinh không hợp lệ\nhoặc timeout đối soát
+
+ACTIVE --> PAUSED : Học sinh tạm nghỉ
+PAUSED --> ACTIVE : Học lại
+ACTIVE --> REJECTED : EnrollmentSyncFailed\n(giao dịch bù trừ)
+ACTIVE --> WITHDRAWN : Rút khỏi lớp / lớp đóng\n/ publish StudentWithdrawn
+PAUSED --> WITHDRAWN : Rút khỏi lớp
+
+REJECTED --> [*]
+WITHDRAWN --> [*]
+@enduml
+
+@startuml 09-state-session
+' Bỏ dòng pragma nếu máy đã cài Graphviz
+!pragma layout smetana
+title State Diagram - Vòng đời Buổi học (Schedule & Attendance Service)
+
+[*] --> SCHEDULED : Sinh từ lịch lặp / tạo buổi bù\n/ publish SessionScheduled
+
+SCHEDULED --> IN_PROGRESS : Giáo viên mở buổi\n[trong khung giờ học]
+SCHEDULED --> CANCELLED : Hủy buổi\n/ publish SessionCancelled
+SCHEDULED --> RESCHEDULED : Dời buổi\n/ tạo session mới (makeup_of)
+
+IN_PROGRESS --> COMPLETED : Lưu điểm danh\n/ publish AttendanceRecorded
+IN_PROGRESS --> CANCELLED : Hủy giữa chừng
+
+COMPLETED --> COMPLETED : Sửa điểm danh (<= 48h)\n/ publish AttendanceCorrected
+
+SCHEDULED --> MISSED : Quá giờ kết thúc + 24h\nmà chưa điểm danh (job)
+MISSED --> COMPLETED : Điểm danh bổ sung
+MISSED --> CANCELLED : Xác nhận không dạy
+
+CANCELLED --> [*]
+RESCHEDULED --> [*]
+COMPLETED --> [*]
+@enduml
+
+@startuml 09-state-invoice
+' Bỏ dòng pragma nếu máy đã cài Graphviz
+!pragma layout smetana
+title State Diagram - Vòng đời Hóa đơn (Billing Service)
+
+[*] --> DRAFT : AttendanceRecorded đầu tiên trong tháng\nhoặc tạo hóa đơn MONTHLY
+
+DRAFT --> DRAFT : Thêm / điều chỉnh invoice_item
+DRAFT --> ISSUED : Cron ngày 1 chốt hóa đơn\n/ publish InvoiceIssued
+DRAFT --> VOID : Không phát sinh phí (total = 0)
+
+ISSUED --> PARTIALLY_PAID : Thanh toán < total\n/ publish PaymentReceived
+ISSUED --> PAID : Thanh toán đủ\n/ publish PaymentReceived
+ISSUED --> OVERDUE : Quá due_date\n/ nhắc phí
+ISSUED --> VOID : Hủy do sai sót\n/ phát hành hóa đơn thay thế
+
+PARTIALLY_PAID --> PAID : Thanh toán phần còn lại
+PARTIALLY_PAID --> OVERDUE : Quá due_date
+
+OVERDUE --> PARTIALLY_PAID : Thanh toán một phần
+OVERDUE --> PAID : Thanh toán đủ
+
+PAID --> [*]
+VOID --> [*]
+@enduml
+
+@startuml 09-state-service-runtime
+' Bỏ dòng pragma nếu máy đã cài Graphviz
+!pragma layout smetana
+title State Diagram - Vòng đời runtime của một Microservice (container)
+
+[*] --> Starting : docker compose up
+
+state Starting {
+  [*] --> LoadConfig
+  LoadConfig --> ConnectDB : đọc env / secrets
+  ConnectDB --> RunMigrations
+  RunMigrations --> ConnectBroker
+  ConnectBroker --> [*] : declare exchange / queue
+}
+
+Starting --> Healthy : /health/ready = 200
+Starting --> Failed : Lỗi kết nối DB / broker\nsau N lần retry
+
+Healthy --> Degraded : Dependency lỗi\n(circuit breaker OPEN,\nbroker mất kết nối)
+Degraded --> Healthy : Dependency phục hồi\n(circuit HALF_OPEN -> CLOSED)
+Degraded --> Failed : /health/live fail
+
+Failed --> Starting : Docker restart policy\n(on-failure)
+
+Healthy --> Draining : SIGTERM (deploy / scale down)
+Degraded --> Draining : SIGTERM
+Draining : Ngừng nhận request mới
+Draining : Hoàn tất request đang xử lý
+Draining : Ngừng consume, ack message dở
+Draining --> Stopped : Hết request / timeout 30s
+
+Stopped --> [*]
+@enduml

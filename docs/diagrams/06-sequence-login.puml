@@ -1,0 +1,54 @@
+@startuml 06-sequence-login
+' Sequence diagram - Đăng nhập và gọi API có xác thực
+title Sequence Diagram - Đăng nhập và gọi API có xác thực (JWT)
+autonumber
+skinparam responseMessageBelowArrow true
+
+actor "Giáo viên" as U
+participant "Web App" as Web
+participant "API Gateway" as GW
+participant "Identity Service" as Id
+database "identity_db" as IdDB
+participant "Student Service" as St
+database "student_db" as StDB
+
+== Đăng nhập ==
+U -> Web : Nhập email + mật khẩu
+Web -> GW : POST /auth/login
+GW -> Id : POST /auth/login
+Id -> IdDB : SELECT user WHERE email
+IdDB --> Id : user (password_hash, role, status)
+alt Sai mật khẩu hoặc tài khoản LOCKED
+  Id --> GW : 401 Unauthorized
+  GW --> Web : 401
+  Web --> U : "Sai thông tin đăng nhập"
+else Hợp lệ
+  Id -> Id : Ký access token (RS256, 15 phút)\nclaims: sub, role
+  Id -> IdDB : INSERT refresh_tokens (7 ngày)
+  Id --> GW : 200 {accessToken, refreshToken}
+  GW --> Web : 200
+  Web -> Web : Lưu accessToken (memory)\nrefreshToken (httpOnly cookie)
+  Web --> U : Vào Dashboard
+end
+
+== Gọi API nghiệp vụ ==
+U -> Web : Mở "Danh sách học sinh"
+Web -> GW : GET /students\nAuthorization: Bearer <token>
+GW -> GW : Verify chữ ký JWT bằng public key\n(cache JWKS từ Identity)
+alt Token hết hạn
+  GW --> Web : 401 token_expired
+  Web -> GW : POST /auth/refresh (cookie)
+  GW -> Id : POST /auth/refresh
+  Id -> IdDB : Kiểm tra & xoay vòng refresh token
+  Id --> GW : 200 {accessToken mới}
+  GW --> Web : 200
+  Web -> GW : GET /students (retry với token mới)
+end
+GW -> St : GET /students\nX-User-Id, X-User-Role, X-Correlation-Id
+St -> StDB : SELECT * FROM students\nWHERE tutor_id = :userId
+StDB --> St : rows
+St --> GW : 200 [students]
+GW --> Web : 200 [students]
+Web --> U : Hiển thị danh sách
+
+@enduml

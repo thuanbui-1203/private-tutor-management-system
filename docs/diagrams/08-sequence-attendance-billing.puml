@@ -1,0 +1,77 @@
+@startuml 08-sequence-attendance-billing
+' Sequence diagram - Điểm danh -> Billing -> Notification (Outbox + Idempotency)
+title Sequence Diagram - Điểm danh và tính học phí (Outbox + Idempotent consumer)
+autonumber
+skinparam responseMessageBelowArrow true
+
+actor "Giáo viên" as U
+participant "API Gateway" as GW
+participant "Schedule & Attendance" as Sc
+database "schedule_db" as ScDB
+participant "Outbox Relay" as Relay
+queue "RabbitMQ\ntms.events" as MQ
+participant "Billing Service" as Bi
+database "billing_db" as BiDB
+participant "Academic Service" as Ac
+participant "Notification Service" as No
+actor "Phụ huynh" as P
+
+U -> GW : POST /sessions/{id}/attendance\n[{studentId, status}]
+GW -> Sc : forward
+Sc -> ScDB : SELECT session (status, tutor_id)
+alt Session đã COMPLETED / CANCELLED
+  Sc --> GW : 409 Conflict
+  GW --> U : "Buổi học đã đóng"
+else Hợp lệ
+  Sc -> ScDB : BEGIN
+  Sc -> ScDB : INSERT attendances
+  Sc -> ScDB : UPDATE session.status = COMPLETED
+  Sc -> ScDB : INSERT outbox_events (AttendanceRecorded x N)
+  Sc -> ScDB : COMMIT
+  Sc --> GW : 200 OK
+  GW --> U : "Đã lưu điểm danh"
+end
+
+== Outbox relay (poll mỗi 1s) ==
+Relay -> ScDB : SELECT outbox WHERE published_at IS NULL
+Relay -> MQ : publish AttendanceRecorded\n(routing key: attendance.recorded)
+MQ --> Relay : ack (publisher confirm)
+Relay -> ScDB : UPDATE published_at = now()
+
+== Consumer: Billing ==
+MQ -> Bi : AttendanceRecorded {eventId, sessionId,\nstudentId, classId, status, date}
+Bi -> BiDB : SELECT processed_events WHERE event_id
+alt Đã xử lý (event gửi lại)
+  Bi --> MQ : ack (bỏ qua)
+else Chưa xử lý
+  Bi -> BiDB : SELECT fee_policies WHERE class_id
+  Bi -> BiDB : BEGIN
+  opt fee_type = PER_SESSION và status != EXCUSED
+    Bi -> BiDB : UPSERT invoice DRAFT (student_id, period)
+    Bi -> BiDB : INSERT invoice_item (session_id, amount)
+    Bi -> BiDB : UPDATE invoice.total
+  end
+  Bi -> BiDB : INSERT processed_events(event_id)
+  Bi -> BiDB : COMMIT
+  Bi --> MQ : ack
+end
+
+== Các consumer khác (song song) ==
+MQ -> Ac : AttendanceRecorded
+Ac -> Ac : Tạo form nhận xét
+MQ -> No : AttendanceRecorded
+opt status = ABSENT
+  No -> P : SMS/Email "Con vắng buổi học hôm nay"
+end
+
+== Chốt hóa đơn cuối tháng ==
+Bi -> Bi : Cron 00:00 ngày 1
+Bi -> BiDB : UPDATE invoices DRAFT -> ISSUED\n+ INSERT outbox InvoiceIssued
+Bi -> MQ : publish InvoiceIssued (qua relay)
+MQ -> No : InvoiceIssued
+No -> P : Email hóa đơn tháng
+alt Gửi lỗi 3 lần
+  No -> MQ : nack -> Dead Letter Queue
+end
+
+@enduml

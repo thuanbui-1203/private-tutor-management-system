@@ -1,0 +1,65 @@
+@startuml 05-activity-schedule
+' Activity diagram - Thiết lập lịch lặp và sinh buổi học
+title Activity Diagram - Thiết lập lịch học lặp và sinh buổi học
+
+|Giáo viên|
+start
+:Chọn lớp học;
+:Nhập lịch lặp
+(thứ trong tuần, giờ bắt đầu - kết thúc,
+từ ngày - đến ngày);
+
+|Schedule & Attendance Service|
+:Validate dữ liệu
+(start < end, from_date >= hôm nay);
+if (Hợp lệ?) then (có)
+else (không)
+  |Giáo viên|
+  :Hiển thị lỗi nhập liệu;
+  stop
+endif
+
+|Schedule & Attendance Service|
+:Gọi Class Service: lớp tồn tại & OPEN?;
+if (Lớp hợp lệ?) then (có)
+else (không)
+  |Giáo viên|
+  :Báo "Lớp không tồn tại / đã đóng";
+  stop
+endif
+
+|Schedule & Attendance Service|
+:Sinh danh sách buổi dự kiến
+từ from_date đến to_date (tối đa 3 tháng);
+:Kiểm tra trùng lịch với các session
+khác của cùng tutor_id;
+
+if (Có buổi bị trùng?) then (có)
+  |Giáo viên|
+  :Xem danh sách buổi trùng;
+  if (Lựa chọn?) then (bỏ qua buổi trùng)
+    |Schedule & Attendance Service|
+    :Loại các buổi trùng khỏi danh sách;
+  else (hủy thao tác)
+    stop
+  endif
+else (không)
+endif
+
+|Schedule & Attendance Service|
+:BEGIN TRANSACTION;
+:Lưu schedules;
+:Lưu sessions (status = SCHEDULED);
+:Ghi outbox: SessionScheduled (mỗi buổi);
+:COMMIT;
+
+|Notification Service|
+:Nhận SessionScheduled;
+:Tạo delayed job trong Redis
+(nhắc trước 1 giờ);
+
+|Giáo viên|
+:Xem lịch tuần / tháng đã cập nhật;
+stop
+
+@enduml

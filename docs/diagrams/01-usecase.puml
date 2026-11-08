@@ -1,0 +1,119 @@
+@startuml 01-usecase
+' Use-case diagram - Hệ thống quản lý học sinh cho gia sư
+' Bỏ dòng pragma nếu máy đã cài Graphviz
+!pragma layout smetana
+title Use-case Diagram - Hệ thống quản lý học sinh cho gia sư
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+skinparam usecase {
+  BackgroundColor #F5F9FF
+  BorderColor #3A6EA5
+}
+
+actor "Admin\n(Chủ trung tâm)" as Admin
+actor "Giáo viên\n(Tutor)" as Tutor
+actor "Phụ huynh" as Parent
+actor "Học sinh" as Learner
+actor "Hệ thống lịch\n(Scheduler)" as Cron <<system>>
+actor "Email / SMS\nProvider" as Mail <<external>>
+
+rectangle "Tutor Management System" {
+
+  package "Identity " as PkgIdentity {
+    usecase "Đăng nhập" as UC_Login
+    usecase "Đăng ký / mời tài khoản" as UC_Register
+    usecase "Quản lý giáo viên" as UC_ManageTutor
+  }
+
+  package "Student " as PkgStudent {
+    usecase "Quản lý hồ sơ học sinh" as UC_Student
+    usecase "Liên kết phụ huynh" as UC_LinkParent
+  }
+
+  package "Class " as PkgClass {
+    usecase "Tạo / sửa lớp học" as UC_Class
+    usecase "Ghi danh học sinh vào lớp" as UC_Enroll
+    usecase "Rút học sinh khỏi lớp" as UC_Withdraw
+  }
+
+  package "Schedule & Attendance " as PkgSchedule {
+    usecase "Thiết lập lịch lặp" as UC_Schedule
+    usecase "Kiểm tra trùng lịch" as UC_Conflict
+    usecase "Hủy / dạy bù buổi học" as UC_Reschedule
+    usecase "Điểm danh buổi học" as UC_Attendance
+    usecase "Xem lịch học" as UC_ViewSchedule
+  }
+
+  package "Academic " as PkgAcademic {
+    usecase "Giao bài tập" as UC_Assign
+    usecase "Nhập điểm" as UC_Grade
+    usecase "Nhận xét buổi học" as UC_Feedback
+    usecase "Xem điểm & tiến độ" as UC_ViewProgress
+  }
+
+  package "Billing " as PkgBilling {
+    usecase "Cấu hình học phí" as UC_Fee
+    usecase "Chốt hóa đơn tháng" as UC_Invoice
+    usecase "Ghi nhận thanh toán" as UC_Payment
+    usecase "Xem hóa đơn / công nợ" as UC_ViewInvoice
+    usecase "Báo cáo doanh thu" as UC_Revenue
+  }
+
+  package "Notification " as PkgNotification {
+    usecase "Nhắc lịch học" as UC_Remind
+    usecase "Nhắc đóng học phí" as UC_RemindFee
+    usecase "Gửi báo cáo tháng" as UC_Report
+  }
+}
+
+' --- Admin
+Admin --> UC_ManageTutor
+Admin --> UC_Revenue
+Admin --> UC_Login
+
+' --- Tutor
+Tutor --> UC_Login
+Tutor --> UC_Student
+Tutor --> UC_LinkParent
+Tutor --> UC_Class
+Tutor --> UC_Enroll
+Tutor --> UC_Withdraw
+Tutor --> UC_Schedule
+Tutor --> UC_Reschedule
+Tutor --> UC_Attendance
+Tutor --> UC_Assign
+Tutor --> UC_Grade
+Tutor --> UC_Feedback
+Tutor --> UC_Fee
+Tutor --> UC_Payment
+
+' --- Parent
+Parent --> UC_Login
+Parent --> UC_ViewSchedule
+Parent --> UC_ViewProgress
+Parent --> UC_ViewInvoice
+
+' --- Student
+Learner --> UC_Login
+Learner --> UC_ViewSchedule
+Learner --> UC_ViewProgress
+
+' --- System actors
+Cron --> UC_Invoice
+Cron --> UC_Remind
+Cron --> UC_RemindFee
+Cron --> UC_Report
+UC_Remind --> Mail
+UC_RemindFee --> Mail
+UC_Report --> Mail
+
+' --- include / extend
+UC_Schedule ..> UC_Conflict : <<include>>
+UC_Reschedule ..> UC_Conflict : <<include>>
+UC_Register ..> UC_LinkParent : <<extend>>
+UC_Attendance ..> UC_Feedback : <<extend>>
+UC_Payment ..> UC_ViewInvoice : <<include>>
+UC_Invoice ..> UC_RemindFee : <<extend>>
+
+@enduml

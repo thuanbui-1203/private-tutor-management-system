@@ -1,0 +1,84 @@
+@startuml 04-activity-attendance-billing
+' Activity diagram - Luồng điểm danh -> tính học phí -> thông báo
+title Activity Diagram - Điểm danh buổi học và tính học phí
+
+|Giáo viên|
+start
+:Mở buổi học hôm nay;
+
+|Schedule & Attendance Service|
+:Kiểm tra session.status;
+if (status = SCHEDULED hoặc IN_PROGRESS?) then (có)
+  :Lấy danh sách học sinh
+  (class_roster_view, fallback gọi Class Service);
+else (không)
+  :Trả lỗi "Buổi học đã đóng / bị hủy";
+  stop
+endif
+
+|Giáo viên|
+:Chọn trạng thái cho từng học sinh
+(PRESENT / LATE / EXCUSED / ABSENT);
+:Bấm "Lưu điểm danh";
+
+|Schedule & Attendance Service|
+:BEGIN TRANSACTION;
+:Lưu attendances;
+:Cập nhật session.status = COMPLETED;
+:Ghi outbox: AttendanceRecorded (mỗi học sinh một event);
+:COMMIT;
+:Outbox relay publish lên RabbitMQ;
+
+fork
+  |Billing Service|
+  :Nhận AttendanceRecorded;
+  if (event_id đã xử lý?) then (rồi)
+    :Bỏ qua (idempotent);
+  else (chưa)
+    :Đọc fee_policies theo class_id;
+    if (fee_type = PER_SESSION?) then (có)
+      if (status ∈ {PRESENT, LATE, ABSENT}?) then (tính phí)
+        :Tìm/tạo invoice DRAFT
+        (student_id, period hiện tại);
+        :Thêm invoice_item (session_id, fee_amount);
+        :Cập nhật invoice.total;
+      else (EXCUSED)
+        :Không tính phí;
+      endif
+    else (MONTHLY)
+      :Chỉ ghi nhận thống kê chuyên cần;
+    endif
+    :Lưu processed_events;
+  endif
+fork again
+  |Academic Service|
+  :Nhận AttendanceRecorded;
+  :Tạo form nhận xét trống cho học sinh có mặt;
+fork again
+  |Notification Service|
+  :Nhận AttendanceRecorded;
+  if (status = ABSENT?) then (có)
+    :Gửi tin báo vắng cho phụ huynh;
+  endif
+end fork
+
+|Billing Service|
+:Cuối tháng (cron ngày 1);
+:Chốt các invoice DRAFT -> ISSUED;
+:Ghi outbox: InvoiceIssued;
+
+|Notification Service|
+:Nhận InvoiceIssued;
+:Gửi email hóa đơn cho phụ huynh;
+if (Gửi thành công?) then (có)
+  :notifications.status = SENT;
+else (không)
+  :Retry (tối đa 3 lần, backoff);
+  if (vẫn lỗi?) then (có)
+    :Đưa vào Dead Letter Queue;
+    :notifications.status = FAILED;
+  endif
+endif
+stop
+
+@enduml

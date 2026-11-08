@@ -1,0 +1,250 @@
+@startuml 03-erd
+' ERD - Database per Service
+' Đường liền: khóa ngoại (FK) thật trong cùng DB
+' Đường nét đứt: tham chiếu logic giữa các service (KHÔNG có FK, đồng bộ qua event)
+' Bỏ dòng pragma nếu máy đã cài Graphviz
+!pragma layout smetana
+title ERD - Tutor Management System (Database per Service)
+hide circle
+hide methods
+skinparam linetype ortho
+skinparam class {
+  BackgroundColor #FFFFFF
+  BorderColor #3A6EA5
+  HeaderBackgroundColor #E3EEFA
+}
+skinparam package {
+  BackgroundColor #FAFAFA
+  BorderColor #999999
+}
+
+package "identity_db" #F5F9FF {
+  entity users {
+    * id : UUID <<PK>>
+    --
+    * email : VARCHAR(255) <<UNIQUE>>
+    * password_hash : VARCHAR(255)
+    * role : ENUM(ADMIN, TUTOR, PARENT, STUDENT)
+    * status : ENUM(ACTIVE, LOCKED, PENDING)
+    created_at : TIMESTAMP
+  }
+  entity refresh_tokens {
+    * id : UUID <<PK>>
+    --
+    * user_id : UUID <<FK>>
+    * token_hash : VARCHAR(255)
+    * expires_at : TIMESTAMP
+    revoked : BOOLEAN
+  }
+  users ||--o{ refresh_tokens
+}
+
+package "student_db" #F5FFF5 {
+  entity parents {
+    * id : UUID <<PK>>
+    --
+    user_id : UUID <<ref users>>
+    * full_name : VARCHAR(100)
+    * phone : VARCHAR(20)
+    email : VARCHAR(255)
+  }
+  entity students {
+    * id : UUID <<PK>>
+    --
+    * tutor_id : UUID <<ref users>>
+    user_id : UUID <<ref users>>
+    parent_id : UUID <<FK>>
+    * full_name : VARCHAR(100)
+    dob : DATE
+    school : VARCHAR(150)
+    grade : SMALLINT
+    note : TEXT
+    * status : ENUM(ACTIVE, PAUSED, GRADUATED, DROPPED)
+  }
+  parents ||--o{ students
+}
+
+package "class_db" #FFFDF0 {
+  entity classes {
+    * id : UUID <<PK>>
+    --
+    * tutor_id : UUID <<ref users>>
+    * name : VARCHAR(100)
+    * subject : VARCHAR(50)
+    * type : ENUM(ONE_ON_ONE, GROUP)
+    max_students : SMALLINT
+    * fee_type : ENUM(PER_SESSION, MONTHLY)
+    * fee_amount : DECIMAL(12,0)
+    * status : ENUM(OPEN, CLOSED)
+  }
+  entity enrollments {
+    * id : UUID <<PK>>
+    --
+    * class_id : UUID <<FK>>
+    * student_id : UUID <<ref students>>
+    * status : ENUM(PENDING, ACTIVE, PAUSED, WITHDRAWN, REJECTED)
+    joined_at : DATE
+    left_at : DATE
+    ..
+    UNIQUE(class_id, student_id)
+  }
+  classes ||--o{ enrollments
+}
+
+package "schedule_db" #FFF5F5 {
+  entity schedules {
+    * id : UUID <<PK>>
+    --
+    * class_id : UUID <<ref classes>>
+    * weekday : SMALLINT (1-7)
+    * start_time : TIME
+    * end_time : TIME
+    * from_date : DATE
+    to_date : DATE
+  }
+  entity sessions {
+    * id : UUID <<PK>>
+    --
+    schedule_id : UUID <<FK>>
+    * class_id : UUID <<ref classes>>
+    * tutor_id : UUID <<ref users>>
+    * date : DATE
+    * start_time : TIME
+    * end_time : TIME
+    * status : ENUM(SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, RESCHEDULED)
+    makeup_of : UUID <<FK sessions>>
+  }
+  entity attendances {
+    * session_id : UUID <<PK, FK>>
+    * student_id : UUID <<PK, ref students>>
+    --
+    * status : ENUM(PRESENT, LATE, EXCUSED, ABSENT)
+    note : VARCHAR(255)
+    recorded_at : TIMESTAMP
+  }
+  entity class_roster_view {
+    * class_id : UUID <<PK>>
+    * student_id : UUID <<PK>>
+    --
+    student_name : VARCHAR(100)
+    <i>(bản sao từ event StudentEnrolled)</i>
+  }
+  schedules ||--o{ sessions
+  sessions ||--o{ attendances
+  sessions |o--o| sessions : makeup_of
+}
+
+package "academic_db (MongoDB)" #F8F5FF {
+  entity assignments {
+    * _id : ObjectId <<PK>>
+    --
+    * class_id : UUID <<ref classes>>
+    * title : String
+    description : String
+    * due_date : Date
+    attachments : [String]
+  }
+  entity grades {
+    * _id : ObjectId <<PK>>
+    --
+    * student_id : UUID <<ref students>>
+    * class_id : UUID <<ref classes>>
+    assignment_id : ObjectId <<FK>>
+    * type : ENUM(HOMEWORK, QUIZ, TEST)
+    * score : Decimal (0-10)
+    * date : Date
+  }
+  entity feedbacks {
+    * _id : ObjectId <<PK>>
+    --
+    * session_id : UUID <<ref sessions>>
+    * student_id : UUID <<ref students>>
+    * content : String
+    rating : Int (1-5)
+  }
+  assignments ||--o{ grades
+}
+
+package "billing_db" #FFF8EE {
+  entity fee_policies {
+    * class_id : UUID <<PK, ref classes>>
+    --
+    * fee_type : ENUM(PER_SESSION, MONTHLY)
+    * fee_amount : DECIMAL(12,0)
+    <i>(bản sao từ ClassCreated/Updated)</i>
+  }
+  entity invoices {
+    * id : UUID <<PK>>
+    --
+    * student_id : UUID <<ref students>>
+    * student_name_snapshot : VARCHAR(100)
+    * parent_contact_snapshot : VARCHAR(255)
+    * period : CHAR(7) (YYYY-MM)
+    * total : DECIMAL(12,0)
+    * status : ENUM(DRAFT, ISSUED, PARTIALLY_PAID, PAID, OVERDUE, VOID)
+    due_date : DATE
+    ..
+    UNIQUE(student_id, period)
+  }
+  entity invoice_items {
+    * id : UUID <<PK>>
+    --
+    * invoice_id : UUID <<FK>>
+    * class_id : UUID <<ref classes>>
+    session_id : UUID <<ref sessions>>
+    * description : VARCHAR(255)
+    * amount : DECIMAL(12,0)
+    ..
+    UNIQUE(session_id, student via invoice)
+  }
+  entity payments {
+    * id : UUID <<PK>>
+    --
+    * invoice_id : UUID <<FK>>
+    * amount : DECIMAL(12,0)
+    * method : ENUM(CASH, BANK_TRANSFER, MOMO)
+    * paid_at : TIMESTAMP
+  }
+  entity processed_events {
+    * event_id : UUID <<PK>>
+    --
+    processed_at : TIMESTAMP
+    <i>(chống xử lý trùng - idempotency)</i>
+  }
+  invoices ||--|{ invoice_items
+  invoices ||--o{ payments
+}
+
+package "notification_db" #F0FAFA {
+  entity notifications {
+    * id : UUID <<PK>>
+    --
+    * recipient : VARCHAR(255)
+    * channel : ENUM(EMAIL, SMS, ZALO)
+    * template : VARCHAR(50)
+    payload : JSONB
+    * status : ENUM(PENDING, SENT, FAILED)
+    retry_count : SMALLINT
+    sent_at : TIMESTAMP
+  }
+}
+
+note as OutboxNote
+  Mỗi service phát event đều có thêm bảng
+  **outbox_events**(id, aggregate_type, aggregate_id,
+  event_type, payload JSONB, created_at, published_at)
+  ghi chung transaction với dữ liệu nghiệp vụ.
+end note
+
+' --- Tham chiếu logic giữa các service (không FK)
+users .. students : tutor_id / user_id
+users .. parents : user_id
+students .. enrollments : student_id
+classes .. schedules : class_id
+classes .. fee_policies : class_id
+students .. attendances : student_id
+sessions .. invoice_items : session_id
+students .. invoices : student_id
+sessions .. feedbacks : session_id
+
+@enduml

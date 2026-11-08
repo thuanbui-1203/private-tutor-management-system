@@ -1,0 +1,141 @@
+@startuml 02-architecture
+' Architecture diagram - Microservices
+' Bỏ dòng pragma nếu máy đã cài Graphviz
+!pragma layout smetana
+title Architecture Diagram - Tutor Management System (Microservices)
+top to bottom direction
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam nodesep 40
+skinparam ranksep 60
+skinparam component {
+  BackgroundColor #F5F9FF
+  BorderColor #3A6EA5
+}
+skinparam database {
+  BackgroundColor #FFF8E7
+  BorderColor #B8860B
+}
+skinparam queue {
+  BackgroundColor #FCEFEF
+  BorderColor #B03A2E
+}
+skinparam package {
+  BorderColor #888888
+}
+
+actor "Giáo viên / Admin\nPhụ huynh / Học sinh" as Users
+
+rectangle "Client" {
+  component "Web App\n(React / Next.js)" as Web
+}
+
+rectangle "Edge" {
+  component "API Gateway\nrouting · verify JWT · rate limit · CORS\n/auth /students /classes /schedules\n/sessions /academic /billing" as GW
+  database "Redis\n(rate limit,\ndelayed jobs)" as Redis
+}
+
+rectangle "Business Services (Docker network: tms-net)" {
+  package "Identity" as PI {
+    component "Identity Service\n:3001" as IdS
+    database "identity_db\nPostgreSQL" as IdDB
+  }
+  package "Student" as PS {
+    component "Student Service\n:3002" as StS
+    database "student_db\nPostgreSQL" as StDB
+  }
+  package "Class" as PC {
+    component "Class Service\n:3003" as ClS
+    database "class_db\nPostgreSQL" as ClDB
+  }
+  package "Schedule & Attendance" as PSc {
+    component "Schedule Service\n:3004" as ScS
+    database "schedule_db\nPostgreSQL" as ScDB
+  }
+  package "Academic" as PA {
+    component "Academic Service\n:3005" as AcS
+    database "academic_db\nMongoDB" as AcDB
+  }
+  package "Billing" as PB {
+    component "Billing Service\n:3006" as BiS
+    database "billing_db\nPostgreSQL" as BiDB
+  }
+}
+
+queue "RabbitMQ\nexchange: tms.events (topic)\n+ Dead Letter Queue" as MQ
+
+package "Notification" as PN {
+  component "Notification Service\n:3007" as NoS
+  database "notification_db\nPostgreSQL" as NoDB
+}
+
+rectangle "External" {
+  component "SMTP / SendGrid" as SMTP
+  component "SMS / Zalo OA" as SMS
+}
+
+rectangle "Observability" {
+  component "Loki / ELK\n(log tập trung,\ncorrelationId)" as Log
+  component "Prometheus\n+ Grafana" as Mon
+}
+
+' --- client -> edge
+Users --> Web
+Web --> GW : HTTPS / REST
+GW -right-> Redis
+
+' --- gateway -> services (đồng bộ)
+GW --> IdS
+GW --> StS
+GW --> ClS
+GW --> ScS
+GW --> AcS
+GW --> BiS
+
+' --- database per service
+IdS --> IdDB
+StS --> StDB
+ClS --> ClDB
+ScS --> ScDB
+AcS --> AcDB
+BiS --> BiDB
+NoS --> NoDB
+
+' --- sync calls giữa service
+ClS -left-> StS : validate\nstudent
+ScS -left-> ClS : danh sách\nhọc sinh
+
+' --- async events (gộp: publish / consume)
+StDB -[hidden]-> MQ
+StS ..> MQ : publish
+ClS ..> MQ : publish
+ScS ..> MQ : publish / consume
+AcS ..> MQ : publish / consume
+BiS ..> MQ : publish / consume
+
+MQ ..> NoS : consume
+NoS --> Redis : hẹn giờ nhắc lịch
+NoS --> SMTP
+NoS --> SMS
+
+PN -[hidden]right-> Log
+Log -[hidden]right-> Mon
+
+legend right
+  **Ký hiệu**
+  ——>  gọi đồng bộ REST / truy cập DB
+  - - ->  event bất đồng bộ qua RabbitMQ
+
+  **Event chính**
+  Student: StudentCreated, StudentUpdated
+  Class: ClassCreated/Updated, StudentEnrolled, StudentWithdrawn
+  Schedule: SessionScheduled, SessionCancelled, AttendanceRecorded
+  Academic: GradeRecorded
+  Billing: InvoiceIssued, PaymentReceived
+
+  Mỗi service một DB riêng (Database per Service).
+  Event ghi qua Outbox table rồi mới publish.
+  Mọi service đẩy log/metrics lên khối Observability.
+endlegend
+
+@enduml

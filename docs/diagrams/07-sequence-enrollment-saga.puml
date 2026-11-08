@@ -1,0 +1,65 @@
+@startuml 07-sequence-enrollment-saga
+' Sequence diagram - Ghi danh học sinh vào lớp (Saga choreography)
+title Sequence Diagram - Ghi danh học sinh vào lớp (Saga)
+autonumber
+skinparam responseMessageBelowArrow true
+
+actor "Giáo viên" as U
+participant "API Gateway" as GW
+participant "Class Service" as Cl
+database "class_db" as ClDB
+participant "Student Service" as St
+queue "RabbitMQ" as MQ
+participant "Schedule & Attendance" as Sc
+participant "Billing Service" as Bi
+participant "Notification Service" as No
+
+U -> GW : POST /classes/{classId}/enrollments\n{studentId}
+GW -> Cl : forward (X-User-Id)
+
+Cl -> ClDB : Kiểm tra lớp thuộc tutor, OPEN,\nchưa vượt max_students, chưa ghi danh
+alt Lớp không hợp lệ / đầy
+  Cl --> GW : 409 Conflict
+  GW --> U : Báo lỗi
+else Hợp lệ
+  Cl -> St : GET /students/{studentId}
+  note right of St : timeout 2s + retry 2 lần\n+ circuit breaker
+  alt Học sinh không tồn tại / không thuộc tutor
+    St --> Cl : 404
+    Cl --> GW : 422 Unprocessable
+    GW --> U : "Học sinh không hợp lệ"
+  else Student Service không phản hồi (circuit OPEN)
+    Cl -> ClDB : INSERT enrollment (status = PENDING)
+    Cl --> GW : 202 Accepted (chờ xác nhận)
+    GW --> U : "Đang xử lý ghi danh"
+    ... Student Service hoạt động lại, job đối soát chạy ...
+    Cl -> St : GET /students/{studentId}
+    St --> Cl : 200
+    Cl -> ClDB : UPDATE enrollment = ACTIVE\n+ INSERT outbox StudentEnrolled
+  else Hợp lệ
+    St --> Cl : 200 {id, fullName, parentContact}
+    Cl -> ClDB : BEGIN\nINSERT enrollment (ACTIVE)\nINSERT outbox StudentEnrolled\nCOMMIT
+    Cl --> GW : 201 Created
+    GW --> U : "Đã ghi danh"
+  end
+end
+
+== Lan truyền event (bất đồng bộ) ==
+Cl -> MQ : publish StudentEnrolled\n{classId, studentId, studentName}
+par
+  MQ -> Sc : StudentEnrolled
+  Sc -> Sc : Cập nhật class_roster_view\n(thêm vào các buổi sắp tới)
+  alt Lỗi xử lý
+    Sc -> MQ : publish EnrollmentSyncFailed
+    MQ -> Cl : EnrollmentSyncFailed
+    Cl -> Cl : Bù trừ: enrollment = REJECTED\n+ publish StudentWithdrawn
+  end
+else
+  MQ -> Bi : StudentEnrolled
+  Bi -> Bi : Lưu snapshot tên / liên hệ\nphục vụ hóa đơn
+else
+  MQ -> No : StudentEnrolled
+  No -> No : Gửi email chào mừng\n+ lịch học cho phụ huynh
+end
+
+@enduml
