@@ -1,6 +1,6 @@
 # 03. Hướng dẫn cài đặt và chạy
 
-> Tài liệu này mô tả cách thiết lập **dự kiến** của dự án (NestJS + Docker Compose). Các lệnh và file nhắc đến (`docker-compose.yml`, `.env.example`, `infra/`...) sẽ có sau khi dựng khung code theo [02-cac-service.md](02-cac-service.md#11-cấu-trúc-thư-mục-đề-xuất).
+> Cách chạy hệ thống (NestJS + Next.js + Docker Compose) như đang có trong repo: [`docker-compose.yml`](../docker-compose.yml), [`.env.example`](../.env.example), [`infra/`](../infra/). Những phần **chưa làm** được ghi rõ kèm số issue (ví dụ seed ở #6, health check `/health/ready` ở #4, các loại test ở #3, #4, #21).
 
 ## 1. Yêu cầu môi trường
 
@@ -101,15 +101,18 @@ Sau khi chạy xong:
 |---|---|---|
 | PostgreSQL | `postgres:18-alpine` | [`infra/postgres/init.sql`](../infra/postgres/init.sql) tạo database + login role cho từng service ở lần khởi động đầu tiên; mỗi role chỉ kết nối được database của mình (`REVOKE CONNECT ... FROM PUBLIC`), kể cả database `postgres` mặc định ([ADR-0003](adr/0003-postgresql-database-per-service.md)). Role có `CREATEDB` để `prisma migrate dev` tạo shadow database. Volume gắn vào `/var/lib/postgresql` (PostgreSQL 18 lưu dữ liệu ở `/var/lib/postgresql/18/docker`). |
 | RabbitMQ | `rabbitmq:4.2-management-alpine` | [`infra/rabbitmq/definitions.json`](../infra/rabbitmq/definitions.json) tạo exchange `tms.events`, `tms.dlx` (topic, durable) và user `tms`. Khi nạp definitions lúc khởi động, RabbitMQ không tạo user `guest` (vốn cũng chỉ đăng nhập được từ localhost). |
-| Redis | `redis:7.4-alpine` | Rate limit của gateway |
+| Redis | `redis:7.4-alpine` | Rate limit của gateway; sau này thêm cache và hàng đợi hẹn giờ BullMQ (xem `docs/02` §1) |
 | Mailpit | `axllent/mailpit:v1.27` | Hộp thư giả: SMTP 1025, giao diện 8025 |
 
 Ứng dụng:
 
+- Mỗi container chỉ nhận đúng biến môi trường nó cần (không dùng `env_file`): biến chung (`NODE_ENV`, `LOG_LEVEL`, `TZ`, `RABBITMQ_URL`), `PORT`, `DATABASE_URL` của riêng nó, và cấu hình Firebase cho gateway / identity-service. Nhờ vậy không container nào giữ mật khẩu database của service khác hay mật khẩu superuser PostgreSQL ([ADR-0003](adr/0003-postgresql-database-per-service.md)).
+
 - Mọi Dockerfile build từ **thư mục gốc repo** (`build: { context: ., dockerfile: backend/<service>/Dockerfile }`) vì cần pnpm workspace và lockfile.
 - Chỉ `api-gateway` và `identity-service` được gắn `infra/keys/` (Firebase service account key, [ADR-0004](adr/0004-firebase-authentication.md)).
 - Mỗi service nhận `DATABASE_URL` riêng từ `.env` (`IDENTITY_DB_URL`, `STUDENT_DB_URL`...).
-- Health check gọi `/docs-json` cho tới khi issue #4 thêm `/health/ready`; service phụ thuộc chỉ khởi động khi phía kia đã healthy.
+- Health check gọi `/docs-json` cho tới khi issue #4 thêm `/health/ready`; service phụ thuộc chỉ khởi động khi phía kia đã healthy. Health check của PostgreSQL đi qua TCP (`pg_isready -h 127.0.0.1`), nên chỉ báo sẵn sàng sau khi `init.sql` đã chạy xong.
+- Sau khi đổi Prisma schema của một service ở chế độ phát triển, chạy `docker compose up -d --build -V <service>`: cờ `-V` làm mới volume giữ Prisma client, nếu không container vẫn dùng client cũ.
 - `academic-service` và `notification-service` chưa có trong compose (BR-SYS-03).
 
 ## 5. Chạy một service ngoài Docker (để phát triển / debug)

@@ -11,7 +11,7 @@ const parseEnv = (text) =>
   Object.fromEntries(
     text
       .split(/\r?\n/)
-      .map((l) => l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/))
+      .map((line) => line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/))
       .filter(Boolean)
       .map(([, k, v]) => [k, v]),
   );
