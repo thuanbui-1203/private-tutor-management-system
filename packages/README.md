@@ -1,6 +1,6 @@
-# Shared packages
+# Package dùng chung
 
-- `contracts/`: event and DTO contracts shared by all services (issue #3).
-- `common/`: outbox, messaging, auth guard, health and logging plumbing (issue #4).
+- `contracts/`: kiểu dữ liệu event và DTO dùng chung cho mọi service (issue #3).
+- `common/`: outbox, messaging RabbitMQ, auth guard, health check và logging (issue #4).
 
-Services depend on these as `workspace:*`. Change them in their own PR so every agent can rebase.
+Các service khai báo phụ thuộc dạng `workspace:*`. Mọi thay đổi ở đây nên nằm trong một PR riêng để các agent khác rebase theo.

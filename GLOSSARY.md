@@ -1,111 +1,113 @@
-# Tutor Management System
+# Tutor Management System – Thuật ngữ
 
-A system for independent tutors and small tutoring centres to manage students, classes, schedules, attendance, grades and tuition billing.
+Hệ thống giúp gia sư độc lập và trung tâm dạy kèm nhỏ quản lý học sinh, lớp học, lịch học, điểm danh, điểm số và học phí.
 
-## Language
+**Quy ước:** mỗi khái niệm có một **thuật ngữ tiếng Anh dùng trong code** (tên class, bảng, event, API) và một **thuật ngữ tiếng Việt dùng trong tài liệu**. Mục _Tránh dùng_ liệt kê các từ dễ gây nhầm, không dùng cho khái niệm đó ở cả code lẫn tài liệu.
 
-### People
+## Thuật ngữ
 
-**Tutor**:
-The person who teaches classes and owns their data. An Admin who also teaches is treated as a Tutor for the classes they own.
-_Avoid_: Teacher, giáo viên, gia sư, instructor
+### Con người
 
-**Admin**:
-The owner of a centre, with access to all data and to Tutor management. A separate role from Tutor; one person holds exactly one role.
-_Avoid_: Owner, manager
+**Tutor** – Giáo viên:
+Người dạy các lớp và sở hữu dữ liệu của mình. Admin có dạy thì được xem như giáo viên đối với các lớp họ sở hữu.
+_Tránh dùng_: Teacher, instructor; "gia sư" (chỉ dùng khi nói về người dùng mục tiêu)
 
-**Parent**:
-A guardian linked to a Student. A Student may have several Parents, exactly one of them primary (the Payer); only the primary Parent sees billing.
-_Avoid_: Guardian
+**Admin** – Quản trị viên:
+Chủ trung tâm, xem được mọi dữ liệu và quản lý giáo viên. Là vai trò riêng, khác Tutor; mỗi người chỉ giữ đúng một vai trò.
+_Tránh dùng_: Owner, manager, chủ
 
-**Invitation**:
-A single-use link, valid for 7 days, that lets a Student or Parent activate their login and set a password. Re-sending revokes the previous link.
-_Avoid_: Activation email, signup link
+**Parent** – Phụ huynh:
+Người giám hộ gắn với một học sinh. Một học sinh có thể có nhiều phụ huynh, đúng một người là phụ huynh chính (Payer); chỉ phụ huynh chính xem được học phí.
+_Tránh dùng_: Guardian
 
-**Student**:
-A learner enrolled in one or more classes. Every Student has a login by default; a Student under 18 must also have guardian details recorded.
-_Avoid_: Pupil, child
+**Invitation** – Lời mời:
+Đường link dùng một lần, hiệu lực 7 ngày, giúp học sinh hoặc phụ huynh kích hoạt tài khoản và tự đặt mật khẩu. Gửi lại sẽ thu hồi link cũ. Đây là token riêng của hệ thống, không phải email kích hoạt của Firebase.
+_Tránh dùng_: Activation email, signup link
 
-**Payer**:
-The one contact per Student who receives and settles Invoices. For a minor this is the primary Parent; for an adult learner it is the Student themselves.
-_Avoid_: Bill-to, customer
+**Student** – Học sinh:
+Người học ghi danh vào một hoặc nhiều lớp. Mặc định mọi học sinh đều có tài khoản; học sinh dưới 18 tuổi phải có thông tin người giám hộ.
+_Tránh dùng_: Pupil, child, "con" (trừ khi nói từ góc nhìn phụ huynh)
 
-**Anonymisation**:
-Erasing a departed Student's name, contact details and notes on request, once all their Invoices are settled. Money records are kept under a pseudonymous id.
-_Avoid_: Deletion, GDPR delete
+**Payer** – Người thanh toán:
+Người duy nhất của mỗi học sinh nhận và thanh toán hóa đơn. Với học sinh chưa đủ 18 tuổi là phụ huynh chính; với người học đã trưởng thành là chính học sinh đó.
+_Tránh dùng_: Bill-to, customer, khách hàng
 
-### Classes and sessions
+**Anonymisation** – Ẩn danh:
+Xóa tên, thông tin liên lạc và ghi chú của học sinh đã nghỉ khi có yêu cầu, sau khi mọi hóa đơn đã tất toán. Số liệu tiền được giữ lại với mã giả danh.
+_Tránh dùng_: Deletion, GDPR delete, xóa học sinh
 
-**Class**:
-A taught group (or one-on-one) offering of one subject, with a fee policy.
-_Avoid_: Course
+### Lớp và buổi học
 
-**Session**:
-A single dated meeting of a Class.
-_Avoid_: Lesson, meeting, buổi học
+**Class** – Lớp:
+Một lớp nhóm (hoặc 1-1) dạy một môn, kèm chính sách học phí.
+_Tránh dùng_: Course, khóa học
 
-**Schedule**:
-An immutable recurring weekly pattern that generates a Class's Sessions. To change it, the Tutor ends it and creates a replacement.
-_Avoid_: Timetable, recurring session
+**Session** – Buổi học:
+Một lần học có ngày giờ cụ thể của một lớp.
+_Tránh dùng_: Lesson, meeting, "tiết"
 
-**Missed session**:
-A Session with no Attendance recorded 24 hours after it ended. Attendance can still be recorded until 48 hours after the end; after that it is locked and bills nothing.
-_Avoid_: Skipped session
+**Schedule** – Lịch lặp:
+Mẫu lặp hằng tuần, bất biến, dùng để sinh các buổi học của lớp. Muốn đổi thì kết thúc lịch cũ và tạo lịch mới.
+_Tránh dùng_: Timetable, recurring session, thời khóa biểu
 
-**Makeup session**:
-A Session that replaces a cancelled one and is linked back to it.
-_Avoid_: Replacement class, dạy bù
+**Missed session** – Buổi bị bỏ lỡ (`MISSED`):
+Buổi học chưa được điểm danh sau 24 giờ kể từ giờ kết thúc. Vẫn điểm danh được đến 48 giờ sau giờ kết thúc; quá hạn thì khóa và không tính phí.
+_Tránh dùng_: Skipped session, buổi vắng
 
-**Enrollment**:
-A Student's membership in a Class, with a status such as `PENDING`, `AWAITING_PAYMENT`, `ACTIVE`, `PAUSED`, `WITHDRAWN` or `REJECTED`. `PENDING`, `AWAITING_PAYMENT` and `ACTIVE` all hold a seat.
-_Avoid_: Registration, ghi danh
+**Makeup session** – Buổi bù:
+Buổi học thay cho một buổi đã hủy và liên kết về buổi gốc (`makeup_of`).
+_Tránh dùng_: Replacement class, lớp thay thế
 
-**Awaiting payment**:
-The Enrollment status of a Student in a Monthly-fee Class who has not yet paid the first-period Invoice. It becomes `WITHDRAWN` (reason `UNPAID`) after 7 days. Per-session Classes skip this status.
-_Avoid_: Unpaid enrollment, deposit pending
+**Enrollment** – Ghi danh:
+Việc một học sinh thuộc một lớp, với trạng thái `PENDING`, `AWAITING_PAYMENT`, `ACTIVE`, `PAUSED`, `WITHDRAWN` hoặc `REJECTED`. `PENDING`, `AWAITING_PAYMENT` và `ACTIVE` đều giữ chỗ.
+_Tránh dùng_: Registration, đăng ký lớp
 
-**Roster**:
-The Students with an `ACTIVE` or `AWAITING_PAYMENT` Enrollment in a Class, used to know who is expected at its Sessions. Awaiting-payment Students attend during their 7-day window.
-_Avoid_: Class list, attendance list
+**Awaiting payment** – Chờ thanh toán (`AWAITING_PAYMENT`):
+Trạng thái ghi danh của học sinh vào lớp học phí theo tháng khi chưa trả hóa đơn ghi danh. Sau 7 ngày chuyển `WITHDRAWN` (lý do `UNPAID`). Lớp học phí theo buổi không có trạng thái này.
+_Tránh dùng_: Unpaid enrollment, deposit pending, nợ cọc
 
-### Attendance
+**Roster** – Danh sách lớp (roster):
+Các học sinh có ghi danh `ACTIVE` hoặc `AWAITING_PAYMENT` trong một lớp, dùng để biết ai sẽ có mặt ở các buổi học. Học sinh chờ thanh toán vẫn đi học trong 7 ngày đó.
+_Tránh dùng_: Class list, attendance list, danh sách điểm danh
 
-**Attendance**:
-The record of whether a Student was present at a Session: `PRESENT`, `LATE`, `EXCUSED` or `ABSENT`.
+### Điểm danh
 
-**Excused absence**:
-An absence the Tutor chooses to mark `EXCUSED` because the Student gave notice roughly 24 hours ahead. The system does not verify the notice.
-_Avoid_: Approved absence
+**Attendance** – Điểm danh:
+Bản ghi cho biết học sinh có mặt ở buổi học hay không: `PRESENT`, `LATE`, `EXCUSED` hoặc `ABSENT`.
 
-### Billing
+**Excused absence** – Vắng có phép (`EXCUSED`):
+Vắng mà giáo viên chọn đánh dấu `EXCUSED` vì học sinh đã báo trước khoảng 24 giờ. Hệ thống không kiểm tra việc báo trước.
+_Tránh dùng_: Approved absence, nghỉ được duyệt
 
-**Invoice**:
-A request for payment addressed to a Student's Payer, made of lines tagged by Tutor. Either a Monthly invoice or an Enrollment invoice.
-_Avoid_: Bill
+### Học phí
 
-**Monthly invoice**:
-The regular Invoice for one Student and one month. At most one non-void Monthly invoice exists per Student per month; a voided one may be replaced.
-_Avoid_: Statement, bill
+**Invoice** – Hóa đơn:
+Yêu cầu thanh toán gửi tới người thanh toán của học sinh, gồm các dòng phí gắn với giáo viên. Có hai loại: hóa đơn tháng và hóa đơn ghi danh.
+_Tránh dùng_: Bill, phiếu thu
 
-**Enrollment invoice**:
-An Invoice issued immediately on enrolling in a Monthly-fee Class, covering only the prorated fee for the first period. The Monthly invoice later skips lines already billed this way.
-_Avoid_: Deposit, first invoice
+**Monthly invoice** – Hóa đơn tháng:
+Hóa đơn định kỳ cho một học sinh trong một tháng. Mỗi học sinh mỗi tháng có tối đa một hóa đơn tháng chưa `VOID`; hóa đơn đã `VOID` có thể được thay thế.
+_Tránh dùng_: Statement, sao kê
 
-**Payment**:
-An immutable record of money received against an Invoice, never exceeding its outstanding balance. Invoice status is derived from Payments and Reversals.
-_Avoid_: Receipt, transaction
+**Enrollment invoice** – Hóa đơn ghi danh:
+Hóa đơn phát hành ngay khi ghi danh vào lớp học phí theo tháng, chỉ gồm phí kỳ đầu tính theo tỉ lệ. Hóa đơn tháng sau đó bỏ qua các dòng đã thu theo cách này.
+_Tránh dùng_: Deposit, first invoice, tiền cọc
 
-**Reversal**:
-A Payment entry that cancels an earlier, wrongly recorded Payment.
-_Avoid_: Refund, payment edit
+**Payment** – Thanh toán:
+Bản ghi bất biến về số tiền đã nhận cho một hóa đơn, không bao giờ vượt số còn nợ. Trạng thái hóa đơn được suy ra từ các khoản thanh toán và bút toán đảo.
+_Tránh dùng_: Receipt, transaction, giao dịch
 
-**Adjustment**:
-A line on the next open Invoice that corrects a charge on an already-issued Invoice, such as after an Attendance correction. Issued Invoices are never edited.
-_Avoid_: Credit note, refund line
+**Reversal** – Bút toán đảo:
+Một khoản thanh toán dùng để hủy một khoản thanh toán đã ghi sai trước đó.
+_Tránh dùng_: Refund, payment edit, hoàn tiền
 
-**Per-session fee**:
-A Class fee charged for each attended or billable Session, including Makeup sessions.
+**Adjustment** – Dòng điều chỉnh:
+Dòng trên hóa đơn còn mở kế tiếp để sửa một khoản phí trên hóa đơn đã phát hành, ví dụ sau khi sửa điểm danh. Hóa đơn đã phát hành không bao giờ bị sửa.
+_Tránh dùng_: Credit note, refund line
 
-**Monthly fee**:
-A flat Class fee for the month that does not depend on session count. Makeup sessions and cancellations never change it.
-_Avoid_: Package fee, subscription
+**Per-session fee** – Học phí theo buổi (`PER_SESSION`):
+Học phí tính cho mỗi buổi học có mặt hoặc phải tính phí, kể cả buổi bù.
+
+**Monthly fee** – Học phí theo tháng (`MONTHLY`):
+Học phí trọn gói của tháng, không phụ thuộc số buổi. Buổi bù và buổi bị hủy không làm thay đổi nó.
+_Tránh dùng_: Package fee, subscription, gói đăng ký

@@ -11,9 +11,9 @@
 | 2 | `student-service` | 3002 | PostgreSQL `student_db` | Hồ sơ học sinh, phụ huynh | ✔ |
 | 3 | `class-service` | 3003 | PostgreSQL `class_db` | Lớp học, học phí, ghi danh | ✔ |
 | 4 | `schedule-service` | 3004 | PostgreSQL `schedule_db` | Lịch, buổi học, điểm danh | ✔ |
-| 5 | `academic-service` | 3005 | MongoDB `academic_db` | Bài tập, điểm, nhận xét | Giai đoạn 4 |
-| 6 | `billing-service` | 3006 | PostgreSQL `billing_db` | Hóa đơn, thanh toán, công nợ | Giai đoạn 3 |
-| 7 | `notification-service` | 3007 | PostgreSQL `notification_db` + Redis | Gửi email, SMS, Zalo, push | Giai đoạn 2 (tùy chọn, xem BR-SYS-03) |
+| 5 | `academic-service` | 3005 | MongoDB `academic_db` | Bài tập, điểm, nhận xét | Tùy chọn (BR-SYS-03) |
+| 6 | `billing-service` | 3006 | PostgreSQL `billing_db` | Hóa đơn, thanh toán, công nợ | ✔ |
+| 7 | `notification-service` | 3007 | PostgreSQL `notification_db` + Redis | Gửi email, SMS, Zalo, push | Tùy chọn (BR-SYS-03) |
 
 **Hạ tầng dùng chung:**
 

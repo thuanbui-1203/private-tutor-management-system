@@ -7,10 +7,11 @@
 | Công cụ | Phiên bản | Ghi chú |
 |---|---|---|
 | Docker Desktop | ≥ 4.30 | Trên Windows bật WSL 2 backend; cấp ≥ 6 GB RAM cho Docker |
-| Node.js | 22 LTS | Chỉ cần khi chạy service ngoài Docker |
-| pnpm | ≥ 9 | `npm i -g pnpm` (monorepo dùng pnpm workspace) |
+| Node.js | 22 LTS | Cần trên máy để chạy migration, test và service ngoài Docker |
+| pnpm | 9.15.x | `npm i -g pnpm@9` (monorepo dùng pnpm workspace; phiên bản ghi trong `package.json` > `packageManager`) |
 | Git | bất kỳ | |
-| (Tùy chọn) Java 17+ và extension PlantUML | | Để xem / render sơ đồ trong `docs/diagrams` |
+| Firebase CLI | ≥ 15 | `npm i -g firebase-tools`; chạy Firebase Auth Emulator khi phát triển và test |
+| Java | 21+ | Cần cho Firebase Emulator; cũng dùng để render sơ đồ PlantUML trong `docs/diagrams` |
 
 Kiểm tra nhanh:
 
@@ -275,7 +276,8 @@ Hạ tầng vẫn chạy trong Docker, chỉ service đang sửa chạy trên m�
 
 ```bash
 # Chỉ bật hạ tầng
-docker compose up -d postgres mongo rabbitmq redis mailpit
+docker compose up -d postgres rabbitmq redis mailpit
+firebase emulators:start --only auth    # nếu service cần Firebase Auth
 
 # Chạy service cần sửa
 cd backend/billing-service
@@ -289,21 +291,21 @@ Nếu muốn các service khác (vẫn chạy trong Docker) gọi được servi
 
 ## 6. Kiểm thử
 
-| Loại | Lệnh | Phạm vi |
-|---|---|---|
-| Unit test | `pnpm test` (trong từng service) | Logic nghiệp vụ: tính phí, kiểm tra trùng lịch, chuyển trạng thái |
-| Integration | `pnpm test:int` | Chạy với PostgreSQL / RabbitMQ thật qua Testcontainers |
-| Contract test | `pnpm test:contract` | Kiểm tra schema event trong `packages/contracts` |
-| End-to-end | `pnpm test:e2e` (thư mục gốc) | Kịch bản: tạo học sinh → ghi danh → điểm danh → hóa đơn |
-| Toàn bộ | `pnpm -r test` | Mọi service |
+| Loại | Lệnh | Phạm vi | Trạng thái |
+|---|---|---|---|
+| Unit / smoke test | `pnpm test` (thư mục gốc chạy mọi package; hoặc trong từng service) | Logic nghiệp vụ: tính phí, kiểm tra trùng lịch, chuyển trạng thái | Đã có (hiện mới có test khởi động app) |
+| Integration | dự kiến `pnpm test:int` | PostgreSQL và RabbitMQ thật trong `docker compose`, mỗi lần chạy một database riêng ([ADR-0003](adr/0003-postgresql-database-per-service.md)); đăng nhập qua Firebase Auth Emulator, không dùng project thật | Làm trong issue #4 |
+| Contract test | dự kiến `pnpm test:contract` | Kiểm tra schema event trong `packages/contracts` | Làm trong issue #3 |
+| End-to-end | dự kiến `pnpm test:e2e` (thư mục gốc) | Kịch bản: tạo học sinh → ghi danh → điểm danh → hóa đơn | Làm trong issue #21 |
+| Kiểm tra mã | `pnpm lint`, `pnpm format:check`, `pnpm build` | ESLint (backend + frontend), Prettier, build toàn bộ | Đã có |
 
 **Kịch bản kiểm tra thủ công nhanh:**
-1. Đăng nhập `tutor@tms.local`, tạo học sinh, ghi danh vào lớp học phí `PER_SESSION`.
+1. Đăng nhập `tutor@tms.local` trên frontend (http://localhost:5173, qua Firebase Auth), tạo học sinh, ghi danh vào lớp học phí `PER_SESSION`.
 2. Tạo lịch có một buổi hôm nay rồi điểm danh `PRESENT`.
 3. Mở RabbitMQ UI và kiểm tra queue `billing.attendance-recorded` đã có message được ack.
 4. `GET /api/billing/invoices?period=<tháng hiện tại>`: hóa đơn `DRAFT` có 1 dòng phí.
 5. Gửi lại cùng event (nút *Publish* trong RabbitMQ UI): tổng tiền **không đổi** (idempotent).
-6. Tắt `notification-service` (`docker compose stop notification-service`), điểm danh tiếp: vẫn thành công. Bật lại thì email bị dồn sẽ được gửi (xem ở Mailpit).
+6. (Khi đã có `notification-service`, BR-SYS-03) Tắt nó (`docker compose stop notification-service`), điểm danh tiếp: vẫn thành công. Bật lại thì email bị dồn sẽ được gửi (xem ở Mailpit).
 
 ## 7. Các lệnh hữu ích
 
@@ -321,9 +323,11 @@ docker compose down -v                            # dừng và XÓA toàn bộ d
 
 | Hiện tượng | Nguyên nhân | Cách xử lý |
 |---|---|---|
-| `port is already allocated` | Port 5432 / 6379 / 8080 đang bị chiếm (PostgreSQL cài sẵn trên Windows...) | Tắt dịch vụ đang chiếm port hoặc đổi port bên trái trong `ports:` |
+| `port is already allocated` | Port 5432 / 6379 / 8080 đang bị chiếm (ví dụ PostgreSQL cài sẵn trên Windows) | Tắt dịch vụ đang chiếm port (Services > `postgresql-x64-*`) hoặc đổi port bên trái trong `ports:` |
 | Service restart liên tục | DB hoặc RabbitMQ chưa sẵn sàng, sai `*_DB_URL` | `docker compose logs <service>`; kiểm tra healthcheck của hạ tầng |
-| `401 invalid signature` | Gateway và Identity dùng cặp khóa khác nhau | Sinh lại khóa ở bước 2.3, restart cả hai service |
+| Gateway trả `401` cho mọi request | ID token hết hạn / đã bị thu hồi, hoặc gateway không đọc được Firebase service account key, hoặc frontend và gateway trỏ hai Firebase project khác nhau | Kiểm tra `infra/keys/firebase-service-account.json` và `FIREBASE_PROJECT_ID`; so với `NEXT_PUBLIC_FIREBASE_PROJECT_ID` của frontend; đăng nhập lại |
+| Đăng nhập được nhưng API trả `403` | Tài khoản Firebase chưa có vai trò (custom claim) | Hoàn tất đăng ký giáo viên hoặc nhận lời mời; Admin kiểm tra người dùng trong Identity |
+| Dữ liệu PostgreSQL mất sau `docker compose down` | Volume gắn sai đường dẫn (image PostgreSQL 18 lưu ở `/var/lib/postgresql/18/docker`) | Gắn volume vào `/var/lib/postgresql`, không phải `/var/lib/postgresql/data` |
 | Không nhận được email | Đang dùng Mailpit ở môi trường dev | Mở http://localhost:8025 |
 | Hóa đơn không cập nhật sau khi điểm danh | Billing chưa nhận event | Xem queue trong RabbitMQ UI; kiểm tra DLQ `billing.dlq` |
 | `exec format error` / `\r` trong script | File `.sh` bị đổi line ending thành CRLF trên Windows | `git config core.autocrlf input`, chuyển file về LF |

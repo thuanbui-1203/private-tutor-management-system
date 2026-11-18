@@ -1,6 +1,6 @@
 # Tài liệu dự án – Tutor Management System (TMS)
 
-Hệ thống quản lý học sinh quy mô nhỏ cho gia sư / giáo viên dạy kèm, xây dựng theo kiến trúc microservice.
+Hệ thống quản lý học sinh quy mô nhỏ cho gia sư / giáo viên dạy kèm, xây dựng theo kiến trúc microservice. Thuật ngữ chuẩn nằm ở [GLOSSARY.md](../GLOSSARY.md).
 
 ## Mục lục
 
@@ -10,6 +10,15 @@ Hệ thống quản lý học sinh quy mô nhỏ cho gia sư / giáo viên dạy
 | 2 | [02-cac-service.md](02-cac-service.md) | Danh mục service, port, DB, API endpoint, event phát / nhận, quy ước RabbitMQ, cấu trúc thư mục |
 | 3 | [03-cach-chay.md](03-cach-chay.md) | Yêu cầu môi trường, chạy bằng Docker Compose, biến môi trường, chạy riêng một service, kiểm thử, xử lý sự cố |
 | 4 | [04-tich-hop-ben-ngoai.md](04-tich-hop-ben-ngoai.md) | Email, thanh toán / VietQR, Zalo, SMS, push, lịch, lưu trữ, PDF, hóa đơn điện tử, AI, giám sát |
+
+## Quyết định kiến trúc (ADR)
+
+| ADR | Quyết định |
+|---|---|
+| [0001](adr/0001-single-tenant-deployment.md) | Mỗi bản triển khai phục vụ một trung tâm (single-tenant) |
+| [0002](adr/0002-immutable-invoices-with-adjustments.md) | Hóa đơn đã phát hành là bất biến; sửa sai bằng dòng điều chỉnh |
+| [0003](adr/0003-postgresql-database-per-service.md) | PostgreSQL 18 trong Docker, mỗi service một database + login role |
+| [0004](adr/0004-firebase-authentication.md) | Đăng nhập bằng Firebase Authentication; Identity giữ vai trò, lời mời |
 
 ## Sơ đồ (PlantUML)
 
@@ -33,8 +42,24 @@ java -jar ~/.vscode/extensions/jebbs.plantuml-2.18.1/plantuml.jar -charset UTF-8
 
 ## Tóm tắt kiến trúc
 
-- **7 service:** Identity, Student, Class, Schedule & Attendance, Academic, Billing, Notification; đứng trước là **API Gateway**.
-- **Database per service:** PostgreSQL 18 trong Docker, mỗi service một database + login role ([ADR-0003](adr/0003-postgresql-database-per-service.md)); MongoDB cho Academic.
-- **Đăng nhập:** Firebase Authentication; gateway xác thực Firebase ID token ([ADR-0004](adr/0004-firebase-authentication.md)).
+- **Phạm vi MVP (BR-SYS-03):** API Gateway + 5 service: Identity, Student, Class, Schedule & Attendance, Billing. Academic và Notification đã được mô tả nhưng chỉ làm nếu còn thời gian.
+- **Mã nguồn:** pnpm monorepo. `backend/` chứa các service NestJS 11, `frontend/` là ứng dụng Next.js 16 (cổng 5173, chỉ gọi API Gateway), `packages/` chứa contract và mã dùng chung. Phiên bản thư viện dùng chung được khóa trong `pnpm-workspace.yaml` (catalog).
+- **Database per service:** PostgreSQL 18 trong Docker, mỗi service một database + login role, truy cập qua Prisma 7 ([ADR-0003](adr/0003-postgresql-database-per-service.md)).
+- **Đăng nhập:** Firebase Authentication (gói miễn phí Spark); gateway xác thực Firebase ID token ([ADR-0004](adr/0004-firebase-authentication.md)).
 - **Giao tiếp:** REST cho truy vấn đồng bộ; **RabbitMQ** cho event, có Outbox pattern và idempotent consumer.
 - **Triển khai:** Docker Compose; giám sát bằng Prometheus / Grafana / Loki (tùy chọn).
+
+## Lệnh thường dùng (thư mục gốc)
+
+```bash
+pnpm install          # cài toàn bộ workspace
+pnpm build            # build mọi service và frontend
+pnpm test             # chạy test mọi package
+pnpm lint             # ESLint backend + frontend
+pnpm format:check     # kiểm tra Prettier
+pnpm migrate:all      # chạy migration Prisma của mọi service
+```
+
+## Kế hoạch triển khai
+
+Công việc được chia thành GitHub issue #1–#21 (issue #1 là bản đồ tổng). Phần nền tảng (#2–#5) làm trước, sau đó 3 agent làm song song theo nhãn `agent-a` (Gateway, Identity, Student), `agent-b` (Class, Schedule & Attendance), `agent-c` (Billing).
