@@ -6,8 +6,8 @@
 
 | # | Service | Port | DB | Vai trò | Bắt buộc cho MVP |
 |---|---|---|---|---|:-:|
-| 0 | `api-gateway` | 8080 | Redis | Cổng vào duy nhất, định tuyến, xác thực JWT, rate limit | ✔ |
-| 1 | `identity-service` | 3001 | PostgreSQL `identity_db` | Tài khoản, đăng nhập, cấp token | ✔ |
+| 0 | `api-gateway` | 8080 | Redis | Cổng vào duy nhất, định tuyến, xác thực Firebase ID token, rate limit | ✔ |
+| 1 | `identity-service` | 3001 | PostgreSQL `identity_db` + Firebase Auth | Vai trò, lời mời, quản lý giáo viên (đăng nhập do Firebase Auth) | ✔ |
 | 2 | `student-service` | 3002 | PostgreSQL `student_db` | Hồ sơ học sinh, phụ huynh | ✔ |
 | 3 | `class-service` | 3003 | PostgreSQL `class_db` | Lớp học, học phí, ghi danh | ✔ |
 | 4 | `schedule-service` | 3004 | PostgreSQL `schedule_db` | Lịch, buổi học, điểm danh | ✔ |
@@ -19,7 +19,8 @@
 
 | Thành phần | Port | Mục đích |
 |---|---|---|
-| PostgreSQL 16 | 5432 | Một instance, mỗi service một database và một user riêng (môi trường dev) |
+| PostgreSQL 18 (container) | 5432 | Một container, mỗi service một database và một login role riêng ([ADR-0003](adr/0003-postgresql-database-per-service.md)) |
+| Firebase Authentication (dịch vụ ngoài) | – | Lưu mật khẩu, đăng nhập, cấp ID token ([ADR-0004](adr/0004-firebase-authentication.md)); gói Spark miễn phí |
 | MongoDB 7 | 27017 | Cho academic-service |
 | RabbitMQ 3.13 | 5672 / 15672 (UI) | Message broker, exchange `tms.events` loại topic |
 | Redis 7 | 6379 | Rate limit, cache, delayed job (BullMQ) |
@@ -39,11 +40,11 @@
 
 ## 2. API Gateway
 
-**Trách nhiệm:** định tuyến, kiểm tra chữ ký JWT bằng public key (lấy từ JWKS của Identity và cache lại), rate limit theo IP và user (Redis), CORS, gán `X-Correlation-Id`.
+**Trách nhiệm:** định tuyến, xác thực Firebase ID token bằng Firebase Admin SDK (kiểm tra cả token đã bị thu hồi) rồi lấy `uid` và vai trò từ custom claim, rate limit theo IP và user (Redis), CORS, gán `X-Correlation-Id`.
 
 | Đường dẫn | Chuyển tới | Cần xác thực |
 |---|---|:-:|
-| `/api/auth/**` | identity-service | Một phần (login, refresh không cần) |
+| `/api/auth/**` | identity-service | Một phần (nhận lời mời không cần; đăng ký giáo viên cần ID token nhưng chưa cần vai trò) |
 | `/api/users/**` | identity-service | ✔ |
 | `/api/students/**`, `/api/parents/**` | student-service | ✔ |
 | `/api/classes/**` | class-service | ✔ |
@@ -57,20 +58,17 @@
 
 ## 3. Identity Service
 
-**Dữ liệu:** `users`, `refresh_tokens`, `invitations`, `outbox_events`
+**Dữ liệu:** `users` (`firebase_uid`, email, vai trò, trạng thái), `invitations`, `outbox_events`. Mật khẩu và phiên đăng nhập nằm ở Firebase Authentication, không lưu trong `identity_db` ([ADR-0004](adr/0004-firebase-authentication.md)).
+
+Đăng nhập, làm mới token, đăng xuất và quên mật khẩu do **Firebase client SDK** ở frontend gọi thẳng tới Firebase, không qua Identity Service.
 
 | Method | Endpoint | Mô tả | Quyền |
 |---|---|---|---|
-| POST | `/auth/register` | Giáo viên tự đăng ký | Public |
-| POST | `/auth/login` | Đăng nhập, trả access token và refresh token | Public |
-| POST | `/auth/refresh` | Đổi refresh token lấy access token mới | Public (cookie) |
-| POST | `/auth/logout` | Thu hồi refresh token | Đã đăng nhập |
-| POST | `/auth/invitations` | Mời phụ huynh hoặc học sinh | TUTOR, ADMIN |
-| POST | `/auth/invitations/{token}/accept` | Kích hoạt tài khoản từ lời mời | Public |
-| POST | `/auth/forgot-password`, `/auth/reset-password` | Quên mật khẩu | Public |
+| POST | `/auth/register` | Giáo viên tự đăng ký: tạo tài khoản Firebase ở frontend, rồi gọi endpoint này để tạo bản ghi `users` và gán vai trò `TUTOR` | ID token hợp lệ, chưa có vai trò |
+| POST | `/auth/invitations` | Mời phụ huynh hoặc học sinh: tạo tài khoản Firebase chưa có mật khẩu + lời mời riêng (1 lần, 7 ngày, BR-AU-02) | TUTOR, ADMIN |
+| POST | `/auth/invitations/{token}/accept` | Kích hoạt tài khoản từ lời mời: đặt mật khẩu qua Firebase Admin SDK, gán vai trò | Public |
 | GET | `/users/me` | Thông tin người đang đăng nhập | Đã đăng nhập |
-| GET/PATCH | `/users/{id}` | Quản lý người dùng; vô hiệu hóa giáo viên (`DISABLED`) chỉ khi không còn lớp mở (BR-CL-08) | ADMIN |
-| GET | `/.well-known/jwks.json` | Public key để kiểm tra JWT | Nội bộ |
+| GET/PATCH | `/users/{id}` | Quản lý người dùng; đổi vai trò hoặc vô hiệu hóa giáo viên (`DISABLED`, chỉ khi không còn lớp mở, BR-CL-08) sẽ cập nhật custom claim và thu hồi phiên Firebase | ADMIN |
 
 **Phát event:** `UserRegistered`, `InvitationCreated`
 **Nhận event:** không có

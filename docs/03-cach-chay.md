@@ -29,10 +29,10 @@ cd microservices_final
 # 2. Tạo file biến môi trường
 cp .env.example .env
 
-# 3. Sinh cặp khóa RS256 cho JWT (chỉ làm một lần)
-mkdir -p infra/keys
-openssl genrsa -out infra/keys/jwt-private.pem 2048
-openssl rsa -in infra/keys/jwt-private.pem -pubout -out infra/keys/jwt-public.pem
+# 3. Firebase (chỉ làm một lần): đặt service account key của project
+#    vào infra/keys/firebase-service-account.json (Firebase console > Project settings
+#    > Service accounts > Generate new private key), và tạo frontend/.env.local
+#    từ cấu hình Web app (xem mục 3). Không commit hai file này.
 
 # 4. Build và khởi động
 docker compose up -d --build
@@ -40,10 +40,8 @@ docker compose up -d --build
 # 5. Theo dõi trạng thái (chờ tất cả "healthy")
 docker compose ps
 
-# 6. Chạy migration và tạo dữ liệu mẫu
-docker compose exec identity-service pnpm migrate:deploy
-docker compose exec student-service  pnpm migrate:deploy
-# ... lặp lại cho các service còn lại, hoặc dùng:
+# 6. Chạy migration (từ máy host, PostgreSQL trong Docker mở cổng 5432) và tạo dữ liệu mẫu
+pnpm install
 pnpm run migrate:all
 pnpm run seed
 ```
@@ -69,9 +67,13 @@ Sau khi chạy xong:
 | PARENT | parent@tms.local | `Parent@123` |
 | STUDENT | student@tms.local | `Student@123` |
 
+> Seed tạo các tài khoản này trên Firebase Authentication (kèm vai trò trong custom claim) và bản ghi `users` tương ứng trong `identity_db`. Khi phát triển nên trỏ seed và test vào Firebase Auth Emulator (`firebase emulators:start --only auth`) để không tạo tài khoản rác trên project thật.
+
 ## 3. Biến môi trường
 
-File `.env` ở thư mục gốc dùng chung cho docker compose. Mỗi service có thêm `.env.example` riêng để chạy độc lập.
+File `.env` ở thư mục gốc dùng chung cho docker compose. Mỗi service có thêm `.env.example` riêng để chạy độc lập (chứa `DATABASE_URL` trỏ `localhost:5432`, dùng cho migration từ máy host).
+
+Frontend đọc `frontend/.env.local`: các giá trị `NEXT_PUBLIC_FIREBASE_*` lấy từ cấu hình Web app trong Firebase console, cùng `NEXT_PUBLIC_API_URL=http://localhost:8080/api`.
 
 ```dotenv
 # ---------- Chung ----------
@@ -94,11 +96,9 @@ SCHEDULE_DB_URL=postgresql://schedule:schedule@postgres:5432/schedule_db
 BILLING_DB_URL=postgresql://billing:billing@postgres:5432/billing_db
 NOTIFICATION_DB_URL=postgresql://notification:notification@postgres:5432/notification_db
 
-# ---------- JWT ----------
-JWT_PRIVATE_KEY_PATH=/run/keys/jwt-private.pem
-JWT_PUBLIC_KEY_PATH=/run/keys/jwt-public.pem
-JWT_ACCESS_TTL=15m
-JWT_REFRESH_TTL=7d
+# ---------- Firebase Authentication (ADR-0004) ----------
+FIREBASE_PROJECT_ID=private-tutor-management-sys
+GOOGLE_APPLICATION_CREDENTIALS=/run/keys/firebase-service-account.json
 
 # ---------- Nghiệp vụ ----------
 BILLING_INVOICE_DUE_DAY=10
@@ -126,7 +126,7 @@ S3_SECRET_KEY=minio123
 SENTRY_DSN=
 ```
 
-> Không commit `.env` và thư mục `infra/keys/`. Hai mục này đã có trong `.gitignore`.
+> Không commit `.env`, `frontend/.env.local` và thư mục `infra/keys/`. Các mục này đã có trong `.gitignore`.
 
 ## 4. Khung `docker-compose.yml`
 
@@ -146,12 +146,12 @@ x-service: &service
 services:
   # ---------- Hạ tầng ----------
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - pg-data:/var/lib/postgresql/data
+      - pg-data:/var/lib/postgresql   # PostgreSQL 18: dữ liệu nằm dưới /var/lib/postgresql/18/docker
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports: ["5432:5432"]
     healthcheck:
@@ -245,7 +245,7 @@ volumes:
   mongo-data:
 ```
 
-`infra/postgres/init.sql` tạo database và user riêng cho từng service:
+`infra/postgres/init.sql` tạo database và login role riêng cho từng service; mỗi role chỉ kết nối được database của mình ([ADR-0003](adr/0003-postgresql-database-per-service.md)):
 
 ```sql
 CREATE USER identity WITH PASSWORD 'identity';

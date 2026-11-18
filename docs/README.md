@@ -20,7 +20,7 @@ Hệ thống quản lý học sinh quy mô nhỏ cho gia sư / giáo viên dạy
 | [diagrams/03-erd.puml](diagrams/03-erd.puml) | ERD (database per service) |
 | [diagrams/04-activity-attendance-billing.puml](diagrams/04-activity-attendance-billing.puml) | Activity: điểm danh → học phí |
 | [diagrams/05-activity-schedule.puml](diagrams/05-activity-schedule.puml) | Activity: thiết lập lịch |
-| [diagrams/06-sequence-login.puml](diagrams/06-sequence-login.puml) | Sequence: đăng nhập / JWT |
+| [diagrams/06-sequence-login.puml](diagrams/06-sequence-login.puml) | Sequence: đăng nhập qua Firebase Auth, gọi API có xác thực |
 | [diagrams/07-sequence-enrollment-saga.puml](diagrams/07-sequence-enrollment-saga.puml) | Sequence: ghi danh (Saga) |
 | [diagrams/08-sequence-attendance-billing.puml](diagrams/08-sequence-attendance-billing.puml) | Sequence: Outbox + idempotent consumer |
 | [diagrams/09-state-lifecycle.puml](diagrams/09-state-lifecycle.puml) | State: học sinh, ghi danh, buổi học, hóa đơn, runtime service |
@@ -34,6 +34,7 @@ java -jar ~/.vscode/extensions/jebbs.plantuml-2.18.1/plantuml.jar -charset UTF-8
 ## Tóm tắt kiến trúc
 
 - **7 service:** Identity, Student, Class, Schedule & Attendance, Academic, Billing, Notification; đứng trước là **API Gateway**.
-- **Database per service:** PostgreSQL (MongoDB cho Academic).
+- **Database per service:** PostgreSQL 18 trong Docker, mỗi service một database + login role ([ADR-0003](adr/0003-postgresql-database-per-service.md)); MongoDB cho Academic.
+- **Đăng nhập:** Firebase Authentication; gateway xác thực Firebase ID token ([ADR-0004](adr/0004-firebase-authentication.md)).
 - **Giao tiếp:** REST cho truy vấn đồng bộ; **RabbitMQ** cho event, có Outbox pattern và idempotent consumer.
 - **Triển khai:** Docker Compose; giám sát bằng Prometheus / Grafana / Loki (tùy chọn).

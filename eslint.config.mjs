@@ -7,7 +7,14 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   {
     // frontend/ has its own Next.js ESLint config and is linted by its own script.
-    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', 'docs/**', 'frontend/**'],
+    ignores: [
+      '**/dist/**',
+      '**/node_modules/**',
+      '**/coverage/**',
+      'docs/**',
+      'frontend/**',
+      '**/generated/**',
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,

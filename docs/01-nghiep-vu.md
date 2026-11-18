@@ -42,9 +42,9 @@
 
 - Giáo viên tự đăng ký hoặc được Admin mời qua email.
 - Tài khoản phụ huynh và học sinh do giáo viên **mời**: hệ thống gửi link kích hoạt, người nhận tự đặt mật khẩu.
-- Đăng nhập bằng email + mật khẩu (giai đoạn sau có thể thêm Google).
-- Access token sống 15 phút, refresh token 7 ngày, mỗi lần làm mới sẽ cấp refresh token mới (xoay vòng).
-- Đăng nhập sai 5 lần liên tiếp thì khóa tài khoản 15 phút.
+- Đăng nhập bằng email + mật khẩu qua **Firebase Authentication** (giai đoạn sau có thể thêm Google) ([ADR-0004](adr/0004-firebase-authentication.md)).
+- Firebase lưu mật khẩu, cấp ID token (hiệu lực 1 giờ, SDK tự làm mới), xử lý quên mật khẩu và chặn đăng nhập sai liên tục (thay cho quy tắc tự khóa 15 phút trước đây).
+- Identity Service vẫn quản lý vai trò (lưu thành custom claim trên tài khoản Firebase), lời mời và việc vô hiệu hóa giáo viên. Mỗi lần đổi vai trò hoặc vô hiệu hóa, Identity thu hồi phiên đăng nhập để thay đổi có hiệu lực ngay.
 
 ### 3.2. Học sinh (Student)
 
@@ -200,7 +200,7 @@ Mọi event đều có phần chung (envelope):
 | Hiệu năng | API đọc p95 < 300ms; điểm danh 1 lớp < 1s |
 | Sẵn sàng | Một service phụ lỗi (Notification, Academic) không làm gián đoạn điểm danh và học phí |
 | Nhất quán | Nhất quán cuối cùng (eventual consistency) giữa các service, trễ < 5s; không mất event (Outbox); không xử lý trùng (idempotent consumer) |
-| Bảo mật | HTTPS, mật khẩu bcrypt, JWT RS256, phân quyền ở từng service, không log thông tin cá nhân |
+| Bảo mật | HTTPS, đăng nhập qua Firebase Authentication, gateway xác thực Firebase ID token, phân quyền ở từng service, không log thông tin cá nhân |
 | Quyền riêng tư | Dữ liệu trẻ vị thành niên: chỉ phụ huynh và giáo viên phụ trách được xem; hỗ trợ xóa / ẩn danh khi nghỉ học |
 | Khả năng quan sát | Log có `correlationId`, endpoint `/health/live` và `/health/ready`, metrics Prometheus |
 | Triển khai | Toàn bộ chạy bằng `docker compose up` |

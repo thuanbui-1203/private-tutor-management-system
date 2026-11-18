@@ -22,19 +22,12 @@ package "identity_db" #F5F9FF {
   entity users {
     * id : UUID <<PK>>
     --
+    * firebase_uid : VARCHAR(128) <<UNIQUE>>
     * email : VARCHAR(255) <<UNIQUE>>
-    * password_hash : VARCHAR(255)
+    <i>(mật khẩu nằm ở Firebase Auth, ADR-0004)</i>
     * role : ENUM(ADMIN, TUTOR, PARENT, STUDENT)
     * status : ENUM(PENDING, ACTIVE, LOCKED, DISABLED)
     created_at : TIMESTAMP
-  }
-  entity refresh_tokens {
-    * id : UUID <<PK>>
-    --
-    * user_id : UUID <<FK>>
-    * token_hash : VARCHAR(255)
-    * expires_at : TIMESTAMP
-    revoked : BOOLEAN
   }
   entity invitations {
     * id : UUID <<PK>>
@@ -46,7 +39,6 @@ package "identity_db" #F5F9FF {
     revoked_at : TIMESTAMP
     <i>(dùng 1 lần; gửi lại thì thu hồi bản cũ)</i>
   }
-  users ||--o{ refresh_tokens
   users ||--o{ invitations
 }
 

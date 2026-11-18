@@ -1,0 +1,12 @@
+// class-service owns class_db. No other service may connect to it.
+// Models are added by the issues that own this service (see GitHub #1).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}

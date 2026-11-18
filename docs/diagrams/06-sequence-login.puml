@@ -1,54 +1,55 @@
 @startuml 06-sequence-login
-' Sequence diagram - Đăng nhập và gọi API có xác thực
-title Sequence Diagram - Đăng nhập và gọi API có xác thực (JWT)
+' Sequence diagram - Đăng nhập (Firebase Authentication) và gọi API có xác thực
+' Liên quan: ADR-0004
+title Sequence Diagram - Đăng nhập qua Firebase Auth và gọi API có xác thực
 autonumber
 skinparam responseMessageBelowArrow true
 
 actor "Giáo viên" as U
-participant "Web App" as Web
+participant "Web App\n(Next.js + Firebase SDK)" as Web
+participant "Firebase\nAuthentication" as FB
 participant "API Gateway" as GW
 participant "Identity Service" as Id
 database "identity_db" as IdDB
 participant "Student Service" as St
 database "student_db" as StDB
 
-== Đăng nhập ==
+== Đăng nhập (không qua backend) ==
 U -> Web : Nhập email + mật khẩu
-Web -> GW : POST /auth/login
-GW -> Id : POST /auth/login
-Id -> IdDB : SELECT user WHERE email
-IdDB --> Id : user (password_hash, role, status)
-alt Sai mật khẩu hoặc tài khoản LOCKED
-  Id --> GW : 401 Unauthorized
-  GW --> Web : 401
+Web -> FB : signInWithEmailAndPassword
+alt Sai thông tin / bị chặn do sai nhiều lần / tài khoản bị vô hiệu hóa
+  FB --> Web : lỗi auth/...
   Web --> U : "Sai thông tin đăng nhập"
 else Hợp lệ
-  Id -> Id : Ký access token (RS256, 15 phút)\nclaims: sub, role
-  Id -> IdDB : INSERT refresh_tokens (7 ngày)
-  Id --> GW : 200 {accessToken, refreshToken}
-  GW --> Web : 200
-  Web -> Web : Lưu accessToken (memory)\nrefreshToken (httpOnly cookie)
+  FB --> Web : ID token (1 giờ) + refresh token\nclaims: uid, role (custom claim)
+  Web -> Web : SDK tự lưu và tự làm mới token
   Web --> U : Vào Dashboard
 end
 
 == Gọi API nghiệp vụ ==
 U -> Web : Mở "Danh sách học sinh"
-Web -> GW : GET /students\nAuthorization: Bearer <token>
-GW -> GW : Verify chữ ký JWT bằng public key\n(cache JWKS từ Identity)
-alt Token hết hạn
-  GW --> Web : 401 token_expired
-  Web -> GW : POST /auth/refresh (cookie)
-  GW -> Id : POST /auth/refresh
-  Id -> IdDB : Kiểm tra & xoay vòng refresh token
-  Id --> GW : 200 {accessToken mới}
-  GW --> Web : 200
-  Web -> GW : GET /students (retry với token mới)
+Web -> Web : getIdToken() (SDK làm mới nếu sắp hết hạn)
+Web -> GW : GET /api/students\nAuthorization: Bearer <ID token>
+GW -> GW : Firebase Admin SDK verifyIdToken(token, checkRevoked)\n(khóa công khai của Google được cache)
+alt Token sai / hết hạn / đã bị thu hồi / thiếu role
+  GW --> Web : 401
+  Web -> Web : Làm mới token hoặc đăng nhập lại
+else Hợp lệ
+  GW -> St : GET /students\nX-User-Id = uid, X-User-Role = role,\nX-Correlation-Id
+  St -> StDB : SELECT * FROM students\nWHERE tutor_id = :userId
+  StDB --> St : rows
+  St --> GW : 200 [students]
+  GW --> Web : 200 [students]
+  Web --> U : Hiển thị danh sách
 end
-GW -> St : GET /students\nX-User-Id, X-User-Role, X-Correlation-Id
-St -> StDB : SELECT * FROM students\nWHERE tutor_id = :userId
-StDB --> St : rows
-St --> GW : 200 [students]
-GW --> Web : 200 [students]
-Web --> U : Hiển thị danh sách
+
+== Admin đổi vai trò / vô hiệu hóa giáo viên ==
+U -> GW : PATCH /api/users/{id}
+GW -> Id : forward
+Id -> IdDB : UPDATE users (role / DISABLED)
+Id -> FB : setCustomUserClaims / updateUser(disabled)\n+ revokeRefreshTokens(uid)
+note right of FB : Token cũ bị từ chối ngay\nnhờ checkRevoked ở gateway
+Id --> GW : 200
+GW --> U : 200
 
 @enduml
