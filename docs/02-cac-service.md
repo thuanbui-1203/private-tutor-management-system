@@ -231,33 +231,31 @@ Hóa đơn đã `ISSUED` không bao giờ bị sửa. Sửa sai được ghi th�
 
 ```
 microservices_final/
-├── api-gateway/
-├── services/
+├── backend/                     # mọi service NestJS
+│   ├── api-gateway/
 │   ├── identity-service/
 │   │   ├── src/
 │   │   │   ├── modules/         # auth, users, invitations
-│   │   │   ├── outbox/          # outbox table + relay
+│   │   │   ├── outbox/          # outbox + relay
 │   │   │   ├── messaging/       # publisher / consumer RabbitMQ
+│   │   │   ├── app.setup.ts     # cấu hình dùng chung cho main.ts và test
 │   │   │   └── main.ts
-│   │   ├── prisma/ (hoặc migrations/)
 │   │   ├── test/
-│   │   ├── Dockerfile
+│   │   ├── Dockerfile           # build từ thư mục gốc repo
 │   │   └── .env.example
 │   ├── student-service/
 │   ├── class-service/
 │   ├── schedule-service/
-│   ├── academic-service/
-│   ├── billing-service/
-│   └── notification-service/
+│   └── billing-service/         # academic / notification: chỉ làm nếu còn thời gian
+├── frontend/                    # Next.js (App Router), cổng 5173, chỉ gọi API Gateway
 ├── packages/
 │   ├── contracts/               # kiểu dữ liệu event và DTO dùng chung (versioned)
 │   └── common/                  # logger, auth guard, health check, outbox helper
-├── frontend/
 ├── infra/
-│   ├── postgres/init.sql        # tạo database + user cho từng service
 │   ├── rabbitmq/definitions.json
 │   └── grafana/
 ├── docs/
+├── pnpm-workspace.yaml          # workspace + catalog phiên bản dùng chung
 ├── docker-compose.yml
 ├── docker-compose.override.yml  # cấu hình riêng cho dev (hot reload)
 └── .env.example

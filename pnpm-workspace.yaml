@@ -1,0 +1,24 @@
+packages:
+  - backend/*
+  - frontend
+  - packages/*
+
+# Shared dependency versions. Services reference these as "catalog:" so every
+# agent builds against the same versions. Bump here, never in a service.
+catalog:
+  '@nestjs/cli': ^11.0.10
+  '@nestjs/common': ^11.1.6
+  '@nestjs/core': ^11.1.6
+  '@nestjs/platform-express': ^11.1.6
+  '@nestjs/swagger': ^11.2.0
+  '@nestjs/testing': ^11.1.6
+  reflect-metadata: ^0.2.2
+  rxjs: ^7.8.2
+  '@types/express': ^5.0.3
+  '@types/jest': ^30.0.0
+  '@types/node': ^22.18.6
+  '@types/supertest': ^6.0.3
+  jest: ^30.1.3
+  supertest: ^7.1.4
+  ts-jest: ^29.4.4
+  typescript: ^5.9.2

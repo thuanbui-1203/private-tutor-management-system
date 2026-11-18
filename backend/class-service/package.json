@@ -1,0 +1,43 @@
+{
+  "name": "@tms/class-service",
+  "version": "0.1.0",
+  "private": true,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "dev": "nest start --watch",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@nestjs/common": "catalog:",
+    "@nestjs/core": "catalog:",
+    "@nestjs/platform-express": "catalog:",
+    "@nestjs/swagger": "catalog:",
+    "reflect-metadata": "catalog:",
+    "rxjs": "catalog:"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "catalog:",
+    "@nestjs/testing": "catalog:",
+    "@types/express": "catalog:",
+    "@types/jest": "catalog:",
+    "@types/node": "catalog:",
+    "@types/supertest": "catalog:",
+    "jest": "catalog:",
+    "supertest": "catalog:",
+    "ts-jest": "catalog:",
+    "typescript": "catalog:"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": [
+      "<rootDir>/src",
+      "<rootDir>/test"
+    ],
+    "testRegex": "\\.spec\\.ts$"
+  }
+}

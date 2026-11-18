@@ -7,7 +7,7 @@
 | Công cụ | Phiên bản | Ghi chú |
 |---|---|---|
 | Docker Desktop | ≥ 4.30 | Trên Windows bật WSL 2 backend; cấp ≥ 6 GB RAM cho Docker |
-| Node.js | 20 LTS | Chỉ cần khi chạy service ngoài Docker |
+| Node.js | 22 LTS | Chỉ cần khi chạy service ngoài Docker |
 | pnpm | ≥ 9 | `npm i -g pnpm` (monorepo dùng pnpm workspace) |
 | Git | bất kỳ | |
 | (Tùy chọn) Java 17+ và extension PlantUML | | Để xem / render sơ đồ trong `docs/diagrams` |
@@ -196,44 +196,44 @@ services:
 
   identity-service:
     <<: *service
-    build: ./services/identity-service
+    build: ./backend/identity-service
     ports: ["3001:3001"]
 
   student-service:
     <<: *service
-    build: ./services/student-service
+    build: ./backend/student-service
     ports: ["3002:3002"]
 
   class-service:
     <<: *service
-    build: ./services/class-service
+    build: ./backend/class-service
     ports: ["3003:3003"]
 
   schedule-service:
     <<: *service
-    build: ./services/schedule-service
+    build: ./backend/schedule-service
     ports: ["3004:3004"]
 
   academic-service:
     <<: *service
-    build: ./services/academic-service
+    build: ./backend/academic-service
     ports: ["3005:3005"]
     depends_on: [mongo, rabbitmq]
 
   billing-service:
     <<: *service
-    build: ./services/billing-service
+    build: ./backend/billing-service
     ports: ["3006:3006"]
 
   notification-service:
     <<: *service
-    build: ./services/notification-service
+    build: ./backend/notification-service
     ports: ["3007:3007"]
     depends_on: [rabbitmq, redis, mailpit]
 
   frontend:
     build: ./frontend
-    ports: ["5173:80"]
+    ports: ["5173:5173"]
     depends_on: [api-gateway]
     networks: [tms-net]
 
@@ -264,11 +264,11 @@ Hạ tầng vẫn chạy trong Docker, chỉ service đang sửa chạy trên m�
 docker compose up -d postgres mongo rabbitmq redis mailpit
 
 # Chạy service cần sửa
-cd services/billing-service
+cd backend/billing-service
 cp .env.example .env          # đổi host thành localhost
 pnpm install
 pnpm migrate:dev
-pnpm start:dev                # http://localhost:3006/docs
+pnpm dev                      # http://localhost:3006/docs
 ```
 
 Nếu muốn các service khác (vẫn chạy trong Docker) gọi được service đang chạy trên máy, đặt URL nội bộ thành `http://host.docker.internal:3006`.
