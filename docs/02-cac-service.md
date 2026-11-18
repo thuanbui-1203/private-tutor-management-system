@@ -13,7 +13,7 @@
 | 4 | `schedule-service` | 3004 | PostgreSQL `schedule_db` | Lịch, buổi học, điểm danh | ✔ |
 | 5 | `academic-service` | 3005 | MongoDB `academic_db` | Bài tập, điểm, nhận xét | Giai đoạn 4 |
 | 6 | `billing-service` | 3006 | PostgreSQL `billing_db` | Hóa đơn, thanh toán, công nợ | Giai đoạn 3 |
-| 7 | `notification-service` | 3007 | PostgreSQL `notification_db` + Redis | Gửi email, SMS, Zalo, push | Giai đoạn 2 |
+| 7 | `notification-service` | 3007 | PostgreSQL `notification_db` + Redis | Gửi email, SMS, Zalo, push | Giai đoạn 2 (tùy chọn, xem BR-SYS-03) |
 
 **Hạ tầng dùng chung:**
 
@@ -114,7 +114,7 @@
 | GET | `/students/{studentId}/classes` | Các lớp của một học sinh | TUTOR, PARENT, STUDENT |
 
 **Phát event:** `ClassCreated`, `ClassUpdated`, `ClassClosed`, `StudentEnrolled`, `StudentWithdrawn`
-**Nhận event:** `StudentStatusChanged` (tạm dừng hoặc rút ghi danh), `EnrollmentSyncFailed` (giao dịch bù trừ)
+**Nhận event:** `StudentStatusChanged` (tạm dừng hoặc rút ghi danh), `EnrollmentConfirmed`, `EnrollmentSyncFailed` (giao dịch bù trừ)
 **Gọi đồng bộ:** student-service
 
 ---
@@ -137,7 +137,7 @@
 | GET | `/students/{id}/attendance?month=` | Lịch sử chuyên cần | TUTOR, PARENT, STUDENT |
 | GET | `/calendar/{token}.ics` | Lịch dạng iCal để đồng bộ Google / Apple Calendar | Token riêng |
 
-**Phát event:** `SessionScheduled`, `SessionCancelled`, `AttendanceRecorded`, `AttendanceCorrected`
+**Phát event:** `SessionScheduled`, `SessionCancelled`, `AttendanceRecorded`, `AttendanceCorrected`, `EnrollmentConfirmed`
 **Nhận event:** `StudentEnrolled`, `StudentWithdrawn`, `ClassClosed`
 **Gọi đồng bộ:** class-service (khi chưa có roster trong `class_roster_view`)
 **Tác vụ định kỳ:** mỗi giờ quét các buổi quá hạn và chuyển sang `MISSED`; mỗi tuần sinh thêm buổi cho lịch lặp
@@ -177,7 +177,7 @@
 | GET | `/billing/reports/revenue?from=&to=` | Báo cáo doanh thu | TUTOR, ADMIN |
 | POST | `/webhooks/payments/{provider}` | Nhận webhook từ cổng thanh toán / ngân hàng | Chữ ký webhook |
 
-**Phát event:** `InvoiceIssued`, `PaymentReceived`, `InvoiceOverdue`
+**Phát event:** `InvoiceIssued` (hóa đơn tháng và hóa đơn ghi danh), `PaymentReceived`, `InvoiceOverdue`
 **Nhận event:** `StudentCreated`, `StudentUpdated`, `StudentStatusChanged`, `ClassCreated`, `ClassUpdated`, `StudentEnrolled`, `AttendanceRecorded`, `AttendanceCorrected`, `SessionCancelled`
 **Tác vụ định kỳ:** 00:00 ngày 1 chốt hóa đơn; 08:00 hằng ngày đánh dấu hóa đơn quá hạn và gửi nhắc
 
@@ -194,7 +194,7 @@
 | GET/PUT | `/notifications/preferences` | Chọn kênh, bật / tắt từng loại thông báo | Đã đăng nhập |
 | POST | `/notifications/devices` | Đăng ký push token (FCM) | Đã đăng nhập |
 
-**Nhận event:** `UserRegistered`, `InvitationCreated`, `StudentEnrolled`, `SessionScheduled`, `SessionCancelled`, `AttendanceRecorded` (khi vắng), `GradeRecorded`, `InvoiceIssued`, `InvoiceOverdue`, `PaymentReceived`, `MonthlyReportGenerated`
+**Nhận event:** `UserRegistered`, `InvitationCreated`, `EnrollmentConfirmed`, `SessionScheduled`, `SessionCancelled`, `AttendanceRecorded` (khi vắng), `GradeRecorded`, `InvoiceIssued`, `InvoiceOverdue`, `PaymentReceived`, `MonthlyReportGenerated`
 **Cách thiết kế:** mỗi kênh gửi là một *adapter* (`EmailChannel`, `SmsChannel`, `ZaloChannel`, `PushChannel`) cài đặt chung một interface `NotificationChannel`. Nhờ vậy có thể đổi nhà cung cấp mà không sửa logic nghiệp vụ.
 
 ---

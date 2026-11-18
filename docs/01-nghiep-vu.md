@@ -19,7 +19,7 @@
 | `ADMIN` | Chủ trung tâm | Toàn bộ dữ liệu, báo cáo doanh thu, quản lý giáo viên |
 | `TUTOR` | Giáo viên | Chỉ học sinh, lớp, lịch, hóa đơn do mình quản lý (`tutor_id = mình`) |
 | `PARENT` | Phụ huynh | Chỉ dữ liệu của con mình (`students.parent_id`) |
-| `STUDENT` | Học sinh | Chỉ dữ liệu của bản thân, không xem học phí |
+| `STUDENT` | Học sinh | Chỉ dữ liệu của bản thân; chỉ xem học phí khi đã đủ 18 tuổi và là người thanh toán (Payer) của chính mình |
 | `SYSTEM` | Tác vụ định kỳ (cron) | Chốt hóa đơn, nhắc lịch, đánh dấu quá hạn |
 
 **Ma trận quyền (rút gọn):**
@@ -87,7 +87,7 @@
   - BR-SC-02: chỉ được điểm danh khi buổi đã bắt đầu và chưa đóng.
   - BR-SC-03: chỉ được sửa điểm danh trong vòng 48 giờ sau buổi học. Khi sửa, hệ thống phát `AttendanceCorrected` để Billing điều chỉnh phí.
   - BR-SC-04: giáo viên hủy buổi thì không tính phí cho học sinh nào và gợi ý tạo buổi bù.
-  - BR-SC-05: buổi bù liên kết với buổi gốc qua `makeup_of`, tính phí như một buổi bình thường.
+  - BR-SC-05: buổi bù liên kết với buổi gốc qua `makeup_of`, tính phí như một buổi bình thường (chỉ với lớp `PER_SESSION`; lớp `MONTHLY` không tính thêm).
   - BR-SC-06: quá 24h sau giờ kết thúc mà chưa điểm danh thì buổi chuyển `MISSED` và giáo viên nhận nhắc nhở.
 
 ### 3.5. Học tập (Academic)
@@ -107,9 +107,13 @@
 - **Quy tắc:**
   - BR-BI-01: mỗi cặp (buổi học, học sinh) chỉ sinh tối đa 1 khoản phí, tức là chống tính trùng.
   - BR-BI-02: hóa đơn có tổng bằng 0 sẽ tự `VOID` khi chốt.
-  - BR-BI-03: quá hạn thì chuyển `OVERDUE` và gửi nhắc vào các ngày 11, 15, 20.
-  - BR-BI-04: không sửa hóa đơn đã `ISSUED`; nếu sai thì `VOID` rồi phát hành hóa đơn thay thế.
-  - BR-BI-05: lớp `MONTHLY` tạo 1 dòng phí cố định cho tháng; nếu học sinh vào giữa tháng thì tính theo tỉ lệ số buổi còn lại.
+  - BR-BI-03: quá hạn thì chuyển `OVERDUE` vào ngày hôm sau hạn thanh toán và gửi nhắc vào các ngày hạn + 1, + 5, + 10 (áp dụng cho cả hóa đơn tháng và hóa đơn ghi danh).
+  - BR-BI-04: không sửa hóa đơn đã `ISSUED`; nếu sai thì `VOID` rồi phát hành hóa đơn thay thế. Hóa đơn tháng chỉ có tối đa 1 bản không `VOID` cho mỗi (học sinh, kỳ). Sửa điểm danh sau khi chốt hóa đơn tạo **dòng điều chỉnh (Adjustment)** trên hóa đơn kế tiếp, không sửa hóa đơn cũ ([ADR-0002](adr/0002-immutable-invoices-with-adjustments.md)).
+  - BR-BI-05: lớp `MONTHLY` tạo 1 dòng phí cố định cho tháng, không đổi khi giáo viên hủy buổi hay có buổi bù; học sinh vào hoặc rời giữa tháng thì tính theo tỉ lệ số buổi trong khoảng thời gian học. Nếu đã thu thừa thì chênh lệch được điều chỉnh ở hóa đơn kế tiếp, hệ thống không hoàn tiền.
+  - BR-BI-06: lớp `MONTHLY` khi ghi danh sẽ phát hành ngay **hóa đơn ghi danh** (phí tháng đầu theo tỉ lệ, hạn 7 ngày). Hóa đơn tháng sau đó không lặp lại dòng phí này. Lớp `PER_SESSION` không có hóa đơn ghi danh.
+  - BR-BI-07: khoản thanh toán không được vượt số còn nợ của hóa đơn; thanh toán không sửa / xóa, ghi sai thì tạo bút toán đảo (Reversal). Trạng thái hóa đơn luôn được suy ra từ các khoản thanh toán.
+  - BR-BI-08: phí `ABSENT` cấu hình theo từng lớp (mặc định có tính phí), thay cho biến môi trường toàn cục.
+  - BR-BI-09: học sinh `DROPPED` vẫn bị tính các buổi đã học; hóa đơn nháp vẫn được chốt bình thường.
 
 ### 3.7. Thông báo (Notification)
 
@@ -161,7 +165,8 @@
 | `StudentStatusChanged` | Student | studentId, from, to | Class, Billing |
 | `ClassCreated` / `ClassUpdated` | Class | classId, tutorId, feeType, feeAmount, effectiveFrom | Billing, Schedule |
 | `ClassClosed` | Class | classId | Schedule |
-| `StudentEnrolled` | Class | classId, studentId, studentName | Schedule, Billing, Notification |
+| `StudentEnrolled` | Class | classId, studentId, studentName | Schedule, Billing |
+| `EnrollmentConfirmed` | Schedule | classId, studentId | Class, Notification (gửi email chào mừng, BR-NO-01) |
 | `StudentWithdrawn` | Class | classId, studentId, reason | Schedule, Billing |
 | `SessionScheduled` | Schedule | sessionId, classId, startAt, studentIds | Notification |
 | `SessionCancelled` | Schedule | sessionId, reason, cancelledBy | Billing, Notification |
@@ -196,3 +201,28 @@ Mọi event đều có phần chung (envelope):
 | Quyền riêng tư | Dữ liệu trẻ vị thành niên: chỉ phụ huynh và giáo viên phụ trách được xem; hỗ trợ xóa / ẩn danh khi nghỉ học |
 | Khả năng quan sát | Log có `correlationId`, endpoint `/health/live` và `/health/ready`, metrics Prometheus |
 | Triển khai | Toàn bộ chạy bằng `docker compose up` |
+
+## 7. Quy tắc bổ sung (chốt sau phiên rà soát nghiệp vụ)
+
+Thuật ngữ chuẩn nằm ở [GLOSSARY.md](../GLOSSARY.md); quyết định kiến trúc nằm ở [docs/adr/](adr/).
+
+| Mã | Quy tắc |
+|---|---|
+| BR-AU-01 | Mỗi người dùng giữ đúng 1 vai trò. Admin có thể sở hữu lớp như một giáo viên. |
+| BR-AU-02 | Lời mời kích hoạt dùng 1 lần, hiệu lực 7 ngày; gửi lại sẽ thu hồi link cũ. |
+| BR-ST-04 | Mọi học sinh có tài khoản theo mặc định (tạo lời mời khi thêm học sinh). Dưới 18 tuổi bắt buộc có thông tin phụ huynh; lời mời gửi cho phụ huynh nếu em chưa có email. |
+| BR-ST-05 | Mỗi học sinh có 1 người thanh toán (Payer) duy nhất: phụ huynh chính, hoặc chính học sinh nếu đã đủ 18 tuổi. Đủ 18 tuổi không tự đổi Payer. |
+| BR-ST-06 | Một học sinh có thể có nhiều phụ huynh, đúng 1 phụ huynh chính. Phụ huynh phụ xem lịch, điểm, nhận xét nhưng không xem học phí. |
+| BR-ST-07 | Ghi chú trong hồ sơ học sinh chỉ giáo viên và Admin xem. |
+| BR-ST-08 | Ẩn danh học sinh chỉ thực hiện theo yêu cầu, khi học sinh đã `DROPPED` / `GRADUATED` và mọi hóa đơn đã `PAID` hoặc `VOID`; dữ liệu cá nhân bị xóa, số liệu tiền được giữ với mã giả danh. |
+| BR-CL-06 | Ghi danh `PENDING` (chờ Student Service), `AWAITING_PAYMENT` và `ACTIVE` đều giữ chỗ. |
+| BR-CL-07 | Lớp `MONTHLY`: ghi danh ở trạng thái `AWAITING_PAYMENT` cho đến khi thanh toán hóa đơn ghi danh; sau 7 ngày chưa thanh toán thì chuyển `WITHDRAWN` (lý do `UNPAID`), nhả chỗ và phát `StudentWithdrawn`. Trong 7 ngày vẫn được học; khoản đã phát sinh không bị xóa. |
+| BR-CL-08 | Giáo viên chỉ bị vô hiệu hóa (không xóa) và chỉ khi không còn lớp đang mở; Admin chuyển lớp sang giáo viên khác trước. |
+| BR-SC-07 | Lịch lặp (Schedule) bất biến: muốn đổi thì kết thúc lịch cũ và tạo lịch mới; người nhận chỉ thấy 1 thông báo "đổi lịch". |
+| BR-SC-08 | `EXCUSED` do giáo viên chọn; hệ thống không kiểm tra quy tắc báo trước 24h. |
+| BR-SC-09 | Buổi `MISSED` vẫn điểm danh được đến 48h sau khi kết thúc; quá hạn thì khóa và không tính phí. |
+| BR-SC-10 | Dữ liệu buổi học nhóm chỉ hiển thị phần của chính học sinh / phụ huynh đó, không lộ tên hay dữ liệu bạn khác. |
+| BR-NO-01 | Email chào mừng chỉ gửi sau khi Schedule xác nhận học sinh đã vào roster (event `EnrollmentConfirmed`). |
+| BR-SYS-01 | Một triển khai phục vụ đúng một trung tâm ([ADR-0001](adr/0001-single-tenant-deployment.md)). |
+| BR-SYS-02 | Toàn hệ thống dùng một múi giờ (Asia/Ho_Chi_Minh); thời điểm lưu theo UTC. |
+| BR-SYS-03 | Phạm vi dự án: gateway + Identity, Student, Class, Schedule & Attendance, Billing. Notification và Academic được mô tả nhưng chỉ làm nếu còn thời gian. |
