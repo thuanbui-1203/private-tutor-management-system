@@ -23,7 +23,7 @@
 | Push notification | Thông báo trên app / web | Firebase Cloud Messaging (FCM), Web Push | Notification | Trung bình |
 | Lịch | Đồng bộ lịch học sang lịch cá nhân | iCal feed (`.ics`), Google Calendar API, Microsoft Graph | Schedule | Trung bình |
 | Học online | Tạo link phòng học cho buổi online | Google Meet (qua Calendar API), Zoom API, Jitsi | Schedule | Thấp |
-| Đăng nhập | Đăng nhập nhanh | Google OAuth 2.0 / OpenID Connect, Zalo Login | Identity | Thấp |
+| Đăng nhập | Đăng nhập nhanh | Google qua Firebase Authentication, Zalo Login (custom token) | Identity + Firebase Auth | Thấp |
 | Lưu trữ file | Bài tập, file đính kèm, PDF báo cáo | MinIO (tự host, tương thích S3), Amazon S3, Cloudflare R2, Cloudinary | Academic, Billing | Trung bình |
 | Tạo PDF | Hóa đơn, báo cáo tiến độ | Gotenberg (container), Puppeteer, PDFKit | Billing, Academic | Trung bình |
 | Hóa đơn điện tử | Xuất HĐĐT theo quy định (nếu là trung tâm) | VNPT Invoice, Viettel S-Invoice, MISA meInvoice | Billing | Thấp |
@@ -104,10 +104,10 @@ Ngân hàng / Cổng TT ──webhook──▶ API Gateway /api/webhooks/payment
 - **Zoom:** Server-to-Server OAuth app; tạo meeting khi buổi học có `mode = ONLINE`, lưu `join_url` vào session.
 - **Jitsi:** không cần API key, chỉ cần sinh tên phòng ngẫu nhiên; phù hợp cho demo.
 
-### 3.8. Đăng nhập bên thứ ba – Identity Service
+### 3.8. Đăng nhập bên thứ ba – Firebase Authentication
 
-- **Google OIDC:** flow Authorization Code + PKCE. Identity đổi `id_token` lấy JWT nội bộ của hệ thống. Liên kết theo email đã xác minh.
-- Vẫn dùng JWT nội bộ cho mọi service; token của Google không đi sâu vào hệ thống.
+- Đăng nhập đã do Firebase Authentication đảm nhiệm ([ADR-0004](adr/0004-firebase-authentication.md)), nên thêm **Google** chỉ cần bật provider Google trong Firebase console (miễn phí ở gói Spark) và gọi `signInWithPopup` ở frontend. Zalo không có provider sẵn; cần custom token do Identity cấp qua Admin SDK.
+- Gateway vẫn chỉ nhận Firebase ID token, dù người dùng đăng nhập bằng cách nào; vai trò vẫn nằm trong custom claim do Identity gán. Tài khoản Google mới cần qua bước đăng ký / lời mời để có vai trò.
 
 ### 3.9. Lưu trữ file – Academic / Billing
 

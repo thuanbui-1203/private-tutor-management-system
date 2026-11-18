@@ -27,11 +27,11 @@ skinparam package {
 actor "Giáo viên / Admin\nPhụ huynh / Học sinh" as Users
 
 rectangle "Client" {
-  component "Web App\n(React / Next.js)" as Web
+  component "Web App\n(Next.js)" as Web
 }
 
 rectangle "Edge" {
-  component "API Gateway\nrouting · verify JWT · rate limit · CORS\n/auth /students /classes /schedules\n/sessions /academic /billing" as GW
+  component "API Gateway\nrouting · verify Firebase ID token · rate limit · CORS\n/auth /students /classes /schedules\n/sessions /academic /billing" as GW
   database "Redis\n(rate limit,\ndelayed jobs)" as Redis
 }
 
@@ -70,6 +70,7 @@ package "Notification" as PN {
 }
 
 rectangle "External" {
+  component "Firebase\nAuthentication" as FBA
   component "SMTP / SendGrid" as SMTP
   component "SMS / Zalo OA" as SMS
 }
@@ -81,7 +82,10 @@ rectangle "Observability" {
 
 ' --- client -> edge
 Users --> Web
-Web --> GW : HTTPS / REST
+Web --> GW : HTTPS / REST\n(Bearer ID token)
+Web --> FBA : đăng nhập (Firebase SDK)
+GW --> FBA : verifyIdToken
+IdS --> FBA : custom claims, tạo / vô hiệu hóa user
 GW -right-> Redis
 
 ' --- gateway -> services (đồng bộ)

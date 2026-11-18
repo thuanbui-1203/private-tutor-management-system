@@ -46,8 +46,8 @@ alt Đã xử lý (event gửi lại)
 else Chưa xử lý
   Bi -> BiDB : SELECT fee_policies WHERE class_id
   Bi -> BiDB : BEGIN
-  opt fee_type = PER_SESSION và status != EXCUSED
-    Bi -> BiDB : UPSERT invoice DRAFT (student_id, period)
+  opt fee_type = PER_SESSION và (status ∈ {PRESENT, LATE}\nhoặc status = ABSENT và charge_absent)
+    Bi -> BiDB : UPSERT invoice DRAFT MONTHLY (student_id, period)
     Bi -> BiDB : INSERT invoice_item (session_id, amount)
     Bi -> BiDB : UPDATE invoice.total
   end
@@ -56,8 +56,16 @@ else Chưa xử lý
   Bi --> MQ : ack
 end
 
+== Sửa điểm danh (<= 48h) sau khi hóa đơn đã chốt ==
+MQ -> Bi : AttendanceCorrected {sessionId, studentId,\noldStatus, newStatus}
+alt Hóa đơn chứa buổi này còn DRAFT
+  Bi -> BiDB : Thêm / xóa invoice_item trên hóa đơn DRAFT
+else Hóa đơn đã ISSUED (bất biến, ADR-0002)
+  Bi -> BiDB : INSERT invoice_item type = ADJUSTMENT\n(adjusts_item_id) vào hóa đơn DRAFT kế tiếp
+end
+
 == Các consumer khác (song song) ==
-MQ -> Ac : AttendanceRecorded
+MQ -> Ac : AttendanceRecorded\n<i>(Academic: chỉ làm nếu còn thời gian)</i>
 Ac -> Ac : Tạo form nhận xét
 MQ -> No : AttendanceRecorded
 opt status = ABSENT

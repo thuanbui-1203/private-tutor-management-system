@@ -22,21 +22,24 @@ package "identity_db" #F5F9FF {
   entity users {
     * id : UUID <<PK>>
     --
+    * firebase_uid : VARCHAR(128) <<UNIQUE>>
     * email : VARCHAR(255) <<UNIQUE>>
-    * password_hash : VARCHAR(255)
+    <i>(mật khẩu nằm ở Firebase Auth, ADR-0004)</i>
     * role : ENUM(ADMIN, TUTOR, PARENT, STUDENT)
-    * status : ENUM(ACTIVE, LOCKED, PENDING)
+    * status : ENUM(PENDING, ACTIVE, LOCKED, DISABLED)
     created_at : TIMESTAMP
   }
-  entity refresh_tokens {
+  entity invitations {
     * id : UUID <<PK>>
     --
     * user_id : UUID <<FK>>
     * token_hash : VARCHAR(255)
-    * expires_at : TIMESTAMP
-    revoked : BOOLEAN
+    * expires_at : TIMESTAMP (+7 ngày)
+    used_at : TIMESTAMP
+    revoked_at : TIMESTAMP
+    <i>(dùng 1 lần; gửi lại thì thu hồi bản cũ)</i>
   }
-  users ||--o{ refresh_tokens
+  users ||--o{ invitations
 }
 
 package "student_db" #F5FFF5 {
@@ -53,15 +56,28 @@ package "student_db" #F5FFF5 {
     --
     * tutor_id : UUID <<ref users>>
     user_id : UUID <<ref users>>
-    parent_id : UUID <<FK>>
     * full_name : VARCHAR(100)
-    dob : DATE
+    email : VARCHAR(255)
+    * dob : DATE
     school : VARCHAR(150)
     grade : SMALLINT
-    note : TEXT
+    note : TEXT (chỉ TUTOR / ADMIN xem)
+    * payer : ENUM(PRIMARY_PARENT, SELF)
     * status : ENUM(ACTIVE, PAUSED, GRADUATED, DROPPED)
+    anonymised_at : TIMESTAMP
+    ..
+    CHECK: dưới 18 tuổi -> payer = PRIMARY_PARENT
   }
-  parents ||--o{ students
+  entity student_parents {
+    * student_id : UUID <<PK, FK>>
+    * parent_id : UUID <<PK, FK>>
+    --
+    * is_primary : BOOLEAN
+    ..
+    Đúng 1 dòng is_primary = true / học sinh
+  }
+  students ||--o{ student_parents
+  parents ||--o{ student_parents
 }
 
 package "class_db" #FFFDF0 {
@@ -75,6 +91,7 @@ package "class_db" #FFFDF0 {
     max_students : SMALLINT
     * fee_type : ENUM(PER_SESSION, MONTHLY)
     * fee_amount : DECIMAL(12,0)
+    * charge_absent : BOOLEAN (mặc định true)
     * status : ENUM(OPEN, CLOSED)
   }
   entity enrollments {
@@ -82,7 +99,12 @@ package "class_db" #FFFDF0 {
     --
     * class_id : UUID <<FK>>
     * student_id : UUID <<ref students>>
-    * status : ENUM(PENDING, ACTIVE, PAUSED, WITHDRAWN, REJECTED)
+    * status : ENUM(PENDING, AWAITING_PAYMENT, ACTIVE,
+ PAUSED, WITHDRAWN, REJECTED)
+    payment_deadline : TIMESTAMP (+7 ngày, chỉ MONTHLY)
+    roster_confirmed_at : TIMESTAMP
+    withdraw_reason : ENUM(REQUESTED, UNPAID,
+ CLASS_CLOSED, STUDENT_STATUS, SYNC_FAILED)
     joined_at : DATE
     left_at : DATE
     ..
@@ -127,8 +149,11 @@ package "schedule_db" #FFF5F5 {
     * class_id : UUID <<PK>>
     * student_id : UUID <<PK>>
     --
+    * enrollment_id : UUID <<ref enrollments>>
     student_name : VARCHAR(100)
-    <i>(bản sao từ event StudentEnrolled)</i>
+    joined_at : DATE
+    left_at : DATE
+    <i>(bản sao từ StudentEnrolled / StudentWithdrawn)</i>
   }
   schedules ||--o{ sessions
   sessions ||--o{ attendances
@@ -172,39 +197,65 @@ package "billing_db" #FFF8EE {
     --
     * fee_type : ENUM(PER_SESSION, MONTHLY)
     * fee_amount : DECIMAL(12,0)
+    * charge_absent : BOOLEAN
+    effective_from : CHAR(7) (YYYY-MM)
     <i>(bản sao từ ClassCreated/Updated)</i>
+  }
+  entity session_calendar {
+    * session_id : UUID <<PK, ref sessions>>
+    --
+    * class_id : UUID <<ref classes>>
+    * date : DATE
+    * status : ENUM(SCHEDULED, CANCELLED, RESCHEDULED)
+    <i>(bản sao từ SessionScheduled / Cancelled / Rescheduled,</i>
+    <i>dùng tính tỉ lệ phí MONTHLY theo số buổi)</i>
   }
   entity invoices {
     * id : UUID <<PK>>
     --
+    * kind : ENUM(MONTHLY, ENROLLMENT)
     * student_id : UUID <<ref students>>
+    enrollment_id : UUID <<ref enrollments>> (chỉ ENROLLMENT)
     * student_name_snapshot : VARCHAR(100)
-    * parent_contact_snapshot : VARCHAR(255)
+    * payer_contact_snapshot : VARCHAR(255)
     * period : CHAR(7) (YYYY-MM)
     * total : DECIMAL(12,0)
     * status : ENUM(DRAFT, ISSUED, PARTIALLY_PAID, PAID, OVERDUE, VOID)
+    issued_at : TIMESTAMP
     due_date : DATE
+    replaces_invoice_id : UUID <<FK invoices>>
     ..
-    UNIQUE(student_id, period)
+    UNIQUE(student_id, period) WHERE kind = MONTHLY
+     AND status <> VOID
+    status suy ra từ payments (ADR-0002)
   }
   entity invoice_items {
     * id : UUID <<PK>>
     --
     * invoice_id : UUID <<FK>>
+    * type : ENUM(FEE, ADJUSTMENT)
+    * tutor_id : UUID <<ref users>>
     * class_id : UUID <<ref classes>>
     session_id : UUID <<ref sessions>>
+    enrollment_id : UUID <<ref enrollments>>
+    adjusts_item_id : UUID <<FK invoice_items>>
     * description : VARCHAR(255)
-    * amount : DECIMAL(12,0)
+    * amount : DECIMAL(12,0) (ADJUSTMENT có thể âm)
     ..
-    UNIQUE(session_id, student via invoice)
+    UNIQUE(session_id, student) WHERE type = FEE
   }
   entity payments {
     * id : UUID <<PK>>
     --
     * invoice_id : UUID <<FK>>
+    * kind : ENUM(PAYMENT, REVERSAL)
+    reverses_payment_id : UUID <<FK payments>>
     * amount : DECIMAL(12,0)
     * method : ENUM(CASH, BANK_TRANSFER, MOMO)
     * paid_at : TIMESTAMP
+    * recorded_by : UUID <<ref users>>
+    ..
+    Chỉ INSERT; tổng PAYMENT - REVERSAL <= total
   }
   entity processed_events {
     * event_id : UUID <<PK>>
@@ -214,6 +265,8 @@ package "billing_db" #FFF8EE {
   }
   invoices ||--|{ invoice_items
   invoices ||--o{ payments
+  invoice_items |o--o| invoice_items : adjusts_item_id
+  payments |o--o| payments : reverses_payment_id
 }
 
 package "notification_db" #F0FAFA {
@@ -241,10 +294,12 @@ end note
 users .. students : tutor_id / user_id
 users .. parents : user_id
 students .. enrollments : student_id
+enrollments .. invoices : enrollment_id
 classes .. schedules : class_id
 classes .. fee_policies : class_id
 students .. attendances : student_id
 sessions .. invoice_items : session_id
+sessions .. session_calendar : session_id
 students .. invoices : student_id
 sessions .. feedbacks : session_id
 

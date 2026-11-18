@@ -20,13 +20,20 @@ ACTIVE --> GRADUATED : Hoàn thành mục tiêu\n/ rút khỏi mọi lớp
 ACTIVE --> DROPPED : Nghỉ học
 PAUSED --> DROPPED : Nghỉ quá 60 ngày\n(job tự động)
 
-GRADUATED --> [*]
 DROPPED --> ACTIVE : Quay lại học
-DROPPED --> [*] : Xóa / ẩn danh dữ liệu\n(sau khi tất toán công nợ)
+GRADUATED --> [*]
+DROPPED --> [*]
+GRADUATED --> ANONYMISED : Ẩn danh theo yêu cầu
+DROPPED --> ANONYMISED : Ẩn danh theo yêu cầu
+ANONYMISED --> [*]
+ANONYMISED : Xóa tên, liên hệ, ghi chú
+ANONYMISED : Giữ số liệu tiền với mã giả danh
 
-note right of DROPPED
-  Không cho xóa nếu còn
-  hóa đơn ISSUED / OVERDUE
+note right of ANONYMISED
+  BR-ST-08: chỉ khi mọi hóa đơn
+  đã PAID hoặc VOID.
+  ANONYMISED là cờ anonymised_at,
+  không phải giá trị của status.
 end note
 @enduml
 
@@ -36,10 +43,16 @@ end note
 title State Diagram - Vòng đời Ghi danh (Class Service)
 
 [*] --> PENDING : POST /enrollments\n[Student Service chưa xác nhận]
-[*] --> ACTIVE : POST /enrollments\n[học sinh hợp lệ]
+[*] --> ACTIVE : POST /enrollments\n[hợp lệ, lớp PER_SESSION]
+[*] --> AWAITING_PAYMENT : POST /enrollments\n[hợp lệ, lớp MONTHLY]\n/ Billing phát hành hóa đơn ghi danh
 
-PENDING --> ACTIVE : Xác nhận học sinh hợp lệ\n/ publish StudentEnrolled
+PENDING --> ACTIVE : Xác nhận hợp lệ [PER_SESSION]\n/ publish StudentEnrolled
+PENDING --> AWAITING_PAYMENT : Xác nhận hợp lệ [MONTHLY]\n/ publish StudentEnrolled
 PENDING --> REJECTED : Học sinh không hợp lệ\nhoặc timeout đối soát
+
+AWAITING_PAYMENT --> ACTIVE : PaymentReceived\n[hóa đơn ghi danh PAID]
+AWAITING_PAYMENT --> WITHDRAWN : Quá 7 ngày chưa thanh toán\n(reason UNPAID, job hằng ngày)\n/ publish StudentWithdrawn
+AWAITING_PAYMENT --> REJECTED : EnrollmentSyncFailed
 
 ACTIVE --> PAUSED : Học sinh tạm nghỉ
 PAUSED --> ACTIVE : Học lại
@@ -49,6 +62,13 @@ PAUSED --> WITHDRAWN : Rút khỏi lớp
 
 REJECTED --> [*]
 WITHDRAWN --> [*]
+
+note right of AWAITING_PAYMENT
+  BR-CL-06: PENDING, AWAITING_PAYMENT
+  và ACTIVE đều giữ chỗ.
+  BR-CL-07: vẫn được đi học
+  trong 7 ngày chờ thanh toán.
+end note
 @enduml
 
 @startuml 09-state-session
@@ -60,7 +80,7 @@ title State Diagram - Vòng đời Buổi học (Schedule & Attendance Service)
 
 SCHEDULED --> IN_PROGRESS : Giáo viên mở buổi\n[trong khung giờ học]
 SCHEDULED --> CANCELLED : Hủy buổi\n/ publish SessionCancelled
-SCHEDULED --> RESCHEDULED : Dời buổi\n/ tạo session mới (makeup_of)
+SCHEDULED --> RESCHEDULED : Dời buổi\n/ tạo session mới (makeup_of)\n/ publish SessionRescheduled
 
 IN_PROGRESS --> COMPLETED : Lưu điểm danh\n/ publish AttendanceRecorded
 IN_PROGRESS --> CANCELLED : Hủy giữa chừng
@@ -68,8 +88,9 @@ IN_PROGRESS --> CANCELLED : Hủy giữa chừng
 COMPLETED --> COMPLETED : Sửa điểm danh (<= 48h)\n/ publish AttendanceCorrected
 
 SCHEDULED --> MISSED : Quá giờ kết thúc + 24h\nmà chưa điểm danh (job)
-MISSED --> COMPLETED : Điểm danh bổ sung
+MISSED --> COMPLETED : Điểm danh bổ sung\n[<= 48h sau giờ kết thúc]
 MISSED --> CANCELLED : Xác nhận không dạy
+MISSED --> [*] : Quá 48h: khóa,\nkhông tính phí (BR-SC-09)
 
 CANCELLED --> [*]
 RESCHEDULED --> [*]
@@ -81,25 +102,35 @@ COMPLETED --> [*]
 !pragma layout smetana
 title State Diagram - Vòng đời Hóa đơn (Billing Service)
 
-[*] --> DRAFT : AttendanceRecorded đầu tiên trong tháng\nhoặc tạo hóa đơn MONTHLY
+[*] --> DRAFT : [MONTHLY] AttendanceRecorded đầu tiên\ntrong tháng, dòng phí MONTHLY\nhoặc Adjustment chuyển sang
+[*] --> ISSUED : [ENROLLMENT] StudentEnrolled vào lớp MONTHLY\n/ publish InvoiceIssued (hạn 7 ngày)
 
-DRAFT --> DRAFT : Thêm / điều chỉnh invoice_item
-DRAFT --> ISSUED : Cron ngày 1 chốt hóa đơn\n/ publish InvoiceIssued
+DRAFT --> DRAFT : Thêm invoice_item\n(FEE hoặc ADJUSTMENT)
+DRAFT --> ISSUED : Cron ngày 1 chốt hóa đơn\n/ publish InvoiceIssued (hạn ngày 10)
 DRAFT --> VOID : Không phát sinh phí (total = 0)
 
 ISSUED --> PARTIALLY_PAID : Thanh toán < total\n/ publish PaymentReceived
 ISSUED --> PAID : Thanh toán đủ\n/ publish PaymentReceived
-ISSUED --> OVERDUE : Quá due_date\n/ nhắc phí
+ISSUED --> OVERDUE : Ngày sau due_date\n/ publish InvoiceOverdue
 ISSUED --> VOID : Hủy do sai sót\n/ phát hành hóa đơn thay thế
 
 PARTIALLY_PAID --> PAID : Thanh toán phần còn lại
 PARTIALLY_PAID --> OVERDUE : Quá due_date
+PARTIALLY_PAID --> ISSUED : Reversal về 0
 
 OVERDUE --> PARTIALLY_PAID : Thanh toán một phần
 OVERDUE --> PAID : Thanh toán đủ
 
+PAID --> PARTIALLY_PAID : Reversal (ghi sai)
 PAID --> [*]
 VOID --> [*]
+
+note right of ISSUED
+  ADR-0002: từ ISSUED trở đi không sửa nội dung.
+  Status suy ra từ PAYMENT và REVERSAL
+  (không cho trả vượt số còn nợ, BR-BI-07).
+  Sửa sai: Adjustment ở hóa đơn DRAFT kế tiếp.
+end note
 @enduml
 
 @startuml 09-state-service-runtime

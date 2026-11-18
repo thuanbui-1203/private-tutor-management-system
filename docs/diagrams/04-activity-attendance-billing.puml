@@ -37,12 +37,12 @@ fork
   else (chưa)
     :Đọc fee_policies theo class_id;
     if (fee_type = PER_SESSION?) then (có)
-      if (status ∈ {PRESENT, LATE, ABSENT}?) then (tính phí)
+      if (PRESENT / LATE, hoặc ABSENT\nvà lớp bật charge_absent?) then (tính phí)
         :Tìm/tạo invoice DRAFT
         (student_id, period hiện tại);
         :Thêm invoice_item (session_id, fee_amount);
         :Cập nhật invoice.total;
-      else (EXCUSED)
+      else (EXCUSED / ABSENT không tính)
         :Không tính phí;
       endif
     else (MONTHLY)
