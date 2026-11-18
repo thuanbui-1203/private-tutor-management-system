@@ -62,4 +62,13 @@ pnpm migrate:all      # chạy migration Prisma của mọi service
 
 ## Kế hoạch triển khai
 
-Công việc được chia thành GitHub issue #1–#21 (issue #1 là bản đồ tổng). Phần nền tảng (#2–#5) làm trước, sau đó 3 agent làm song song theo nhãn `agent-a` (Gateway, Identity, Student), `agent-b` (Class, Schedule & Attendance), `agent-c` (Billing).
+Công việc được chia thành GitHub issue #1–#21 và #23 (issue #1 là bản đồ tổng). Phần nền tảng (#2–#5) làm trước, sau đó 4 agent làm song song, mỗi agent trong một git worktree riêng, theo nhãn:
+
+| Agent | Nhãn | Phạm vi | Issue |
+|---|---|---|---|
+| A | `agent-a` | Gateway, Identity, Student | #6–#10 |
+| B | `agent-b` | Class, Schedule & Attendance | #11–#15 |
+| C | `agent-c` | Billing | #16–#20 |
+| D | `agent-d` | Frontend (`frontend/`) | #23 |
+
+Agent D chỉ cần #2 và #3 là bắt đầu được, vì test frontend stub các lời gọi `/api/*`. Test end-to-end với hệ thống thật nằm ở #21.
