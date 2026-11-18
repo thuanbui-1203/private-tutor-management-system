@@ -1,0 +1,69 @@
+# Development overrides, applied automatically by `docker compose up`.
+# Each backend app runs from its Dockerfile `build` stage in watch mode with its src/
+# mounted from the host, so edits reload without rebuilding the image. The frontend
+# runs on the host instead (see below).
+# Production-like run without these overrides: `docker compose -f docker-compose.yml up -d`.
+#
+# Docker Desktop on Windows does not forward file-change events from the host into
+# containers, so the watchers poll. src/generated (Prisma client built in the image)
+# stays in an anonymous volume so the host mount does not hide it on a fresh clone.
+
+x-watch-env: &watch-env
+  TSC_WATCHFILE: DynamicPriorityPolling
+  TSC_WATCHDIRECTORY: DynamicPriorityPolling
+  CHOKIDAR_USEPOLLING: 'true'
+
+services:
+  api-gateway:
+    build: { target: build }
+    command: pnpm --filter @tms/api-gateway dev
+    environment: *watch-env
+    volumes:
+      - ./backend/api-gateway/src:/repo/backend/api-gateway/src
+
+  identity-service:
+    build: { target: build }
+    command: pnpm --filter @tms/identity-service dev
+    environment: *watch-env
+    volumes:
+      - ./backend/identity-service/src:/repo/backend/identity-service/src
+      - /repo/backend/identity-service/src/generated
+
+  student-service:
+    build: { target: build }
+    command: pnpm --filter @tms/student-service dev
+    environment: *watch-env
+    volumes:
+      - ./backend/student-service/src:/repo/backend/student-service/src
+      - /repo/backend/student-service/src/generated
+
+  class-service:
+    build: { target: build }
+    command: pnpm --filter @tms/class-service dev
+    environment: *watch-env
+    volumes:
+      - ./backend/class-service/src:/repo/backend/class-service/src
+      - /repo/backend/class-service/src/generated
+
+  schedule-service:
+    build: { target: build }
+    command: pnpm --filter @tms/schedule-service dev
+    environment: *watch-env
+    volumes:
+      - ./backend/schedule-service/src:/repo/backend/schedule-service/src
+      - /repo/backend/schedule-service/src/generated
+
+  billing-service:
+    build: { target: build }
+    command: pnpm --filter @tms/billing-service dev
+    environment: *watch-env
+    volumes:
+      - ./backend/billing-service/src:/repo/backend/billing-service/src
+      - /repo/backend/billing-service/src/generated
+
+  # In development the frontend runs on the host (`pnpm --filter @tms/frontend dev`,
+  # port 5173), as Next.js recommends: Turbopack misses file changes made through
+  # Docker Desktop's file sharing, and polling is slow. The container is still in
+  # docker-compose.yml for production-like runs.
+  frontend:
+    profiles: ['frontend-in-docker']

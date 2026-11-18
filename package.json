@@ -12,7 +12,8 @@
     "lint": "eslint . && pnpm --filter @tms/frontend lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "migrate:all": "pnpm -r --if-present migrate:deploy"
+    "migrate:all": "pnpm -r --if-present migrate:deploy",
+    "setup:env": "node scripts/setup-env.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
