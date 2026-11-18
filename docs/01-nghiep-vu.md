@@ -18,7 +18,7 @@
 |---|---|---|
 | `ADMIN` | Chủ trung tâm | Toàn bộ dữ liệu, báo cáo doanh thu, quản lý giáo viên |
 | `TUTOR` | Giáo viên | Chỉ học sinh, lớp, lịch, hóa đơn do mình quản lý (`tutor_id = mình`) |
-| `PARENT` | Phụ huynh | Chỉ dữ liệu của con mình (`students.parent_id`) |
+| `PARENT` | Phụ huynh | Chỉ dữ liệu của con mình (bảng `student_parents`); chỉ phụ huynh chính xem học phí |
 | `STUDENT` | Học sinh | Chỉ dữ liệu của bản thân; chỉ xem học phí khi đã đủ 18 tuổi và là người thanh toán (Payer) của chính mình |
 | `SYSTEM` | Tác vụ định kỳ (cron) | Chốt hóa đơn, nhắc lịch, đánh dấu quá hạn |
 
@@ -160,21 +160,24 @@
 
 | Event | Service phát | Payload chính | Service nhận |
 |---|---|---|---|
-| `UserRegistered` | Identity | userId, email, role | Notification |
+| `UserRegistered` | Identity | userId, email, role | Student, Notification |
+| `InvitationCreated` | Identity | invitationId, userId, email, expiresAt | Notification |
 | `StudentCreated` / `StudentUpdated` | Student | studentId, fullName, tutorId, parentContact | Billing, Notification |
 | `StudentStatusChanged` | Student | studentId, from, to | Class, Billing |
 | `ClassCreated` / `ClassUpdated` | Class | classId, tutorId, feeType, feeAmount, effectiveFrom | Billing, Schedule |
 | `ClassClosed` | Class | classId | Schedule |
-| `StudentEnrolled` | Class | classId, studentId, studentName | Schedule, Billing |
-| `EnrollmentConfirmed` | Schedule | classId, studentId | Class, Notification (gửi email chào mừng, BR-NO-01) |
-| `StudentWithdrawn` | Class | classId, studentId, reason | Schedule, Billing |
-| `SessionScheduled` | Schedule | sessionId, classId, startAt, studentIds | Notification |
+| `StudentEnrolled` | Class | enrollmentId, classId, studentId, studentName, feeType, status, joinedAt | Schedule, Billing (lớp `MONTHLY` → hóa đơn ghi danh) |
+| `EnrollmentConfirmed` | Schedule | enrollmentId, classId, studentId | Class, Notification (gửi email chào mừng, BR-NO-01) |
+| `EnrollmentSyncFailed` | Schedule | enrollmentId, classId, studentId, error | Class (bù trừ → `REJECTED`) |
+| `StudentWithdrawn` | Class | enrollmentId, classId, studentId, reason (`REQUESTED`, `UNPAID`, `CLASS_CLOSED`, `STUDENT_STATUS`, `SYNC_FAILED`) | Schedule, Billing |
+| `SessionScheduled` | Schedule | sessionId, classId, startAt, studentIds | Billing (bản sao `session_calendar` để tính tỉ lệ phí), Notification |
 | `SessionCancelled` | Schedule | sessionId, reason, cancelledBy | Billing, Notification |
+| `SessionRescheduled` | Schedule | oldSessionId, newSessionId, classId, newStartAt, studentIds | Billing (cập nhật `session_calendar`), Notification (1 thông báo "dời buổi") |
 | `AttendanceRecorded` | Schedule | sessionId, studentId, classId, status, date | Billing, Academic, Notification |
 | `AttendanceCorrected` | Schedule | sessionId, studentId, oldStatus, newStatus | Billing |
 | `GradeRecorded` | Academic | studentId, classId, type, score | Notification |
-| `InvoiceIssued` | Billing | invoiceId, studentId, period, total, dueDate | Notification |
-| `PaymentReceived` | Billing | invoiceId, amount, method | Notification |
+| `InvoiceIssued` | Billing | invoiceId, kind, studentId, enrollmentId?, period, total, dueDate | Notification |
+| `PaymentReceived` | Billing | invoiceId, invoiceKind, enrollmentId?, amount, method, invoiceStatus | Class (kích hoạt ghi danh `AWAITING_PAYMENT`), Notification |
 | `InvoiceOverdue` | Billing | invoiceId, daysOverdue | Notification |
 
 Mọi event đều có phần chung (envelope):

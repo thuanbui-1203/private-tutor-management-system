@@ -65,7 +65,7 @@ The Enrollment status of a Student in a Monthly-fee Class who has not yet paid t
 _Avoid_: Unpaid enrollment, deposit pending
 
 **Roster**:
-The Students with an `ACTIVE` Enrollment in a Class, used to know who is expected at its Sessions.
+The Students with an `ACTIVE` or `AWAITING_PAYMENT` Enrollment in a Class, used to know who is expected at its Sessions. Awaiting-payment Students attend during their 7-day window.
 _Avoid_: Class list, attendance list
 
 ### Attendance

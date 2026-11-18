@@ -69,7 +69,7 @@
 | POST | `/auth/invitations/{token}/accept` | Kích hoạt tài khoản từ lời mời | Public |
 | POST | `/auth/forgot-password`, `/auth/reset-password` | Quên mật khẩu | Public |
 | GET | `/users/me` | Thông tin người đang đăng nhập | Đã đăng nhập |
-| GET/PATCH | `/users/{id}` | Quản lý người dùng | ADMIN |
+| GET/PATCH | `/users/{id}` | Quản lý người dùng; vô hiệu hóa giáo viên (`DISABLED`) chỉ khi không còn lớp mở (BR-CL-08) | ADMIN |
 | GET | `/.well-known/jwks.json` | Public key để kiểm tra JWT | Nội bộ |
 
 **Phát event:** `UserRegistered`, `InvitationCreated`
@@ -79,7 +79,7 @@
 
 ## 4. Student Service
 
-**Dữ liệu:** `students`, `parents`, `outbox_events`
+**Dữ liệu:** `students`, `parents`, `student_parents` (nhiều phụ huynh, đúng 1 phụ huynh chính), `outbox_events`
 
 | Method | Endpoint | Mô tả | Quyền |
 |---|---|---|---|
@@ -109,13 +109,20 @@
 | PATCH | `/classes/{id}` | Sửa lớp, đổi học phí (áp dụng kỳ sau) | TUTOR, ADMIN |
 | POST | `/classes/{id}/close` | Đóng lớp | TUTOR, ADMIN |
 | GET | `/classes/{id}/students` | Danh sách học sinh đang học | TUTOR; nội bộ |
-| POST | `/classes/{id}/enrollments` | Ghi danh học sinh | TUTOR, ADMIN |
+| POST | `/classes/{id}/enrollments` | Ghi danh học sinh. Trả `201` với `status = ACTIVE` (lớp `PER_SESSION`) hoặc `AWAITING_PAYMENT` (lớp `MONTHLY`); trả `202` với `PENDING` khi Student Service không phản hồi | TUTOR, ADMIN |
 | PATCH | `/classes/{id}/enrollments/{eid}` | Tạm dừng / rút khỏi lớp | TUTOR, ADMIN |
 | GET | `/students/{studentId}/classes` | Các lớp của một học sinh | TUTOR, PARENT, STUDENT |
 
+**Ghi danh lớp `MONTHLY`** ([sơ đồ Saga](diagrams/07-sequence-enrollment-saga.puml)):
+- Ghi danh tạo ở trạng thái `AWAITING_PAYMENT` với `payment_deadline = now + 7 ngày` (BR-CL-07). Học sinh vẫn được vào roster và đi học trong thời gian này.
+- `PENDING`, `AWAITING_PAYMENT` và `ACTIVE` đều tính vào sĩ số khi kiểm tra `max_students` (BR-CL-06).
+- Khi nhận `PaymentReceived` với `invoiceKind = ENROLLMENT` và `invoiceStatus = PAID`, ghi danh chuyển `ACTIVE`.
+- Hết hạn mà chưa thanh toán thì chuyển `WITHDRAWN` với `withdraw_reason = UNPAID` và phát `StudentWithdrawn`.
+
 **Phát event:** `ClassCreated`, `ClassUpdated`, `ClassClosed`, `StudentEnrolled`, `StudentWithdrawn`
-**Nhận event:** `StudentStatusChanged` (tạm dừng hoặc rút ghi danh), `EnrollmentConfirmed`, `EnrollmentSyncFailed` (giao dịch bù trừ)
+**Nhận event:** `StudentStatusChanged` (tạm dừng hoặc rút ghi danh), `EnrollmentConfirmed` (ghi `roster_confirmed_at`), `EnrollmentSyncFailed` (giao dịch bù trừ), `PaymentReceived` (kích hoạt ghi danh `AWAITING_PAYMENT`)
 **Gọi đồng bộ:** student-service
+**Tác vụ định kỳ:** hằng ngày chuyển các ghi danh `AWAITING_PAYMENT` quá `payment_deadline` sang `WITHDRAWN`; đối soát các ghi danh `PENDING`
 
 ---
 
@@ -137,7 +144,7 @@
 | GET | `/students/{id}/attendance?month=` | Lịch sử chuyên cần | TUTOR, PARENT, STUDENT |
 | GET | `/calendar/{token}.ics` | Lịch dạng iCal để đồng bộ Google / Apple Calendar | Token riêng |
 
-**Phát event:** `SessionScheduled`, `SessionCancelled`, `AttendanceRecorded`, `AttendanceCorrected`, `EnrollmentConfirmed`
+**Phát event:** `SessionScheduled`, `SessionCancelled`, `SessionRescheduled` (dời buổi: thay cho cặp hủy + tạo mới), `AttendanceRecorded`, `AttendanceCorrected`, `EnrollmentConfirmed`
 **Nhận event:** `StudentEnrolled`, `StudentWithdrawn`, `ClassClosed`
 **Gọi đồng bộ:** class-service (khi chưa có roster trong `class_roster_view`)
 **Tác vụ định kỳ:** mỗi giờ quét các buổi quá hạn và chuyển sang `MISSED`; mỗi tuần sinh thêm buổi cho lịch lặp
@@ -164,21 +171,31 @@
 
 ## 8. Billing Service
 
-**Dữ liệu:** `fee_policies`, `invoices`, `invoice_items`, `payments`, `processed_events`, `outbox_events`
+**Dữ liệu:** `fee_policies`, `session_calendar`, `invoices`, `invoice_items`, `payments`, `processed_events`, `outbox_events`
+
+`session_calendar` là bản sao cục bộ các buổi học (từ `SessionScheduled` / `SessionCancelled` / `SessionRescheduled`). Billing dùng nó để tính phí `MONTHLY` theo tỉ lệ số buổi khi vào / rời lớp giữa tháng (BR-BI-05, BR-BI-06), không gọi đồng bộ sang Schedule.
 
 | Method | Endpoint | Mô tả | Quyền |
 |---|---|---|---|
-| GET | `/billing/invoices?period=&status=` | Danh sách hóa đơn | TUTOR, ADMIN |
-| GET | `/billing/invoices/{id}` | Chi tiết hóa đơn và các dòng phí | TUTOR, PARENT (con) |
-| GET | `/billing/invoices/{id}/qr` | Mã VietQR chuyển khoản | TUTOR, PARENT |
-| POST | `/billing/invoices/{id}/payments` | Ghi nhận thanh toán thủ công | TUTOR, ADMIN |
-| POST | `/billing/invoices/{id}/void` | Hủy hóa đơn | TUTOR, ADMIN |
+| GET | `/billing/invoices?period=&status=&kind=` | Danh sách hóa đơn (`kind` = `MONTHLY` / `ENROLLMENT`) | TUTOR, ADMIN |
+| GET | `/billing/invoices/{id}` | Chi tiết hóa đơn và các dòng phí (FEE, ADJUSTMENT) | TUTOR, ADMIN, Payer |
+| GET | `/billing/enrollments/{enrollmentId}/invoice` | Hóa đơn ghi danh của một ghi danh `MONTHLY` | TUTOR, ADMIN, Payer |
+| GET | `/billing/invoices/{id}/qr` | Mã VietQR chuyển khoản | TUTOR, Payer |
+| POST | `/billing/invoices/{id}/payments` | Ghi nhận thanh toán thủ công (không vượt số còn nợ) | TUTOR, ADMIN |
+| POST | `/billing/payments/{id}/reversal` | Tạo bút toán đảo cho khoản ghi sai | TUTOR, ADMIN |
+| POST | `/billing/invoices/{id}/void` | Hủy hóa đơn và phát hành hóa đơn thay thế | TUTOR, ADMIN |
 | GET | `/billing/students/{id}/balance` | Công nợ học sinh | TUTOR, PARENT |
 | GET | `/billing/reports/revenue?from=&to=` | Báo cáo doanh thu | TUTOR, ADMIN |
 | POST | `/webhooks/payments/{provider}` | Nhận webhook từ cổng thanh toán / ngân hàng | Chữ ký webhook |
 
-**Phát event:** `InvoiceIssued` (hóa đơn tháng và hóa đơn ghi danh), `PaymentReceived`, `InvoiceOverdue`
-**Nhận event:** `StudentCreated`, `StudentUpdated`, `StudentStatusChanged`, `ClassCreated`, `ClassUpdated`, `StudentEnrolled`, `AttendanceRecorded`, `AttendanceCorrected`, `SessionCancelled`
+**Hai loại hóa đơn:**
+- **Hóa đơn tháng** (`MONTHLY`): `DRAFT` trong tháng, chốt ngày 1, hạn ngày 10.
+- **Hóa đơn ghi danh** (`ENROLLMENT`): tạo khi nhận `StudentEnrolled` của lớp `MONTHLY`, `ISSUED` ngay với phí tháng đầu theo tỉ lệ, hạn 7 ngày (BR-BI-06). Hóa đơn tháng sau không lặp lại dòng phí đã thu ở đây.
+
+Hóa đơn đã `ISSUED` không bao giờ bị sửa. Sửa sai được ghi thành dòng `ADJUSTMENT` trên hóa đơn `DRAFT` kế tiếp ([ADR-0002](adr/0002-immutable-invoices-with-adjustments.md)). Trạng thái hóa đơn luôn suy ra từ các khoản `PAYMENT` và `REVERSAL`.
+
+**Phát event:** `InvoiceIssued` (kèm `kind`), `PaymentReceived` (kèm `invoiceKind`, `enrollmentId`, `invoiceStatus`), `InvoiceOverdue`
+**Nhận event:** `StudentCreated`, `StudentUpdated`, `StudentStatusChanged`, `ClassCreated`, `ClassUpdated`, `StudentEnrolled`, `StudentWithdrawn`, `AttendanceRecorded`, `AttendanceCorrected`, `SessionScheduled`, `SessionCancelled`, `SessionRescheduled`
 **Tác vụ định kỳ:** 00:00 ngày 1 chốt hóa đơn; 08:00 hằng ngày đánh dấu hóa đơn quá hạn và gửi nhắc
 
 ---
@@ -194,7 +211,7 @@
 | GET/PUT | `/notifications/preferences` | Chọn kênh, bật / tắt từng loại thông báo | Đã đăng nhập |
 | POST | `/notifications/devices` | Đăng ký push token (FCM) | Đã đăng nhập |
 
-**Nhận event:** `UserRegistered`, `InvitationCreated`, `EnrollmentConfirmed`, `SessionScheduled`, `SessionCancelled`, `AttendanceRecorded` (khi vắng), `GradeRecorded`, `InvoiceIssued`, `InvoiceOverdue`, `PaymentReceived`, `MonthlyReportGenerated`
+**Nhận event:** `UserRegistered`, `InvitationCreated`, `EnrollmentConfirmed`, `SessionScheduled`, `SessionCancelled`, `SessionRescheduled`, `AttendanceRecorded` (khi vắng), `GradeRecorded`, `InvoiceIssued`, `InvoiceOverdue`, `PaymentReceived`, `MonthlyReportGenerated`
 **Cách thiết kế:** mỗi kênh gửi là một *adapter* (`EmailChannel`, `SmsChannel`, `ZaloChannel`, `PushChannel`) cài đặt chung một interface `NotificationChannel`. Nhờ vậy có thể đổi nhà cung cấp mà không sửa logic nghiệp vụ.
 
 ---
