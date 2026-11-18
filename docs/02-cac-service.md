@@ -40,7 +40,7 @@
 
 ## 2. API Gateway
 
-**Trách nhiệm:** định tuyến, xác thực Firebase ID token bằng Firebase Admin SDK (kiểm tra cả token đã bị thu hồi) rồi lấy `uid` và vai trò từ custom claim, rate limit theo IP và user (Redis), CORS, gán `X-Correlation-Id`.
+**Trách nhiệm:** định tuyến, xác thực Firebase ID token bằng Firebase Admin SDK (kiểm tra cả token đã bị thu hồi) rồi lấy hai custom claim `userId` (là `users.id` của Identity, UUID) và `role`, chuyển xuống thành `X-User-Id` và `X-User-Role`, rate limit theo IP và user (Redis), CORS, gán `X-Correlation-Id`.
 
 | Đường dẫn | Chuyển tới | Cần xác thực |
 |---|---|:-:|
@@ -58,7 +58,7 @@
 
 ## 3. Identity Service
 
-**Dữ liệu:** `users` (`firebase_uid`, email, vai trò, trạng thái), `invitations`, `outbox_events`. Mật khẩu và phiên đăng nhập nằm ở Firebase Authentication, không lưu trong `identity_db` ([ADR-0004](adr/0004-firebase-authentication.md)).
+**Dữ liệu:** `users` (`id` UUID dùng làm id người dùng trong toàn hệ thống, `firebase_uid`, email, vai trò, trạng thái), `invitations`, `outbox_events`. Mật khẩu và phiên đăng nhập nằm ở Firebase Authentication, không lưu trong `identity_db` ([ADR-0004](adr/0004-firebase-authentication.md)).
 
 Đăng nhập, làm mới token, đăng xuất và quên mật khẩu do **Firebase client SDK** ở frontend gọi thẳng tới Firebase, không qua Identity Service.
 

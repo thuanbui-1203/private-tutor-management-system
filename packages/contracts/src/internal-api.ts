@@ -1,0 +1,54 @@
+import { z } from 'zod';
+import { Role, StudentStatus } from './enums';
+import { Contact, Id, IsoDateTime } from './primitives';
+
+// Request / response bodies of the synchronous service-to-service calls.
+// `/internal/**` paths are blocked at the API gateway; only services call them.
+
+/** student-service `GET /internal/students/{id}`, called by class-service when enrolling. */
+export const InternalStudentResponse = z.object({
+  id: Id,
+  fullName: z.string().min(1).max(100),
+  tutorId: Id,
+  status: StudentStatus,
+  payerContact: Contact,
+});
+export type InternalStudentResponse = z.infer<typeof InternalStudentResponse>;
+
+/** class-service `GET /internal/tutors/{id}/open-classes`, called by identity-service before disabling a Tutor (BR-CL-08). */
+export const InternalOpenClassesResponse = z.object({
+  tutorId: Id,
+  classIds: z.array(Id),
+});
+export type InternalOpenClassesResponse = z.infer<typeof InternalOpenClassesResponse>;
+
+/**
+ * billing-service `GET /internal/students/{id}/open-invoices`, called by
+ * student-service before Anonymisation (BR-ST-08). "Open" means any status
+ * other than PAID or VOID, DRAFT included.
+ */
+export const InternalOpenInvoicesResponse = z.object({
+  studentId: Id,
+  invoiceIds: z.array(Id),
+});
+export type InternalOpenInvoicesResponse = z.infer<typeof InternalOpenInvoicesResponse>;
+
+/**
+ * identity-service `POST /internal/invitations`, called by student-service when
+ * a Student is created (BR-ST-04). Creates the Firebase user, the `users` row
+ * and a single-use Invitation valid for 7 days (BR-AU-02).
+ */
+export const InternalCreateInvitationRequest = z.object({
+  email: z.email(),
+  fullName: z.string().min(1).max(100),
+  role: Role.extract(['PARENT', 'STUDENT']),
+  invitedBy: Id,
+});
+export type InternalCreateInvitationRequest = z.infer<typeof InternalCreateInvitationRequest>;
+
+export const InternalCreateInvitationResponse = z.object({
+  invitationId: Id,
+  userId: Id,
+  expiresAt: IsoDateTime,
+});
+export type InternalCreateInvitationResponse = z.infer<typeof InternalCreateInvitationResponse>;
