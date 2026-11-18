@@ -4,5 +4,6 @@
 .git
 docs
 infra/keys
-.env
+**/.env*
+!**/.env.example
 **/.next

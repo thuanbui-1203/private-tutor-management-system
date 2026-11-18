@@ -8,3 +8,4 @@ coverage/
 infra/keys/
 **/generated/
 .DS_Store
+.claude/settings.local.json

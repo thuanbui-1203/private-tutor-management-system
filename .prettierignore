@@ -5,3 +5,4 @@ pnpm-lock.yaml
 **/.next/
 frontend/next-env.d.ts
 **/generated/
+.claude/

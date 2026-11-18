@@ -99,6 +99,11 @@ NOTIFICATION_DB_URL=postgresql://notification:notification@postgres:5432/notific
 # ---------- Firebase Authentication (ADR-0004) ----------
 FIREBASE_PROJECT_ID=private-tutor-management-sys
 GOOGLE_APPLICATION_CREDENTIALS=/run/keys/firebase-service-account.json
+# Cấu hình Web app (công khai), truyền vào image frontend lúc build
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=private-tutor-management-sys.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=private-tutor-management-sys
+NEXT_PUBLIC_FIREBASE_APP_ID=
 
 # ---------- Nghiệp vụ ----------
 BILLING_INVOICE_DUE_DAY=10
@@ -133,15 +138,20 @@ SENTRY_DSN=
 ```yaml
 name: tms
 
+# Mọi Dockerfile build từ thư mục gốc repo (cần pnpm workspace + lockfile),
+# nên context luôn là "." và chỉ đổi đường dẫn dockerfile.
 x-service: &service
   restart: on-failure
   env_file: .env
   networks: [tms-net]
-  volumes:
-    - ./infra/keys:/run/keys:ro
   depends_on:
     postgres: { condition: service_healthy }
     rabbitmq: { condition: service_healthy }
+
+# Chỉ gateway và identity-service cần Firebase service account key (ADR-0004).
+x-firebase-key: &firebase-key
+  volumes:
+    - ./infra/keys:/run/keys:ro
 
 services:
   # ---------- Hạ tầng ----------
@@ -189,50 +199,54 @@ services:
 
   # ---------- Ứng dụng ----------
   api-gateway:
-    <<: *service
-    build: ./api-gateway
+    <<: [*service, *firebase-key]
+    build: { context: ., dockerfile: backend/api-gateway/Dockerfile }
     ports: ["8080:8080"]
     depends_on: [identity-service, redis]
 
   identity-service:
-    <<: *service
-    build: ./backend/identity-service
+    <<: [*service, *firebase-key]
+    build: { context: ., dockerfile: backend/identity-service/Dockerfile }
+    environment: { DATABASE_URL: "${IDENTITY_DB_URL}" }
     ports: ["3001:3001"]
 
   student-service:
     <<: *service
-    build: ./backend/student-service
+    build: { context: ., dockerfile: backend/student-service/Dockerfile }
+    environment: { DATABASE_URL: "${STUDENT_DB_URL}" }
     ports: ["3002:3002"]
 
   class-service:
     <<: *service
-    build: ./backend/class-service
+    build: { context: ., dockerfile: backend/class-service/Dockerfile }
+    environment: { DATABASE_URL: "${CLASS_DB_URL}" }
     ports: ["3003:3003"]
 
   schedule-service:
     <<: *service
-    build: ./backend/schedule-service
+    build: { context: ., dockerfile: backend/schedule-service/Dockerfile }
+    environment: { DATABASE_URL: "${SCHEDULE_DB_URL}" }
     ports: ["3004:3004"]
-
-  academic-service:
-    <<: *service
-    build: ./backend/academic-service
-    ports: ["3005:3005"]
-    depends_on: [mongo, rabbitmq]
 
   billing-service:
     <<: *service
-    build: ./backend/billing-service
+    build: { context: ., dockerfile: backend/billing-service/Dockerfile }
+    environment: { DATABASE_URL: "${BILLING_DB_URL}" }
     ports: ["3006:3006"]
 
-  notification-service:
-    <<: *service
-    build: ./backend/notification-service
-    ports: ["3007:3007"]
-    depends_on: [rabbitmq, redis, mailpit]
+  # academic-service (:3005, MongoDB) và notification-service (:3007) chỉ thêm
+  # nếu còn thời gian (BR-SYS-03); khi đó bật lại service mongo bên trên.
 
   frontend:
-    build: ./frontend
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args: # giá trị công khai, lấy từ .env gốc (cùng giá trị với frontend/.env.local)
+        NEXT_PUBLIC_API_URL: "http://localhost:8080/api"
+        NEXT_PUBLIC_FIREBASE_API_KEY: "${NEXT_PUBLIC_FIREBASE_API_KEY}"
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}"
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: "${NEXT_PUBLIC_FIREBASE_PROJECT_ID}"
+        NEXT_PUBLIC_FIREBASE_APP_ID: "${NEXT_PUBLIC_FIREBASE_APP_ID}"
     ports: ["5173:5173"]
     depends_on: [api-gateway]
     networks: [tms-net]
