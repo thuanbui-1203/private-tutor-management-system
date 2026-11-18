@@ -66,6 +66,9 @@ catalogs:
     typescript:
       specifier: ^5.9.2
       version: 5.9.3
+    zod:
+      specifier: ^4.6.7
+      version: 4.6.7
 
 importers:
 
@@ -492,6 +495,28 @@ importers:
       eslint-config-next:
         specifier: ^16.4.6
         version: 16.4.6(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/contracts:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
+    devDependencies:
+      '@types/jest':
+        specifier: 'catalog:'
+        version: 30.0.0
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.5
+      jest:
+        specifier: 'catalog:'
+        version: 30.5.2(@types/node@22.20.5)
+      ts-jest:
+        specifier: 'catalog:'
+        version: 29.4.15(@babel/core@7.29.13)(@jest/transform@30.5.2)(@jest/types@30.5.1)(babel-jest@30.5.2(@babel/core@7.29.13))(jest-util@30.5.1)(jest@30.5.2(@types/node@22.20.5))(typescript@5.9.3)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

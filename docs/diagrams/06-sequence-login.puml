@@ -21,7 +21,7 @@ alt Sai thông tin / bị chặn do sai nhiều lần / tài khoản bị vô hi
   FB --> Web : lỗi auth/...
   Web --> U : "Sai thông tin đăng nhập"
 else Hợp lệ
-  FB --> Web : ID token (1 giờ) + refresh token\nclaims: uid, role (custom claim)
+  FB --> Web : ID token (1 giờ) + refresh token\ncustom claims: userId (users.id), role
   Web -> Web : SDK tự lưu và tự làm mới token
   Web --> U : Vào Dashboard
 end
@@ -35,7 +35,7 @@ alt Token sai / hết hạn / đã bị thu hồi / thiếu role
   GW --> Web : 401
   Web -> Web : Làm mới token hoặc đăng nhập lại
 else Hợp lệ
-  GW -> St : GET /students\nX-User-Id = uid, X-User-Role = role,\nX-Correlation-Id
+  GW -> St : GET /students\nX-User-Id = claim userId, X-User-Role = role,\nX-Correlation-Id
   St -> StDB : SELECT * FROM students\nWHERE tutor_id = :userId
   StDB --> St : rows
   St --> GW : 200 [students]

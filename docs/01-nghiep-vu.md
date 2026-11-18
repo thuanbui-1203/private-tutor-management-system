@@ -158,27 +158,34 @@
 
 ## 5. Danh mục event nghiệp vụ
 
-| Event | Service phát | Payload chính | Service nhận |
-|---|---|---|---|
-| `UserRegistered` | Identity | userId, email, role | Student, Notification |
-| `InvitationCreated` | Identity | invitationId, userId, email, expiresAt | Notification |
-| `StudentCreated` / `StudentUpdated` | Student | studentId, fullName, tutorId, parentContact | Billing, Notification |
-| `StudentStatusChanged` | Student | studentId, from, to | Class, Billing |
-| `ClassCreated` / `ClassUpdated` | Class | classId, tutorId, feeType, feeAmount, effectiveFrom | Billing, Schedule |
-| `ClassClosed` | Class | classId | Schedule |
-| `StudentEnrolled` | Class | enrollmentId, classId, studentId, studentName, feeType, status, joinedAt | Schedule, Billing (lớp `MONTHLY` → hóa đơn ghi danh) |
-| `EnrollmentConfirmed` | Schedule | enrollmentId, classId, studentId | Class, Notification (gửi email chào mừng, BR-NO-01) |
-| `EnrollmentSyncFailed` | Schedule | enrollmentId, classId, studentId, error | Class (bù trừ → `REJECTED`) |
-| `StudentWithdrawn` | Class | enrollmentId, classId, studentId, reason (`REQUESTED`, `UNPAID`, `CLASS_CLOSED`, `STUDENT_STATUS`, `SYNC_FAILED`) | Schedule, Billing |
-| `SessionScheduled` | Schedule | sessionId, classId, startAt, studentIds | Billing (bản sao `session_calendar` để tính tỉ lệ phí), Notification |
-| `SessionCancelled` | Schedule | sessionId, reason, cancelledBy | Billing, Notification |
-| `SessionRescheduled` | Schedule | oldSessionId, newSessionId, classId, newStartAt, studentIds | Billing (cập nhật `session_calendar`), Notification (1 thông báo "dời buổi") |
-| `AttendanceRecorded` | Schedule | sessionId, studentId, classId, status, date | Billing, Academic, Notification |
-| `AttendanceCorrected` | Schedule | sessionId, studentId, oldStatus, newStatus | Billing |
-| `GradeRecorded` | Academic | studentId, classId, type, score | Notification |
-| `InvoiceIssued` | Billing | invoiceId, kind, studentId, enrollmentId?, period, total, dueDate | Notification |
-| `PaymentReceived` | Billing | invoiceId, invoiceKind, enrollmentId?, amount, method, invoiceStatus | Class (kích hoạt ghi danh `AWAITING_PAYMENT`), Notification |
-| `InvoiceOverdue` | Billing | invoiceId, daysOverdue | Notification |
+| Event | Routing key | Service phát | Payload chính | Service nhận |
+|---|---|---|---|---|
+| `UserRegistered` | `user.registered` | Identity | userId, email, role | Student, Notification |
+| `InvitationCreated` | `invitation.created` | Identity | invitationId, userId, email, expiresAt | Notification |
+| `StudentCreated` / `StudentUpdated` | `student.created` / `student.updated` | Student | studentId, fullName, tutorId, payerContact | Billing, Notification |
+| `StudentStatusChanged` | `student.status-changed` | Student | studentId, from, to | Class, Billing |
+| `ClassCreated` / `ClassUpdated` | `class.created` / `class.updated` | Class | classId, tutorId, feeType, feeAmount, chargeAbsent, effectiveFrom | Billing, Schedule |
+| `ClassClosed` | `class.closed` | Class | classId | Schedule |
+| `StudentEnrolled` | `enrollment.enrolled` | Class | enrollmentId, classId, studentId, studentName, feeType, status, joinedAt | Schedule, Billing (lớp `MONTHLY` → hóa đơn ghi danh) |
+| `EnrollmentConfirmed` | `enrollment.confirmed` | Schedule | enrollmentId, classId, studentId | Class, Notification (gửi email chào mừng, BR-NO-01) |
+| `EnrollmentSyncFailed` | `enrollment.sync-failed` | Schedule | enrollmentId, classId, studentId, error | Class (bù trừ → `REJECTED`) |
+| `StudentWithdrawn` | `enrollment.withdrawn` | Class | enrollmentId, classId, studentId, reason (`REQUESTED`, `UNPAID`, `CLASS_CLOSED`, `STUDENT_STATUS`, `SYNC_FAILED`) | Schedule, Billing |
+| `SessionScheduled` | `session.scheduled` | Schedule | sessionId, classId, startAt, studentIds | Billing (bản sao `session_calendar` để tính tỉ lệ phí), Notification |
+| `SessionCancelled` | `session.cancelled` | Schedule | sessionId, reason, cancelledBy | Billing, Notification |
+| `SessionRescheduled` | `session.rescheduled` | Schedule | oldSessionId, newSessionId, classId, newStartAt, studentIds | Billing (cập nhật `session_calendar`), Notification (1 thông báo "dời buổi") |
+| `AttendanceRecorded` | `attendance.recorded` | Schedule | sessionId, studentId, classId, status, date | Billing, Academic, Notification |
+| `AttendanceCorrected` | `attendance.corrected` | Schedule | sessionId, studentId, classId, date, oldStatus, newStatus | Billing |
+| `GradeRecorded` | `grade.recorded` | Academic | studentId, classId, type, score | Notification |
+| `InvoiceIssued` | `invoice.issued` | Billing | invoiceId, kind, studentId, enrollmentId?, period, total, dueDate | Notification |
+| `PaymentReceived` | `payment.received` | Billing | invoiceId, invoiceKind, enrollmentId?, amount, method, invoiceStatus | Class (kích hoạt ghi danh `AWAITING_PAYMENT`), Notification |
+| `InvoiceOverdue` | `invoice.overdue` | Billing | invoiceId, daysOverdue | Notification |
+
+Nguồn chuẩn của bảng này là package `@tms/contracts` (`packages/contracts`): mỗi event có kiểu dữ liệu, routing key và bộ kiểm tra (zod). Một test đọc bảng này và báo lỗi nếu hai bên lệch nhau, nên khi đổi event phải sửa cả hai trong cùng một PR.
+
+- **Id:** mọi id là UUID. Id người dùng (`userId`, `tutorId`, `cancelledBy`...) là `users.id` của Identity, nằm trong custom claim `userId` của Firebase ID token; `uid` của Firebase không đi ra ngoài Identity ([ADR-0004](adr/0004-firebase-authentication.md)).
+- **Kiểu dữ liệu:** tiền là số nguyên VND; ngày dạng `YYYY-MM-DD`, kỳ dạng `YYYY-MM`, thời điểm dạng ISO 8601 theo UTC (`...Z`).
+- `payerContact`: tên và email / số điện thoại của người thanh toán (phụ huynh chính, hoặc chính học sinh đã trưởng thành, BR-ST-05).
+- `PaymentReceived` chỉ phát cho khoản thanh toán, không phát cho bút toán đảo; `invoiceStatus` là `PARTIALLY_PAID` hoặc `PAID` sau khoản đó.
 
 Mọi event đều có phần chung (envelope):
 

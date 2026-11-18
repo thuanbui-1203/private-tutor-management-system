@@ -2,7 +2,7 @@
 
 Firebase Authentication (email và mật khẩu) lo toàn bộ phần thông tin đăng nhập: lưu mật khẩu, đăng nhập, làm mới token, quên mật khẩu và chặn dò mật khẩu. Frontend đăng nhập bằng Firebase client SDK rồi gửi Firebase ID token tới API Gateway; gateway xác thực token bằng Admin SDK (có kiểm tra token đã bị thu hồi) và chuyển xuống các header `X-User-Id`, `X-User-Role` như trước. Project dùng gói miễn phí Spark.
 
-Identity Service vẫn giữ những gì thuộc nghiệp vụ của hệ thống: **vai trò** duy nhất của mỗi người dùng, lưu thành custom claim trên tài khoản Firebase; **lời mời** (token riêng của hệ thống, dùng 1 lần, hiệu lực 7 ngày, thu hồi được, BR-AU-02; khi nhận lời mời, mật khẩu được đặt qua Admin SDK); và việc quản lý giáo viên, trong đó vô hiệu hóa giáo viên sẽ vô hiệu hóa tài khoản Firebase và thu hồi refresh token của họ.
+Identity Service vẫn giữ những gì thuộc nghiệp vụ của hệ thống: **danh tính** và **vai trò** duy nhất của mỗi người dùng, lưu thành hai custom claim trên tài khoản Firebase: `userId` (là `users.id`, UUID) và `role`. Gateway chuyển `userId` thành `X-User-Id`, nên mọi service và event chỉ dùng UUID của hệ thống; `uid` của Firebase chỉ nằm trong Identity; **lời mời** (token riêng của hệ thống, dùng 1 lần, hiệu lực 7 ngày, thu hồi được, BR-AU-02; khi nhận lời mời, mật khẩu được đặt qua Admin SDK); và việc quản lý giáo viên, trong đó vô hiệu hóa giáo viên sẽ vô hiệu hóa tài khoản Firebase và thu hồi refresh token của họ.
 
 Chúng tôi không chọn tự băm mật khẩu và tự ký JWT RS256: đó là mã nguồn nhạy cảm về bảo mật mà Firebase đã làm tốt hơn, và sẽ chiếm thời gian lẽ ra dành cho các service nghiệp vụ.
 
