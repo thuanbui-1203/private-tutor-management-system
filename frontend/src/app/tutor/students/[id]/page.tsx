@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { AttendanceHistoryView } from '@/components/attendance-history';
 import { EnrollmentBadge, StudentStatusBadge } from '@/components/badges';
+import { BalanceSection } from '@/components/invoice';
 import {
   ActionButton,
   Confirm,
@@ -209,6 +210,9 @@ export default function StudentDetailPage() {
                 </table>
               </div>
             )}
+
+            <h2>Công nợ</h2>
+            <BalanceSection studentId={s.id} invoiceHref={(i) => `/tutor/invoices/${i}`} />
 
             <h2>Chuyên cần</h2>
             <AttendanceHistoryView

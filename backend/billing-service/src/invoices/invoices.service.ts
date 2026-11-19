@@ -42,7 +42,10 @@ export class InvoicesService {
   async get(actor: AuthUser, id: string) {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id },
-      include: { items: { orderBy: { createdAt: 'asc' } } },
+      include: {
+        items: { orderBy: { createdAt: 'asc' } },
+        payments: { orderBy: { createdAt: 'asc' } },
+      },
     });
     await this.access.check(actor, invoice);
     return invoiceView(invoice!);
@@ -51,7 +54,10 @@ export class InvoicesService {
   async enrollmentInvoice(actor: AuthUser, enrollmentId: string) {
     const invoice = await this.prisma.invoice.findFirst({
       where: { enrollmentId, kind: 'ENROLLMENT', status: { not: 'VOID' } },
-      include: { items: { orderBy: { createdAt: 'asc' } } },
+      include: {
+        items: { orderBy: { createdAt: 'asc' } },
+        payments: { orderBy: { createdAt: 'asc' } },
+      },
     });
     await this.access.check(actor, invoice);
     return invoiceView(invoice!);

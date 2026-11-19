@@ -13,12 +13,14 @@
     "@tms/contracts": "workspace:*",
     "firebase": "catalog:",
     "next": "^16.4.6",
+    "qrcode": "catalog:",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@playwright/test": "catalog:",
     "@types/node": "catalog:",
+    "@types/qrcode": "catalog:",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

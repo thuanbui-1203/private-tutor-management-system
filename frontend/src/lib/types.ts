@@ -165,3 +165,82 @@ export interface AttendanceHistory {
     note: string | null;
   }[];
 }
+
+export interface InvoiceItemView {
+  id: string;
+  type: 'FEE' | 'ADJUSTMENT';
+  classId: string | null;
+  sessionId: string | null;
+  enrollmentId: string | null;
+  adjustsItemId: string | null;
+  /** The month the charge is for. */
+  servicePeriod: string;
+  attendanceStatus: AttendanceStatus | null;
+  description: string;
+  amount: number;
+}
+
+export interface PaymentView {
+  id: string;
+  kind: 'PAYMENT' | 'REVERSAL';
+  reversesPaymentId: string | null;
+  amount: number;
+  method: PaymentMethod;
+  paidAt: string;
+  note: string | null;
+}
+
+export interface InvoiceView {
+  id: string;
+  kind: InvoiceKind;
+  studentId: string;
+  enrollmentId: string | null;
+  studentName: string;
+  payerContact: { name?: string; email?: string; phone?: string };
+  period: string;
+  total: number;
+  status: InvoiceStatus;
+  issuedAt: string | null;
+  dueDate: string | null;
+  replacesInvoiceId: string | null;
+  items?: InvoiceItemView[];
+  payments?: PaymentView[];
+  paid?: number;
+  outstanding?: number;
+}
+
+export interface BalanceView {
+  studentId: string;
+  studentName: string;
+  outstanding: number;
+  overdue: number;
+  currentMonthDraft: number;
+  invoices: {
+    invoiceId: string;
+    kind: InvoiceKind;
+    period: string;
+    status: InvoiceStatus;
+    dueDate: string | null;
+    total: number;
+    paid: number;
+    outstanding: number;
+  }[];
+}
+
+export interface RevenueReport {
+  from: string;
+  to: string;
+  months: { period: string; billed: number; collected: number }[];
+  billed: number;
+  collected: number;
+}
+
+export interface QrView {
+  invoiceId: string;
+  amount: number;
+  bankBin: string;
+  accountNumber: string;
+  accountName: string | null;
+  description: string;
+  payload: string;
+}

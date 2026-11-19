@@ -6,6 +6,8 @@ export const TUTOR_NAV: NavItem[] = [
   { href: '/tutor/students', label: 'Học sinh' },
   { href: '/tutor/classes', label: 'Lớp học' },
   { href: '/tutor/schedule', label: 'Lịch dạy' },
+  { href: '/tutor/invoices', label: 'Hóa đơn' },
+  { href: '/tutor/revenue', label: 'Doanh thu' },
 ];
 export const PARENT_NAV: NavItem[] = [{ href: '/parent', label: 'Tổng quan' }];
 export const STUDENT_NAV: NavItem[] = [{ href: '/student', label: 'Tổng quan' }];
