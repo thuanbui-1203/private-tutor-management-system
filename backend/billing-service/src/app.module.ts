@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { E2eHooksModule } from './e2e/e2e-hooks.module';
 import { prismaDatabase, TmsCommonModule } from '@tms/common';
 import { ChargesModule } from './charges/charges.module';
 import { CopiesModule } from './copies/copies.module';
@@ -23,6 +24,8 @@ import { PrismaService } from './prisma/prisma.service';
     ChargesModule,
     InvoicesModule,
     PaymentsModule,
+    // Test-only hooks for the end-to-end suite (#21); off unless E2E_HOOKS=true.
+    ...(process.env.E2E_HOOKS === 'true' ? [E2eHooksModule] : []),
   ],
 })
 export class AppModule {}

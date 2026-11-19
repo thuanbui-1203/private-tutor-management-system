@@ -17,7 +17,9 @@
     "setup:env": "node scripts/setup-env.mjs",
     "compose": "node scripts/compose.mjs",
     "emulators": "firebase emulators:start --only auth --project demo-tms",
-    "seed": "pnpm -r --if-present seed"
+    "seed": "pnpm -r --if-present seed",
+    "test:e2e": "node scripts/e2e.mjs",
+    "test:e2e:down": "docker compose -p tms-e2e -f docker-compose.yml -f docker-compose.e2e.yml down -v"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

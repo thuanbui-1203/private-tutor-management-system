@@ -9,5 +9,6 @@ import { StudentClient } from './student.client';
   imports: [ClassesModule],
   controllers: [EnrollmentsController],
   providers: [EnrollmentsService, EnrollmentsConsumers, StudentClient],
+  exports: [EnrollmentsService],
 })
 export class EnrollmentsModule {}

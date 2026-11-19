@@ -146,8 +146,16 @@ Nếu muốn các service khác (vẫn chạy trong Docker) gọi được servi
 | Integration | `pnpm test:int` (cần `docker compose up -d postgres rabbitmq` và `pnpm emulators`) | PostgreSQL và RabbitMQ thật, mỗi lần chạy một database riêng ([ADR-0003](adr/0003-postgresql-database-per-service.md)); đăng nhập qua Firebase Auth Emulator, không dùng project thật | Đã có cho mọi service backend |
 | Giao diện (trình duyệt) | `pnpm --filter @tms/frontend test:e2e` (cần `pnpm emulators`; lần đầu `pnpm --filter @tms/frontend exec playwright install chromium`) | Playwright điều khiển frontend thật; mọi lời gọi `/api/*` được stub trong từng test, đăng nhập qua Auth Emulator (project `demo-tms`), không cần backend. Test tự chạy `next dev` ở cổng 5174 (thư mục build `.next-e2e`) | Đã có (#23) |
 | Contract test | nằm trong `pnpm test` | Kiểm tra schema event trong `packages/contracts` và so khớp với bảng event trong `docs/01` | Đã có (#3) |
-| End-to-end | dự kiến `pnpm test:e2e` (thư mục gốc) | Kịch bản: tạo học sinh → ghi danh → điểm danh → hóa đơn | Làm trong issue #21 |
+| End-to-end | `pnpm test:e2e` (thư mục gốc; cần Docker và `.env`). `--keep` giữ stack để xem lại, `pnpm test:e2e:down` xóa | Chạy cả hệ thống thật qua API Gateway trong một compose project riêng `tms-e2e` (xem bên dưới). 6 kịch bản của #21: ghi danh lớp theo tháng → hóa đơn ghi danh + danh sách lớp; thanh toán → `ACTIVE`; quá 7 ngày chưa trả → `WITHDRAWN (UNPAID)`; điểm danh, chốt tháng, sửa → dòng điều chỉnh tháng sau; dời buổi được đếm một lần; student-service ngừng → `202 PENDING` rồi tự hoàn tất | Đã có (#21) |
 | Kiểm tra mã | `pnpm lint`, `pnpm format:check`, `pnpm build` | ESLint (backend + frontend), Prettier, build toàn bộ | Đã có |
+
+**Stack end-to-end (`pnpm test:e2e`, [scripts/e2e.mjs](../scripts/e2e.mjs)):**
+
+- Compose project riêng `tms-e2e` = `docker-compose.yml` + [`docker-compose.e2e.yml`](../docker-compose.e2e.yml): database, broker và volume riêng, không đụng dữ liệu dev; image production (không nạp file override hot reload). Mỗi lần chạy bắt đầu từ trạng thái trống và xóa stack khi xong (trừ khi `--keep`).
+- Đăng nhập: container Firebase Auth Emulator (project `demo-tms`, [infra/firebase-emulator](../infra/firebase-emulator)) nghe trên `0.0.0.0` *bên trong* mạng compose; các service dùng `firebase-emulator:9099`. Không dùng project Firebase thật.
+- Cổng host chuyển sang 2xxxx và chỉ mở trên `127.0.0.1` (gateway `28080`, emulator `29099`, postgres `25432`...), nên chạy song song được với stack dev và không lộ ra mạng LAN.
+- Script tự chạy migration Prisma của từng service vào database e2e, rồi bật service và chờ healthy.
+- Test ([tests/e2e](../tests/e2e)) gọi mọi nghiệp vụ qua API Gateway với ID token thật từ emulator. Riêng việc "tua thời gian" dùng endpoint chỉ dành cho test `/internal/test/*` (chỉ bật khi `E2E_HOOKS=true`, gateway không bao giờ chuyển `/internal/**`): chạy job hết hạn ghi danh / đối soát `PENDING` của class-service, chốt tháng của billing, tạo buổi học ở thời điểm bất kỳ của schedule.
 
 **Kịch bản kiểm tra thủ công nhanh:**
 1. Đăng nhập `tutor@tms.local` trên frontend (http://localhost:5173, qua Firebase Auth), tạo học sinh, ghi danh vào lớp học phí `PER_SESSION`.

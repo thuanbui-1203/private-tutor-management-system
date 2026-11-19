@@ -1,0 +1,60 @@
+# End-to-end stack (#21), used only by `pnpm test:e2e` (scripts/e2e.mjs):
+#   docker compose -p tms-e2e -f docker-compose.yml -f docker-compose.e2e.yml ...
+# - Its own compose project (`tms-e2e`): its own databases and broker, never the dev data.
+# - Production images (the dev hot-reload override is not loaded).
+# - Firebase Auth Emulator in a container (project `demo-tms`), reached by the services as
+#   firebase-emulator:9099 on the private network; nothing uses the real Firebase project.
+# - Every host port is moved to 2xxxx and bound to 127.0.0.1 only, so it can run next to
+#   the dev stack and nothing is exposed beyond this machine.
+# - E2E_HOOKS=true mounts the test-only /internal/test/* endpoints (run jobs at a chosen
+#   time); the gateway never routes /internal/**.
+
+x-emulator-env: &emulator-env
+  FIREBASE_PROJECT_ID: demo-tms
+  FIREBASE_AUTH_EMULATOR_HOST: firebase-emulator:9099
+  GOOGLE_APPLICATION_CREDENTIALS: ''
+
+services:
+  firebase-emulator:
+    build: { context: ., dockerfile: infra/firebase-emulator/Dockerfile }
+    networks: [tms-net]
+    ports: ['127.0.0.1:29099:9099']
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:9099/ > /dev/null || exit 1']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  postgres:
+    ports: !override ['127.0.0.1:25432:5432']
+  rabbitmq:
+    ports: !override ['127.0.0.1:25672:5672', '127.0.0.1:25673:15672']
+  redis:
+    ports: !reset []
+  mailpit:
+    ports: !reset []
+
+  api-gateway:
+    environment: *emulator-env
+    ports: !override ['127.0.0.1:28080:8080']
+    depends_on:
+      firebase-emulator: { condition: service_healthy }
+  identity-service:
+    environment: *emulator-env
+    ports: !override ['127.0.0.1:23001:3001']
+    depends_on:
+      firebase-emulator: { condition: service_healthy }
+  student-service:
+    ports: !override ['127.0.0.1:23002:3002']
+  class-service:
+    environment: { E2E_HOOKS: 'true' }
+    ports: !override ['127.0.0.1:23003:3003']
+  schedule-service:
+    environment: { E2E_HOOKS: 'true' }
+    ports: !override ['127.0.0.1:23004:3004']
+  billing-service:
+    environment: { E2E_HOOKS: 'true' }
+    ports: !override ['127.0.0.1:23006:3006']
+  frontend:
+    ports: !override ['127.0.0.1:25173:5173']
