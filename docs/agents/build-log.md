@@ -271,3 +271,18 @@ measure and left to the user.
   - Gate: format, lint, 9/9 builds, unit tests, 148 integration tests.
   - Known limit: scenario 4 creates a Session that started 10 minutes ago, so running it
     between 00:00 and 00:10 Vietnam time puts the Session on the previous day.
+- **#21 merged** as PR #49 (closes #21). All 21 sub-issues of tracking issue #1 are closed.
+- **Final deploy (local stack, real Firebase project as decided):**
+  - Rebuilt every image from `main` one at a time (identity, student, class, schedule,
+    billing, gateway, frontend); `pnpm migrate:all` reported no pending migrations; all
+    eleven containers healthy (gateway 8080, identity 3001, student 3002, class 3003,
+    schedule 3004, billing 3006, frontend 5173, postgres, rabbitmq, redis, mailpit).
+  - Found and fixed during the check: the frontend container was still running an
+    image from group 1 (the dev override keeps the frontend behind the
+    `frontend-in-docker` profile, so `up -d` had not recreated it). Recreated it with
+    `pnpm compose --profile frontend-in-docker up -d --force-recreate frontend`.
+  - Verified that real routes answer 200 (`/login`, `/tutor/invoices`, `/tutor/schedule`,
+    `/parent/billing`, `/admin`) and unknown routes under the same layouts answer 404.
+    The status code alone was not conclusive on the stale image, so the check compares
+    against known-bad routes.
+  - The e2e test hooks are absent from this stack (404).
