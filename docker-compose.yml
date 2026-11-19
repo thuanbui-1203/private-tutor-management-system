@@ -116,7 +116,12 @@ services:
   student-service:
     <<: *backend
     build: { context: ., dockerfile: backend/student-service/Dockerfile }
-    environment: { <<: *common-env, PORT: '3002', DATABASE_URL: '${STUDENT_DB_URL}' }
+    environment:
+      <<: *common-env
+      PORT: '3002'
+      DATABASE_URL: ${STUDENT_DB_URL}
+      # BR-ST-08: Anonymisation asks billing for open Invoices.
+      BILLING_SERVICE_URL: http://billing-service:3006
     ports: ['3002:3002']
 
   class-service:
@@ -144,6 +149,10 @@ services:
       DATABASE_URL: ${BILLING_DB_URL}
       BILLING_INVOICE_DUE_DAY: ${BILLING_INVOICE_DUE_DAY}
       BILLING_CHARGE_ABSENT: ${BILLING_CHARGE_ABSENT}
+      # VietQR: the account Parents transfer to (GET /billing/invoices/{id}/qr; 503 when empty).
+      BILLING_BANK_BIN: ${BILLING_BANK_BIN:-}
+      BILLING_BANK_ACCOUNT: ${BILLING_BANK_ACCOUNT:-}
+      BILLING_BANK_ACCOUNT_NAME: ${BILLING_BANK_ACCOUNT_NAME:-}
     ports: ['3006:3006']
 
   # academic-service (:3005, MongoDB) and notification-service (:3007) are added

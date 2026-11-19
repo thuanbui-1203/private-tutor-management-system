@@ -119,10 +119,12 @@ PARTIALLY_PAID --> PAID : Thanh toán phần còn lại
 PARTIALLY_PAID --> OVERDUE : Quá due_date
 PARTIALLY_PAID --> ISSUED : Reversal về 0
 
-OVERDUE --> PARTIALLY_PAID : Thanh toán một phần
+OVERDUE --> OVERDUE : Thanh toán một phần\n(vẫn quá hạn, vẫn nhận nhắc)\n/ publish PaymentReceived
 OVERDUE --> PAID : Thanh toán đủ
 
 PAID --> PARTIALLY_PAID : Reversal (ghi sai)
+PAID --> ISSUED : Reversal về 0, chưa đến hạn
+PAID --> OVERDUE : Reversal, đã quá hạn
 PAID --> [*]
 VOID --> [*]
 

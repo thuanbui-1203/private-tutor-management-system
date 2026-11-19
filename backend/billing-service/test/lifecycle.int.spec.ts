@@ -375,14 +375,27 @@ describe('Billing: monthly close, overdue and void-and-replace (#19)', () => {
       .set(tutor)
       .send({ reason: 'x' })
       .expect(409);
-    await env.db.query(`UPDATE invoices SET status = 'PARTIALLY_PAID' WHERE id = $1`, [
-      res.replacement.id,
-    ]);
+    const part = await http()
+      .post(`/billing/invoices/${res.replacement.id}/payments`)
+      .set(tutor)
+      .send({ amount: 100_000, method: 'CASH' })
+      .expect(201);
     await http()
       .post(`/billing/invoices/${res.replacement.id}/void`)
       .set(tutor)
       .send({ reason: 'x' })
       .expect(409);
+    // Once the payment is reversed, the invoice can be voided again.
+    await http()
+      .post(`/billing/payments/${part.body.payment.id}/reversal`)
+      .set(tutor)
+      .send({ reason: 'Ghi nhầm' })
+      .expect(201);
+    await http()
+      .post(`/billing/invoices/${res.replacement.id}/void`)
+      .set(tutor)
+      .send({ reason: 'Hủy để làm lại' })
+      .expect(201);
   });
 
   it('only the Payer, the Tutor and Admin see an Invoice; a secondary Parent gets 404', async () => {

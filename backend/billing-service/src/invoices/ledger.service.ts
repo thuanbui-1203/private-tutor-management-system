@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { nextPeriod } from '@tms/common';
-import type { Invoice, Prisma } from '../generated/prisma/client';
+import type { Invoice, InvoiceStatus, Prisma } from '../generated/prisma/client';
 import { NotYetKnownError } from '../copies/copies.service';
 
 type Tx = Prisma.TransactionClient;
@@ -12,6 +12,22 @@ export function addDays(date: string, days: number): string {
   const [y, m, d] = date.split('-').map(Number);
   return dateOnly(new Date(Date.UTC(y, m - 1, d + days)));
 }
+/**
+ * BR-BI-07: an issued Invoice's status always follows from its money: fully paid → PAID,
+ * otherwise past its due date → OVERDUE, otherwise some money → PARTIALLY_PAID, else ISSUED.
+ * DRAFT and VOID are not about money and stay as they are.
+ */
+export function deriveStatus(
+  invoice: Pick<Invoice, 'status' | 'total' | 'dueDate'>,
+  paid: number,
+  today: string,
+): InvoiceStatus {
+  if (invoice.status === 'DRAFT' || invoice.status === 'VOID') return invoice.status;
+  if (paid >= invoice.total) return 'PAID';
+  if (invoice.dueDate && today > dateOnly(invoice.dueDate)) return 'OVERDUE';
+  return paid > 0 ? 'PARTIALLY_PAID' : 'ISSUED';
+}
+
 /** Last calendar day of a `YYYY-MM` period. */
 export function lastDayOf(period: string): string {
   const [y, m] = period.split('-').map(Number);
@@ -64,6 +80,17 @@ export class LedgerService {
         period,
       },
     });
+  }
+
+  /** Net money received for an Invoice: PAYMENTs minus REVERSALs. */
+  async paidOf(tx: Tx | { payment: Tx['payment'] }, invoiceId: string): Promise<number> {
+    const rows = await tx.payment.groupBy({
+      by: ['kind'],
+      where: { invoiceId },
+      _sum: { amount: true },
+    });
+    const sum = (k: string) => rows.find((r) => r.kind === k)?._sum.amount ?? 0;
+    return sum('PAYMENT') - sum('REVERSAL');
   }
 
   /** Recomputes `total` from the items. */
