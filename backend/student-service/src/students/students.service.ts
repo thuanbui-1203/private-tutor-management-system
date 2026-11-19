@@ -1,0 +1,341 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
+import { enqueueEvent, type AuthUser, type SqlExecutor } from '@tms/common';
+import type { Contact, InternalStudentResponse } from '@tms/contracts';
+import type { Parent, Prisma, Student, StudentParent } from '../generated/prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { IdentityClient, type InvitationOutcome } from './identity.client';
+import { checkPayer, checkSinglePrimary, isMinor, type PayerKind } from './rules';
+import type { CreateStudent, ParentLink, UpdateStudent } from './schemas';
+
+export type StudentRecord = Student & { parents: (StudentParent & { parent: Parent })[] };
+type Tx = Prisma.TransactionClient;
+
+/** How the caller relates to a Student; decides what they may see (BR-ST-06, BR-ST-07). */
+export type Relation = 'staff' | 'primary-parent' | 'secondary-parent' | 'self';
+
+const WITH_PARENTS = {
+  parents: { include: { parent: true }, orderBy: { isPrimary: 'desc' } },
+} as const;
+const dateOnly = (d: Date) => d.toISOString().slice(0, 10);
+const primaryOf = (s: StudentRecord) => s.parents.find((p) => p.isPrimary)?.parent;
+
+export function payerContact(student: StudentRecord): Contact {
+  const primary = primaryOf(student);
+  if (student.payer === 'PRIMARY_PARENT' && primary) {
+    return {
+      name: primary.fullName,
+      phone: primary.phone,
+      ...(primary.email && { email: primary.email }),
+    };
+  }
+  return { name: student.fullName, ...(student.email && { email: student.email }) };
+}
+
+/** The Student as each kind of caller may see them. Unknown relation → never called (404 earlier). */
+export function viewFor(student: StudentRecord, relation: Relation) {
+  const seesBilling =
+    relation === 'staff' ||
+    relation === 'primary-parent' ||
+    (relation === 'self' && student.payer === 'SELF');
+  return {
+    id: student.id,
+    tutorId: student.tutorId,
+    fullName: student.fullName,
+    email: student.email,
+    dob: dateOnly(student.dob),
+    school: student.school,
+    grade: student.grade,
+    status: student.status,
+    ...(relation === 'staff' && { note: student.note }),
+    ...(seesBilling && { payer: student.payer, payerContact: payerContact(student) }),
+    parents: student.parents.map(({ parent, isPrimary }) => ({
+      id: parent.id,
+      fullName: parent.fullName,
+      isPrimary,
+      ...((relation === 'staff' || relation === 'primary-parent') && {
+        phone: parent.phone,
+        email: parent.email,
+      }),
+    })),
+  };
+}
+
+@Injectable()
+export class StudentsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly identity: IdentityClient,
+  ) {}
+
+  async create(actor: AuthUser, body: CreateStudent) {
+    const tutorId = actor.role === 'TUTOR' ? actor.id : body.tutorId;
+    if (!tutorId)
+      throw new BadRequestException('an Admin must say which Tutor the Student belongs to');
+    checkSinglePrimary(body.parents);
+    const hasPrimaryParent = body.parents.some((p) => p.isPrimary);
+    const payer: PayerKind = body.payer ?? (hasPrimaryParent ? 'PRIMARY_PARENT' : 'SELF');
+    checkPayer({ dob: body.dob, payer, hasPrimaryParent, email: body.email });
+
+    const student = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.student.create({
+        data: {
+          tutorId,
+          fullName: body.fullName,
+          dob: new Date(`${body.dob}T00:00:00Z`),
+          email: body.email,
+          school: body.school,
+          grade: body.grade,
+          note: body.note,
+          payer,
+        },
+      });
+      for (const link of body.parents) await this.link(tx, actor, created.id, link);
+      const full = await tx.student.findUniqueOrThrow({
+        where: { id: created.id },
+        include: WITH_PARENTS,
+      });
+      await this.publish(tx, 'StudentCreated', full);
+      return full;
+    });
+
+    const invitation = body.invite
+      ? await this.sendInvitation(actor, student)
+      : { status: 'skipped', reason: 'not requested' };
+    return { ...viewFor(student, 'staff'), invitation };
+  }
+
+  async list(
+    actor: AuthUser,
+    query: { status?: Student['status']; q?: string; page: number; pageSize: number },
+  ) {
+    const where: Prisma.StudentWhereInput = {
+      ...(actor.role === 'TUTOR' && { tutorId: actor.id }),
+      ...(query.status && { status: query.status }),
+      ...(query.q && { fullName: { contains: query.q, mode: 'insensitive' } }),
+      anonymisedAt: null,
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.student.findMany({
+        where,
+        include: WITH_PARENTS,
+        orderBy: { fullName: 'asc' },
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+      }),
+      this.prisma.student.count({ where }),
+    ]);
+    return {
+      items: items.map((s) => viewFor(s, 'staff')),
+      total,
+      page: query.page,
+      pageSize: query.pageSize,
+    };
+  }
+
+  async get(actor: AuthUser, id: string) {
+    const { student, relation } = await this.visible(actor, id);
+    return viewFor(student, relation);
+  }
+
+  async update(actor: AuthUser, id: string, body: UpdateStudent) {
+    const current = await this.staffOnly(actor, id);
+    const next = {
+      dob: body.dob ?? dateOnly(current.dob),
+      payer: (body.payer ?? current.payer) as PayerKind,
+      email: body.email === undefined ? current.email : body.email,
+    };
+    checkPayer({ ...next, hasPrimaryParent: Boolean(primaryOf(current)) });
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.student.update({
+        where: { id },
+        data: {
+          ...body,
+          ...(body.dob && { dob: new Date(`${body.dob}T00:00:00Z`) }),
+        },
+      });
+      const full = await tx.student.findUniqueOrThrow({ where: { id }, include: WITH_PARENTS });
+      await this.publish(tx, 'StudentUpdated', full);
+      return full;
+    });
+    return viewFor(updated, 'staff');
+  }
+
+  async addParent(actor: AuthUser, id: string, link: ParentLink) {
+    await this.staffOnly(actor, id);
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (link.isPrimary) {
+        await tx.studentParent.updateMany({ where: { studentId: id }, data: { isPrimary: false } });
+      }
+      await this.link(tx, actor, id, link);
+      const full = await tx.student.findUniqueOrThrow({ where: { id }, include: WITH_PARENTS });
+      await this.publish(tx, 'StudentUpdated', full);
+      return full;
+    });
+    return viewFor(updated, 'staff');
+  }
+
+  async removeParent(actor: AuthUser, id: string, parentId: string) {
+    const current = await this.staffOnly(actor, id);
+    const link = current.parents.find((p) => p.parentId === parentId);
+    if (!link) throw new NotFoundException('this Parent is not linked to the Student');
+    if (link.isPrimary) {
+      throw new UnprocessableEntityException(
+        'make another Parent primary before removing the primary one',
+      );
+    }
+    await this.prisma.studentParent.delete({
+      where: { studentId_parentId: { studentId: id, parentId } },
+    });
+    return viewFor(
+      await this.prisma.student.findUniqueOrThrow({ where: { id }, include: WITH_PARENTS }),
+      'staff',
+    );
+  }
+
+  /** class-service: `GET /internal/students/{id}` (InternalStudentResponse). */
+  async internal(id: string): Promise<InternalStudentResponse> {
+    const student = await this.prisma.student.findUnique({ where: { id }, include: WITH_PARENTS });
+    if (!student || student.anonymisedAt) throw new NotFoundException('student not found');
+    return {
+      id: student.id,
+      fullName: student.fullName,
+      tutorId: student.tutorId,
+      status: student.status,
+      payerContact: payerContact(student),
+    };
+  }
+
+  /** Re-publishes StudentUpdated for every Student whose Payer contact may have changed. */
+  async publishForParent(tx: Tx, parentId: string): Promise<void> {
+    const students = await tx.student.findMany({
+      where: { parents: { some: { parentId } } },
+      include: WITH_PARENTS,
+    });
+    for (const s of students) await this.publish(tx, 'StudentUpdated', s);
+  }
+
+  // ---------------------------------------------------------------- helpers
+
+  /** Loads a Student the caller may see, or 404 (never 403: do not reveal it exists). */
+  private async visible(
+    actor: AuthUser,
+    id: string,
+  ): Promise<{ student: StudentRecord; relation: Relation }> {
+    const student = await this.prisma.student.findUnique({ where: { id }, include: WITH_PARENTS });
+    if (student && !student.anonymisedAt) {
+      if (actor.role === 'ADMIN' || (actor.role === 'TUTOR' && student.tutorId === actor.id)) {
+        return { student, relation: 'staff' };
+      }
+      if (actor.role === 'STUDENT' && student.userId === actor.id)
+        return { student, relation: 'self' };
+      if (actor.role === 'PARENT') {
+        const link = student.parents.find((p) => p.parent.userId === actor.id);
+        if (link)
+          return { student, relation: link.isPrimary ? 'primary-parent' : 'secondary-parent' };
+      }
+    }
+    throw new NotFoundException('student not found');
+  }
+
+  private async staffOnly(actor: AuthUser, id: string): Promise<StudentRecord> {
+    const { student, relation } = await this.visible(actor, id);
+    if (relation !== 'staff') throw new NotFoundException('student not found');
+    return student;
+  }
+
+  private async link(tx: Tx, actor: AuthUser, studentId: string, link: ParentLink): Promise<void> {
+    let parentId: string;
+    if ('parentId' in link) {
+      const parent = await tx.parent.findUnique({
+        where: { id: link.parentId },
+        include: { students: { include: { student: { select: { tutorId: true } } } } },
+      });
+      const mine =
+        parent &&
+        (actor.role === 'ADMIN' ||
+          parent.createdBy === actor.id ||
+          parent.students.some((s) => s.student.tutorId === actor.id));
+      if (!mine) throw new NotFoundException(`parent ${link.parentId} not found`);
+      parentId = parent.id;
+    } else {
+      // The same Parent typed in again for a sibling: reuse the record this Tutor already has.
+      const existing = link.email
+        ? await tx.parent.findFirst({
+            where: {
+              email: { equals: link.email, mode: 'insensitive' },
+              OR: [
+                { createdBy: actor.id },
+                { students: { some: { student: { tutorId: actor.id } } } },
+              ],
+            },
+          })
+        : null;
+      parentId =
+        existing?.id ??
+        (
+          await tx.parent.create({
+            data: {
+              fullName: link.fullName,
+              phone: link.phone,
+              email: link.email,
+              createdBy: actor.id,
+            },
+          })
+        ).id;
+    }
+    await tx.studentParent.upsert({
+      where: { studentId_parentId: { studentId, parentId } },
+      create: { studentId, parentId, isPrimary: link.isPrimary },
+      update: { isPrimary: link.isPrimary },
+    });
+  }
+
+  private async publish(
+    tx: Tx,
+    type: 'StudentCreated' | 'StudentUpdated',
+    s: StudentRecord,
+  ): Promise<void> {
+    await enqueueEvent(tx as unknown as SqlExecutor, type, {
+      studentId: s.id,
+      fullName: s.fullName,
+      tutorId: s.tutorId,
+      payerContact: payerContact(s),
+    });
+  }
+
+  /** BR-ST-04: invite the Student, or the primary Parent when the Student has no email. */
+  private async sendInvitation(
+    actor: AuthUser,
+    student: StudentRecord,
+  ): Promise<InvitationOutcome> {
+    if (student.email) {
+      return this.identity.invite({
+        email: student.email,
+        fullName: student.fullName,
+        role: 'STUDENT',
+        invitedBy: actor.id,
+      });
+    }
+    const primary = primaryOf(student);
+    if (primary?.email) {
+      return this.identity.invite({
+        email: primary.email,
+        fullName: primary.fullName,
+        role: 'PARENT',
+        invitedBy: actor.id,
+      });
+    }
+    return {
+      status: 'skipped',
+      reason: isMinor(dateOnly(student.dob))
+        ? 'the primary Parent has no email'
+        : 'the Student has no email',
+    };
+  }
+}

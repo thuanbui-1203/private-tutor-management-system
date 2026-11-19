@@ -13,9 +13,8 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
-import { CurrentUser, Public, Roles, type AuthUser } from '@tms/common';
+import { CurrentUser, Public, Roles, type AuthUser, ZodBody } from '@tms/common';
 import { Role } from '@tms/contracts';
-import { ZodBody } from '../common/zod-body.pipe';
 import { FirebaseAuthService } from '../firebase/firebase-auth.service';
 import { UsersService, type UserView } from './users.service';
 
