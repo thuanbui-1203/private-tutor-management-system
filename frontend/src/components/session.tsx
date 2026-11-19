@@ -72,6 +72,10 @@ export interface NavItem {
   label: string;
 }
 
+/** A role's home (`/tutor`) is active only on itself; sections also on their sub-pages. */
+const isActive = (pathname: string, href: string) =>
+  pathname === href || (href.split('/').length > 2 && pathname.startsWith(`${href}/`));
+
 /** The signed-in layout: header with the user and sign-out, and the role's menu. */
 export function AppShell({ nav, children }: { nav: NavItem[]; children: React.ReactNode }) {
   const { session, signOut } = useAuth();
@@ -85,11 +89,7 @@ export function AppShell({ nav, children }: { nav: NavItem[]; children: React.Re
         </Link>
         <nav aria-label="Menu chính">
           {nav.map((n) => (
-            <Link
-              key={n.href}
-              href={n.href}
-              className={pathname === n.href || pathname.startsWith(`${n.href}/`) ? 'active' : ''}
-            >
+            <Link key={n.href} href={n.href} className={isActive(pathname, n.href) ? 'active' : ''}>
               {n.label}
             </Link>
           ))}
