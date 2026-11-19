@@ -41,4 +41,29 @@ export class FirebaseAuthService {
   async setClaims(firebaseUid: string, claims: TmsClaims): Promise<void> {
     await this.auth.setCustomUserClaims(firebaseUid, { ...claims });
   }
+
+  /**
+   * Firebase account for an invited Parent or Student: no password until the
+   * invitation is accepted. Reuses an existing account with that email only if it
+   * has no role yet (someone who signed up but never registered); returns null otherwise.
+   */
+  async accountForInvitation(email: string, displayName: string): Promise<string | null> {
+    const existing = await this.auth.getUserByEmail(email).catch(() => null);
+    if (existing) return existing.customClaims?.role ? null : existing.uid;
+    const created = await this.auth.createUser({ email, displayName, emailVerified: false });
+    return created.uid;
+  }
+
+  async activate(firebaseUid: string, password: string): Promise<void> {
+    await this.auth.updateUser(firebaseUid, { password, emailVerified: true, disabled: false });
+  }
+
+  async setDisabled(firebaseUid: string, disabled: boolean): Promise<void> {
+    await this.auth.updateUser(firebaseUid, { disabled });
+  }
+
+  /** Invalidates every refresh token; the gateway's checkRevoked then rejects old ID tokens. */
+  async revokeSessions(firebaseUid: string): Promise<void> {
+    await this.auth.revokeRefreshTokens(firebaseUid);
+  }
 }

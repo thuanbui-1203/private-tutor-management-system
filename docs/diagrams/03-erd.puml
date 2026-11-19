@@ -33,10 +33,12 @@ package "identity_db" #F5F9FF {
     * id : UUID <<PK>>
     --
     * user_id : UUID <<FK>>
-    * token_hash : VARCHAR(255)
+    * token_hash : TEXT <<UNIQUE>> (SHA-256)
+    * invited_by : UUID <<ref users>>
     * expires_at : TIMESTAMP (+7 ngày)
     used_at : TIMESTAMP
     revoked_at : TIMESTAMP
+    created_at : TIMESTAMP
     <i>(dùng 1 lần; gửi lại thì thu hồi bản cũ)</i>
   }
   users ||--o{ invitations

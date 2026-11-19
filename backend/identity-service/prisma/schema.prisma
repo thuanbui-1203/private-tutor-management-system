@@ -38,7 +38,26 @@ model User {
   createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  invitations Invitation[]
+
   @@map("users")
+}
+
+/// Single-use activation link for a Parent or Student, valid 7 days (BR-AU-02).
+/// Only the SHA-256 of the token is stored; re-sending sets revokedAt on the old one.
+model Invitation {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String    @unique @map("token_hash")
+  invitedBy String    @map("invited_by") @db.Uuid
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId])
+  @@map("invitations")
 }
 
 /// Outbox (docs/02 §1, @tms/common): events written in the same transaction as the

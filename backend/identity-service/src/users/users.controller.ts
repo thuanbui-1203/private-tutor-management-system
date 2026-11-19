@@ -1,16 +1,30 @@
 import {
+  Body,
   Controller,
   Get,
   Headers,
   HttpCode,
   HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
   Post,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { CurrentUser, Public, type AuthUser } from '@tms/common';
+import { z } from 'zod';
+import { CurrentUser, Public, Roles, type AuthUser } from '@tms/common';
+import { Role } from '@tms/contracts';
+import { ZodBody } from '../common/zod-body.pipe';
 import { FirebaseAuthService } from '../firebase/firebase-auth.service';
 import { UsersService, type UserView } from './users.service';
+
+/** PATCH /users/{id}: at least one of role, status. PENDING is set only by invitations. */
+const UserChangeBody = z
+  .object({ role: Role.optional(), status: z.enum(['ACTIVE', 'DISABLED']).optional() })
+  .refine((c) => c.role !== undefined || c.status !== undefined, {
+    message: 'give a role and / or a status',
+  });
 
 @ApiTags('users')
 @Controller()
@@ -40,5 +54,22 @@ export class UsersController {
   @Get('users/me')
   me(@CurrentUser() user: AuthUser): Promise<UserView> {
     return this.users.findById(user.id);
+  }
+
+  @Roles('ADMIN')
+  @Get('users/:id')
+  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<UserView> {
+    return this.users.findById(id);
+  }
+
+  /** Change role and / or disable / re-enable (BR-CL-08). Revokes the user's sessions. */
+  @Roles('ADMIN')
+  @Patch('users/:id')
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodBody(UserChangeBody)) change: z.infer<typeof UserChangeBody>,
+    @CurrentUser() actor: AuthUser,
+  ): Promise<UserView> {
+    return this.users.update(actor, id, change);
   }
 }
