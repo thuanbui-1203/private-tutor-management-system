@@ -201,6 +201,21 @@ describe('Identity: Invitations and user administration (#7)', () => {
     await expect(signIn(tutor.email)).resolves.toBeDefined();
   });
 
+  it('an Admin lists users by role and status', async () => {
+    const tutor = await registeredTutor();
+    const ids = async (query: object) =>
+      (await http().get('/users').query(query).set(ADMIN).expect(200)).body.map(
+        (u: { id: string }) => u.id,
+      );
+    expect(await ids({ role: 'TUTOR' })).toContain(tutor.id);
+    expect(await ids({ role: 'PARENT' })).not.toContain(tutor.id);
+    expect(await ids({ role: 'TUTOR', status: 'DISABLED' })).not.toContain(tutor.id);
+    await http().patch(`/users/${tutor.id}`).set(ADMIN).send({ status: 'DISABLED' }).expect(200);
+    expect(await ids({ role: 'TUTOR', status: 'DISABLED' })).toContain(tutor.id);
+    await http().get('/users').set(TUTOR).expect(403);
+    await http().get('/users').query({ role: 'OWNER' }).set(ADMIN).expect(400);
+  });
+
   it('only an Admin may administer users, and not their own account', async () => {
     const tutor = await registeredTutor();
     await http().get(`/users/${tutor.id}`).set(TUTOR).expect(403);

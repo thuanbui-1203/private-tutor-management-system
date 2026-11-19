@@ -353,6 +353,26 @@ describe('Billing: Payments, Reversals and reports (#20)', () => {
     await http().get(`/billing/students/${randomUUID()}/balance`).set(tutor).expect(404);
   });
 
+  it("the Payer lists their child's issued invoices, paid ones included; others get 404", async () => {
+    const studentId = await student();
+    const paid = await issued('2029-10', 1, studentId);
+    await pay(paid.invoice.id, 200_000).expect(201);
+    const open = await issued('2029-11', 1, studentId);
+    await attend(studentId, '2029-12-03'); // a draft: not listed
+    const payer = as('PARENT');
+    const secondary = as('PARENT');
+    access.set(`${studentId}:${payer['x-user-id']}`, ['primary-parent', true]);
+    access.set(`${studentId}:${secondary['x-user-id']}`, ['secondary-parent', false]);
+    const res = await http().get(`/billing/students/${studentId}/invoices`).set(payer).expect(200);
+    expect(res.body.map((i: { id: string; status: string }) => [i.id, i.status])).toEqual([
+      [open.invoice.id, 'ISSUED'],
+      [paid.invoice.id, 'PAID'],
+    ]);
+    await http().get(`/billing/students/${studentId}/invoices`).set(tutor).expect(200);
+    await http().get(`/billing/students/${studentId}/invoices`).set(secondary).expect(404);
+    await http().get(`/billing/students/${studentId}/invoices`).set(as('TUTOR')).expect(404);
+  });
+
   it('revenue: billed by month of service, collected by month received; a Tutor sees only their own', async () => {
     // Two Tutors of their own, so other tests' Students do not show up in the numbers.
     async function tutorWithStudent(fee: number, sessions: string[]) {

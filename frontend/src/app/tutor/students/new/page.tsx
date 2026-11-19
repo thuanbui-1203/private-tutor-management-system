@@ -7,12 +7,14 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { ActionButton, ErrorBox, Field, Notice } from '@/components/ui';
 import { api, describeError } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { ageOn } from '@/lib/format';
 import { emptyParent, studentFormProblems, type ParentRow } from '@/lib/rules';
 import type { InvitationOutcome, StudentView } from '@/lib/types';
 
 export default function NewStudentPage() {
   const router = useRouter();
+  const { session } = useAuth();
   const [fullName, setFullName] = useState('');
   const [dob, setDob] = useState('');
   const [email, setEmail] = useState('');
@@ -40,6 +42,8 @@ export default function NewStudentPage() {
     const problems = studentFormProblems(dob, email, parents);
     if (problems.length) return setError(problems.join(' '));
     const body = {
+      // An Admin creates Students on their own account (they can teach, BR-AU-01).
+      ...(session?.role === 'ADMIN' && session.userId && { tutorId: session.userId }),
       fullName: fullName.trim(),
       dob,
       ...(email.trim() && { email: email.trim() }),

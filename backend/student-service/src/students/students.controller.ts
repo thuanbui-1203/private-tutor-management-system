@@ -43,6 +43,13 @@ export class StudentsController {
     return this.students.create(actor, body);
   }
 
+  /** The signed-in Student's own record (declared before ':id' so "me" is not read as an id). */
+  @Roles('STUDENT')
+  @Get('me')
+  me(@CurrentUser() actor: AuthUser) {
+    return this.students.me(actor);
+  }
+
   /** Tutor (owner) or Admin see everything; Parents their children; a Student themselves. Others 404. */
   @Get(':id')
   get(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {

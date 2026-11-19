@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import type { AuthUser } from '@tms/common';
 import { InvoiceKind, InvoiceStatus, Period } from '@tms/contracts';
 import { z } from 'zod';
@@ -49,6 +49,22 @@ export class InvoicesService {
     });
     await this.access.check(actor, invoice);
     return invoiceView(invoice!);
+  }
+
+  /**
+   * GET /billing/students/{id}/invoices: one Student's issued Invoices (both kinds, paid or
+   * not; drafts are not bills yet), for their Tutor, Admin and their Payer only.
+   */
+  async ofStudent(actor: AuthUser, studentId: string) {
+    const student = await this.prisma.studentSnapshot.findUnique({ where: { studentId } });
+    if (!student || !(await this.access.allowed(actor, studentId, student.tutorId))) {
+      throw new NotFoundException('student not found');
+    }
+    const rows = await this.prisma.invoice.findMany({
+      where: { studentId, status: { not: 'DRAFT' } },
+      orderBy: [{ period: 'desc' }, { createdAt: 'desc' }],
+    });
+    return rows.map((r) => invoiceView(r));
   }
 
   async enrollmentInvoice(actor: AuthUser, enrollmentId: string) {

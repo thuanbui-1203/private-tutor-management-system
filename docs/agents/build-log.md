@@ -203,3 +203,32 @@ measure and left to the user.
     Write tool.
   - 8 new browser tests (42 total, stable over two runs).
   - Mutation checks 9/9 caught after strengthening the reversal test (empty reason must not send; the reversal button must disappear once used). The two that first survived showed those gaps.
+- **#23 group 4 merged** as PR #47.
+- **#23 group 5 (Parent, Student, Admin) — closes #23** on `feat/23-frontend-family-admin`:
+  - **Three backend gaps found while planning, each closed with an integration test:**
+    1. student-service `GET /students/me`: a Student had no way to find their own record
+       (only Parents had `/parents/me/children`). Declared before `/:id` so "me" is not
+       parsed as an id. 404 when not linked, 403 for other roles.
+    2. billing `GET /billing/students/{id}/invoices` (Tutor, Admin, Payer): the Payer could
+       not list their child's invoices (`/billing/invoices` is staff-only and the balance
+       shows open ones only), so paid invoices were invisible (story 68). Drafts are not
+       listed. Two mutations (drafts listed, no access check) caught.
+    3. identity `GET /users?role=&status=` (Admin): needed for the Tutors list (story 12).
+  - Screens:
+    - A shared family module for Parents and Students: child switcher (remembered per
+      browser, with safe `localStorage` access), upcoming 4 weeks with cancelled (with the
+      reason) and moved Sessions marked, own-child Attendance.
+    - Billing menu only when the API says the viewer is the Payer: a Parent needs
+      `PRIMARY_PARENT`, a Student needs `SELF`; nothing is inferred from age. Payer
+      billing: balance, every issued invoice incl. paid ones, read-only detail with VietQR.
+    - Admin: Tutors list with disable / re-enable (a 409 shows "N open Classes",
+      BR-CL-08), the Tutor screens in the menu, and Students created on the Admin's own
+      account (`tutorId`).
+  - **Bug the tests caught:** the billing page loaded billing data before checking whether
+    the viewer is the Payer, so a secondary Parent fired requests the API refuses. The
+    loading now lives in a child component rendered only for the Payer.
+  - 7 new browser tests (49 total, stable over two runs); mutation checks 8/8 caught.
+  - Gate: format, lint, 9/9 builds, unit tests, 148 integration tests; identity, student,
+    billing and frontend rebuilt. Live: `/students/me` 404 unlinked,
+    `/billing/students/{id}/invoices` 404 unknown, `/users?role=TUTOR` lists 1 tutor,
+    frontend `/parent` and `/admin` 200.

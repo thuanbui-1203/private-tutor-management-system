@@ -211,6 +211,12 @@ describe('Student: Student and Parent records (#9)', () => {
     expect(me.note).toBeUndefined();
     expect(me.payer).toBeUndefined(); // a minor never sees fees
 
+    // GET /students/me: the Student finds their own record without knowing its id.
+    const own = (await http().get('/students/me').set(self).expect(200)).body;
+    expect(own).toEqual(me);
+    await http().get('/students/me').set(as('STUDENT')).expect(404); // no record linked
+    await http().get('/students/me').set(primary).expect(403); // Students only
+
     await http().get(`/students/${s.id}`).set(otherTutor).expect(404);
     await http().get(`/students/${s.id}`).set(as('PARENT')).expect(404); // another family's Parent
     await http().get(`/students/${s.id}`).set(as('STUDENT')).expect(404);

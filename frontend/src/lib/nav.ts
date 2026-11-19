@@ -9,9 +9,5 @@ export const TUTOR_NAV: NavItem[] = [
   { href: '/tutor/invoices', label: 'Hóa đơn' },
   { href: '/tutor/revenue', label: 'Doanh thu' },
 ];
-export const PARENT_NAV: NavItem[] = [{ href: '/parent', label: 'Tổng quan' }];
-export const STUDENT_NAV: NavItem[] = [{ href: '/student', label: 'Tổng quan' }];
-export const ADMIN_NAV: NavItem[] = [
-  { href: '/admin', label: 'Tổng quan' },
-  { href: '/tutor', label: 'Màn hình giáo viên' },
-];
+/** Admin: the Tutors list, then every Tutor screen (they see the whole centre, BR-AU-01). */
+export const ADMIN_NAV: NavItem[] = [{ href: '/admin', label: 'Giáo viên' }, ...TUTOR_NAV.slice(1)];
