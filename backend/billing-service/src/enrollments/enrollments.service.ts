@@ -142,7 +142,8 @@ export class EnrollmentsService implements OnModuleInit {
       where: {
         enrollmentId,
         type: 'FEE',
-        invoice: { kind: 'ENROLLMENT', status: { not: 'VOID' } },
+        superseded: false,
+        invoice: { kind: 'ENROLLMENT' },
       },
     });
     if (!fee) return;
@@ -169,7 +170,7 @@ export class EnrollmentsService implements OnModuleInit {
       where: {
         enrollmentId,
         servicePeriod: period,
-        invoice: { status: { not: 'VOID' } },
+        superseded: false,
       },
       _sum: { amount: true },
     });
