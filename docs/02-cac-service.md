@@ -123,15 +123,17 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 
 ## 5. Class Service
 
-**Dữ liệu:** `classes`, `enrollments`, `outbox_events`
+**Dữ liệu:** `classes`, `enrollments` (`UNIQUE(class_id, student_id)`), `outbox_events`, `processed_events`
 
 | Method | Endpoint | Mô tả | Quyền |
 |---|---|---|---|
-| GET | `/classes` | Danh sách lớp | TUTOR, ADMIN |
-| POST | `/classes` | Tạo lớp (môn, loại, học phí) | TUTOR, ADMIN |
-| PATCH | `/classes/{id}` | Sửa lớp, đổi học phí (áp dụng kỳ sau) | TUTOR, ADMIN |
-| POST | `/classes/{id}/close` | Đóng lớp | TUTOR, ADMIN |
-| GET | `/classes/{id}/students` | Danh sách học sinh đang học | TUTOR; nội bộ |
+| GET | `/classes?status=` | Danh sách lớp (giáo viên chỉ thấy lớp của mình) | TUTOR, ADMIN |
+| GET | `/classes/{id}` | Chi tiết lớp | TUTOR (chủ sở hữu), ADMIN |
+| POST | `/classes` | Tạo lớp: `ONE_ON_ONE` luôn 1 chỗ, `GROUP` 2–8 chỗ; học phí số nguyên VND; `chargeAbsent` mặc định true; Admin có thể tạo cho giáo viên khác (`tutorId`) hoặc tự dạy (BR-AU-01); phát `ClassCreated` hiệu lực từ kỳ hiện tại | TUTOR, ADMIN |
+| PATCH | `/classes/{id}` | Sửa lớp; đổi học phí / `chargeAbsent` phát `ClassUpdated` với `effectiveFrom` = kỳ sau (BR-CL-04); không giảm sĩ số dưới số chỗ đã giữ; lớp đã đóng → 409 | TUTOR (chủ sở hữu), ADMIN |
+| POST | `/classes/{id}/close` | Đóng lớp: mọi ghi danh còn hiệu lực → `WITHDRAWN` (lý do `CLASS_CLOSED`, mỗi ghi danh một `StudentWithdrawn`), rồi `ClassClosed` (BR-CL-05) | TUTOR (chủ sở hữu), ADMIN |
+| GET | `/classes/{id}/students` | Học sinh đang giữ chỗ hoặc tạm nghỉ trong lớp | TUTOR (chủ sở hữu), ADMIN |
+| GET | `/internal/tutors/{id}/open-classes` | Lớp đang mở của giáo viên, cho identity-service trước khi vô hiệu hóa (BR-CL-08) | Nội bộ |
 | POST | `/classes/{id}/enrollments` | Ghi danh học sinh. Trả `201` với `status = ACTIVE` (lớp `PER_SESSION`) hoặc `AWAITING_PAYMENT` (lớp `MONTHLY`); trả `202` với `PENDING` khi Student Service không phản hồi | TUTOR, ADMIN |
 | PATCH | `/classes/{id}/enrollments/{eid}` | Tạm dừng / rút khỏi lớp | TUTOR, ADMIN |
 | GET | `/students/{studentId}/classes` | Các lớp của một học sinh | TUTOR, PARENT, STUDENT |
