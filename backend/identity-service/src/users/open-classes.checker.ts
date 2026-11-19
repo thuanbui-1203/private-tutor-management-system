@@ -27,9 +27,8 @@ export class ClassServiceOpenClassesChecker implements OpenClassesChecker {
 }
 
 /**
- * TODO(#11): class-service does not expose /internal/tutors/{id}/open-classes yet.
- * Until it does, CLASS_SERVICE_URL stays unset and this stub allows every disable.
- * Once #11 lands, set CLASS_SERVICE_URL for identity-service in docker-compose.yml.
+ * Used only when CLASS_SERVICE_URL is unset (e.g. running Identity alone): allows every
+ * disable and warns once. docker-compose.yml sets CLASS_SERVICE_URL, so BR-CL-08 is enforced.
  */
 export class NoOpenClassesStub implements OpenClassesChecker {
   private warned = false;
@@ -37,7 +36,7 @@ export class NoOpenClassesStub implements OpenClassesChecker {
   async openClassIds(): Promise<string[]> {
     if (!this.warned) {
       new Logger('OpenClassesChecker').warn(
-        'CLASS_SERVICE_URL not set: BR-CL-08 open-class check is stubbed (see #11)',
+        'CLASS_SERVICE_URL not set: BR-CL-08 open-class check is skipped',
       );
       this.warned = true;
     }

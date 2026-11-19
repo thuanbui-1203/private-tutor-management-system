@@ -32,3 +32,87 @@ model ProcessedEvent {
 
   @@map("processed_events")
 }
+
+enum ClassType {
+  ONE_ON_ONE
+  GROUP
+}
+
+enum FeeType {
+  PER_SESSION
+  MONTHLY
+}
+
+enum ClassStatus {
+  OPEN
+  CLOSED
+}
+
+/// PENDING (Student Service unreachable), AWAITING_PAYMENT (Monthly-fee, BR-CL-07) and
+/// ACTIVE hold a seat (BR-CL-06).
+enum EnrollmentStatus {
+  PENDING
+  AWAITING_PAYMENT
+  ACTIVE
+  PAUSED
+  WITHDRAWN
+  REJECTED
+}
+
+enum WithdrawReason {
+  REQUESTED
+  UNPAID
+  CLASS_CLOSED
+  STUDENT_STATUS
+  SYNC_FAILED
+}
+
+model Class {
+  id               String       @id @default(uuid()) @db.Uuid
+  /// Owner: a Tutor, or an Admin who teaches (BR-AU-01).
+  tutorId          String       @map("tutor_id") @db.Uuid
+  name             String       @db.VarChar(100)
+  subject          String       @db.VarChar(50)
+  type             ClassType
+  /// 1 for ONE_ON_ONE (BR-CL-01), 2–8 for GROUP (BR-CL-02).
+  maxStudents      Int          @map("max_students") @db.SmallInt
+  feeType          FeeType      @map("fee_type")
+  /// Whole VND.
+  feeAmount        Int          @map("fee_amount")
+  /// Charge unexcused absences on PER_SESSION Classes (BR-BI-08).
+  chargeAbsent     Boolean      @default(true) @map("charge_absent")
+  /// Billing period (YYYY-MM) from which the current fee applies (BR-CL-04).
+  feeEffectiveFrom String       @map("fee_effective_from") @db.Char(7)
+  status           ClassStatus  @default(OPEN)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  enrollments      Enrollment[]
+
+  @@index([tutorId, status])
+  @@map("classes")
+}
+
+/// A Student's membership in a Class (#12 builds the enrollment flow on this table).
+model Enrollment {
+  id                String           @id @default(uuid()) @db.Uuid
+  classId           String           @map("class_id") @db.Uuid
+  class             Class            @relation(fields: [classId], references: [id])
+  studentId         String           @map("student_id") @db.Uuid
+  /// Snapshot from student-service at enrollment time.
+  studentName       String           @map("student_name") @db.VarChar(100)
+  status            EnrollmentStatus
+  /// AWAITING_PAYMENT only: 7 days after enrolling (BR-CL-07).
+  paymentDeadline   DateTime?        @map("payment_deadline") @db.Timestamptz(6)
+  rosterConfirmedAt DateTime?        @map("roster_confirmed_at") @db.Timestamptz(6)
+  withdrawReason    WithdrawReason?  @map("withdraw_reason")
+  joinedAt          DateTime         @default(now()) @map("joined_at") @db.Date
+  leftAt            DateTime?        @map("left_at") @db.Date
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  /// BR-CL-03: one enrollment per Student per Class.
+  @@unique([classId, studentId])
+  @@index([studentId])
+  @@index([status, paymentDeadline])
+  @@map("enrollments")
+}

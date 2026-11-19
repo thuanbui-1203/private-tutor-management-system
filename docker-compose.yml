@@ -109,6 +109,8 @@ services:
       <<: [*common-env, *firebase-env]
       PORT: '3001'
       DATABASE_URL: ${IDENTITY_DB_URL}
+      # BR-CL-08: ask class-service before disabling a Tutor (#11).
+      CLASS_SERVICE_URL: http://class-service:3003
     ports: ['3001:3001']
 
   student-service:
