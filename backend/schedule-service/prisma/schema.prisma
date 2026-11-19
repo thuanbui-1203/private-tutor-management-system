@@ -32,3 +32,84 @@ model ProcessedEvent {
 
   @@map("processed_events")
 }
+
+enum SessionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+  MISSED
+}
+
+/// Local copy of each Class (from ClassCreated / ClassUpdated / ClassClosed), so
+/// scheduling never needs a synchronous call to class-service.
+model ClassView {
+  classId   String   @id @map("class_id") @db.Uuid
+  tutorId   String   @map("tutor_id") @db.Uuid
+  open      Boolean  @default(true)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("class_view")
+}
+
+/// A recurring weekly pattern; immutable (BR-SC-07): to change it, end it and create another.
+model Schedule {
+  id             String    @id @default(uuid()) @db.Uuid
+  classId        String    @map("class_id") @db.Uuid
+  tutorId        String    @map("tutor_id") @db.Uuid
+  /// ISO weekday in Vietnam: 1 = Monday … 7 = Sunday.
+  weekday        Int       @db.SmallInt
+  /// Local Vietnam time, HH:MM.
+  startTime      String    @map("start_time") @db.Char(5)
+  endTime        String    @map("end_time") @db.Char(5)
+  fromDate       DateTime  @map("from_date") @db.Date
+  toDate         DateTime? @map("to_date") @db.Date
+  /// Sessions exist up to this date; the weekly job extends it (3 months ahead).
+  generatedUntil DateTime  @map("generated_until") @db.Date
+  endedAt        DateTime? @map("ended_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  sessions       Session[]
+
+  @@index([classId])
+  @@map("schedules")
+}
+
+model Session {
+  id           String        @id @default(uuid()) @db.Uuid
+  scheduleId   String?       @map("schedule_id") @db.Uuid
+  schedule     Schedule?     @relation(fields: [scheduleId], references: [id])
+  classId      String        @map("class_id") @db.Uuid
+  tutorId      String        @map("tutor_id") @db.Uuid
+  /// Local Vietnam date and times (what people see) …
+  date         DateTime      @db.Date
+  startTime    String        @map("start_time") @db.Char(5)
+  endTime      String        @map("end_time") @db.Char(5)
+  /// … and the same instants in UTC (overlap checks, events; BR-SYS-02).
+  startsAt     DateTime      @map("starts_at") @db.Timestamptz(6)
+  endsAt       DateTime      @map("ends_at") @db.Timestamptz(6)
+  status       SessionStatus @default(SCHEDULED)
+  /// Makeup session: the cancelled Session it replaces (#14).
+  makeupOf     String?       @map("makeup_of") @db.Uuid
+  cancelReason String?       @map("cancel_reason") @db.VarChar(500)
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tutorId, startsAt])
+  @@index([classId, startsAt])
+  @@map("sessions")
+}
+
+/// Who is expected at a Class's Sessions (ACTIVE / AWAITING_PAYMENT enrollments),
+/// copied from StudentEnrolled / StudentWithdrawn.
+model RosterEntry {
+  classId      String    @map("class_id") @db.Uuid
+  studentId    String    @map("student_id") @db.Uuid
+  enrollmentId String    @map("enrollment_id") @db.Uuid
+  studentName  String    @map("student_name") @db.VarChar(100)
+  joinedAt     DateTime  @map("joined_at") @db.Date
+  leftAt       DateTime? @map("left_at") @db.Date
+
+  @@id([classId, studentId])
+  @@map("class_roster_view")
+}
