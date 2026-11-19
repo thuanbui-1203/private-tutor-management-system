@@ -21,11 +21,15 @@ async function main(): Promise<void> {
       .catch(() => firebase.auth.createUser({ email, password, emailVerified: true }));
 
     const admin = await prisma.$transaction(async (tx) => {
-      const existing = await tx.user.findUnique({ where: { firebaseUid: account.uid } });
+      // Match by Firebase uid, or by email: the emulator forgets accounts on restart, so
+      // the same Admin can come back with a new uid. Keep users.id, re-link the account.
+      const existing =
+        (await tx.user.findUnique({ where: { firebaseUid: account.uid } })) ??
+        (await tx.user.findUnique({ where: { email } }));
       if (existing) {
         return tx.user.update({
           where: { id: existing.id },
-          data: { role: 'ADMIN', status: 'ACTIVE' },
+          data: { firebaseUid: account.uid, role: 'ADMIN', status: 'ACTIVE' },
         });
       }
       const created = await tx.user.create({

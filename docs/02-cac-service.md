@@ -43,18 +43,30 @@
 
 **Trách nhiệm:** định tuyến, xác thực Firebase ID token bằng Firebase Admin SDK (kiểm tra cả token đã bị thu hồi) rồi lấy hai custom claim `userId` (là `users.id` của Identity, UUID) và `role`, chuyển xuống thành `X-User-Id` và `X-User-Role`, rate limit theo IP và user (Redis), CORS, gán `X-Correlation-Id`.
 
-| Đường dẫn | Chuyển tới | Cần xác thực |
-|---|---|:-:|
-| `/api/auth/**` | identity-service | Một phần (nhận lời mời không cần; đăng ký giáo viên cần ID token nhưng chưa cần vai trò) |
-| `/api/users/**` | identity-service | ✔ |
-| `/api/students/**`, `/api/parents/**` | student-service | ✔ |
-| `/api/classes/**` | class-service | ✔ |
-| `/api/schedules/**`, `/api/sessions/**` | schedule-service | ✔ |
-| `/api/academic/**` | academic-service | ✔ |
-| `/api/billing/**` | billing-service | ✔ |
-| `/api/notifications/**` | notification-service | ✔ |
-| `/api/webhooks/**` | billing-service / notification-service | ✘ (xác thực bằng chữ ký webhook) |
+| Đường dẫn (sau `/api`) | Chuyển tới | Xác thực |
+|---|---|---|
+| `POST /auth/invitations/{token}/accept` | identity-service | Không (public) |
+| `POST /auth/register` | identity-service | ID token hợp lệ, chưa cần vai trò; gateway chuyển nguyên header `Authorization` để Identity tự xác thực |
+| `/auth/**`, `/users/**` | identity-service | ID token có claim `userId` + `role` |
+| `/students/{id}/classes` | class-service | Như trên |
+| `/students/{id}/attendance` | schedule-service | Như trên |
+| `/students/**`, `/parents/**` | student-service | Như trên |
+| `/classes/**` | class-service | Như trên |
+| `/schedules/**`, `/sessions/**` | schedule-service | Như trên |
+| `GET /calendar/{token}.ics` | schedule-service | Không (token riêng trong đường dẫn) |
+| `/billing/**` | billing-service | ID token có claim `userId` + `role` |
+| `/academic/**`, `/notifications/**`, `/webhooks/**` | – | Trả 501 (ngoài phạm vi MVP, BR-SYS-03) |
+| Mọi đường dẫn có đoạn `internal` | – | Trả 404: API nội bộ không bao giờ đi qua gateway |
 
+**Cách gateway xử lý một request** (`backend/api-gateway/src/gateway`):
+
+1. Giới hạn theo IP (Redis, cửa sổ 1 phút, `RATE_LIMIT_IP_PER_MINUTE`, mặc định 600) → quá thì 429 kèm `Retry-After`.
+2. Xóa mọi header `X-User-*` và `Authorization` do client gửi.
+3. Xác thực ID token (`verifyIdToken(token, checkRevoked = true)`): thiếu, sai, hết hạn, bị thu hồi → 401; hợp lệ nhưng chưa có claim → 403 (trừ `/auth/register`).
+4. Giới hạn theo người dùng (`RATE_LIMIT_USER_PER_MINUTE`, mặc định 300).
+5. Gắn `X-User-Id` (claim `userId`, không bao giờ là `uid` của Firebase), `X-User-Role`, `X-Correlation-Id` rồi chuyển tiếp nguyên luồng (body không bị đọc ở gateway). Service không phản hồi → 502, quá 30 giây → 504.
+
+Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay vì chặn toàn bộ API. CORS cho các origin trong `CORS_ORIGINS` (mặc định `http://localhost:5173`).
 ---
 
 ## 3. Identity Service
