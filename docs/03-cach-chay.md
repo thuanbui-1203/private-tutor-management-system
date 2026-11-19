@@ -1,6 +1,6 @@
 # 03. Hướng dẫn cài đặt và chạy
 
-> Tài liệu này mô tả cách thiết lập **dự kiến** của dự án (NestJS + Docker Compose). Các lệnh và file nhắc đến (`docker-compose.yml`, `.env.example`, `infra/`...) sẽ có sau khi dựng khung code theo [02-cac-service.md](02-cac-service.md#11-cấu-trúc-thư-mục-đề-xuất).
+> Cách chạy hệ thống (NestJS + Next.js + Docker Compose) như đang có trong repo: [`docker-compose.yml`](../docker-compose.yml), [`.env.example`](../.env.example), [`infra/`](../infra/). Những phần **chưa làm** được ghi rõ kèm số issue (ví dụ seed ở #6, health check `/health/ready` ở #4, các loại test ở #3, #4, #21).
 
 ## 1. Yêu cầu môi trường
 
@@ -20,32 +20,46 @@ docker --version && docker compose version
 node -v && pnpm -v
 ```
 
-## 2. Chạy toàn bộ hệ thống bằng Docker (khuyến nghị)
+## 2. Chạy hệ thống bằng Docker Compose
+
+Cấu hình nằm ở [`docker-compose.yml`](../docker-compose.yml) (bản giống production) và [`docker-compose.override.yml`](../docker-compose.override.yml) (tự áp dụng khi phát triển).
 
 ```bash
-# 1. Lấy mã nguồn
+# 1. Lấy mã nguồn và cài workspace
 git clone <repo-url> microservices_final
 cd microservices_final
-
-# 2. Tạo file biến môi trường
-cp .env.example .env
-
-# 3. Firebase (chỉ làm một lần): đặt service account key của project
-#    vào infra/keys/firebase-service-account.json (Firebase console > Project settings
-#    > Service accounts > Generate new private key), và tạo frontend/.env.local
-#    từ cấu hình Web app (xem mục 3). Không commit hai file này.
-
-# 4. Build và khởi động
-docker compose up -d --build
-
-# 5. Theo dõi trạng thái (chờ tất cả "healthy")
-docker compose ps
-
-# 6. Chạy migration (từ máy host, PostgreSQL trong Docker mở cổng 5432) và tạo dữ liệu mẫu
 pnpm install
-pnpm run migrate:all
-pnpm run seed
+
+# 2. Firebase (chỉ làm một lần, không commit hai file này):
+#    - service account key: Firebase console > Project settings > Service accounts
+#      > Generate new private key, lưu thành infra/keys/firebase-service-account.json
+#    - frontend/.env.local: cấu hình Web app (xem mục 3)
+
+# 3. Tạo các file .env từ file mẫu (không ghi đè file đã có).
+#    Lệnh này cũng chép NEXT_PUBLIC_* từ frontend/.env.local sang .env.
+#    Lưu ý: dùng `pnpm setup:env`, KHÔNG dùng `pnpm setup` (lệnh có sẵn của pnpm, sẽ sửa PATH).
+pnpm setup:env
+
+# 4. Build và khởi động (chế độ phát triển: backend hot reload trong Docker)
+docker compose up -d --build
+docker compose ps          # chờ mọi container "healthy"
+
+# 5. Frontend chạy trên máy host khi phát triển (Fast Refresh nhanh, xem bên dưới)
+pnpm --filter @tms/frontend dev
+
+# 6. Migration (chạy từ máy host, PostgreSQL trong Docker mở cổng 5432) và dữ liệu mẫu
+pnpm migrate:all
+pnpm seed                  # có khi Identity làm xong (#6)
 ```
+
+**Hai chế độ chạy:**
+
+| Lệnh | Backend | Frontend | Dùng khi |
+|---|---|---|---|
+| `docker compose up -d` | Chạy từ stage `build` của Dockerfile, `src/` gắn từ máy host, tự reload khi sửa code (khoảng 5–10 giây) | Không chạy trong Docker; chạy `pnpm --filter @tms/frontend dev` trên máy host | Phát triển hằng ngày |
+| `docker compose -f docker-compose.yml up -d --build` | Image production | Image production (cổng 5173) | Kiểm tra bản build, demo, chấm bài |
+
+Frontend chạy trên host khi phát triển vì Next.js khuyến nghị như vậy: trên Windows / macOS, Turbopack trong container không nhận được thay đổi file đi qua lớp chia sẻ file của Docker Desktop, còn cách polling thì chậm và tốn CPU. Backend dùng polling (`TSC_WATCHFILE`) nên reload được trong Docker.
 
 Sau khi chạy xong:
 
@@ -53,13 +67,12 @@ Sau khi chạy xong:
 |---|---|
 | http://localhost:5173 | Frontend |
 | http://localhost:8080/api | API Gateway |
-| http://localhost:8080/api/docs | Swagger tổng hợp |
-| http://localhost:3001/docs … 3007/docs | Swagger của từng service |
-| http://localhost:15672 | RabbitMQ Management (`guest` / `guest`) |
+| http://localhost:8080/docs, http://localhost:3001/docs … 3006/docs | Swagger của gateway và từng service |
+| http://localhost:15672 | RabbitMQ Management (`tms` / `tms_dev`; không có user `guest`) |
 | http://localhost:8025 | Mailpit – xem các email hệ thống đã gửi |
-| http://localhost:3000 | Grafana (nếu bật profile `observability`) |
+| `localhost:5432` | PostgreSQL: mỗi service một database và một login role (xem mục 4) |
 
-**Tài khoản mẫu sau khi seed:**
+**Tài khoản mẫu sau khi seed** (có khi Identity làm xong):
 
 | Vai trò | Email | Mật khẩu |
 |---|---|---|
@@ -68,221 +81,51 @@ Sau khi chạy xong:
 | PARENT | parent@tms.local | `Parent@123` |
 | STUDENT | student@tms.local | `Student@123` |
 
-> Seed tạo các tài khoản này trên Firebase Authentication (kèm vai trò trong custom claim) và bản ghi `users` tương ứng trong `identity_db`. Khi phát triển nên trỏ seed và test vào Firebase Auth Emulator (`firebase emulators:start --only auth`) để không tạo tài khoản rác trên project thật.
+> Seed tạo các tài khoản này trên Firebase Authentication (kèm custom claim `userId` và `role`) và bản ghi `users` tương ứng trong `identity_db`. Khi phát triển nên trỏ seed và test vào Firebase Auth Emulator (`firebase emulators:start --only auth`) để không tạo tài khoản rác trên project thật.
 
 ## 3. Biến môi trường
 
-File `.env` ở thư mục gốc dùng chung cho docker compose. Mỗi service có thêm `.env.example` riêng để chạy độc lập (chứa `DATABASE_URL` trỏ `localhost:5432`, dùng cho migration từ máy host).
+| File | Dùng cho | Tạo từ |
+|---|---|---|
+| `.env` (thư mục gốc) | `docker compose`: hạ tầng, URL database từng service (host `postgres`), Firebase, build arg của frontend | [`.env.example`](../.env.example) |
+| `backend/<service>/.env` | Chạy service hoặc migration trên máy host (`DATABASE_URL` trỏ `localhost:5432`) | `backend/<service>/.env.example` |
+| `frontend/.env.local` | Frontend: `NEXT_PUBLIC_API_URL` và `NEXT_PUBLIC_FIREBASE_*` lấy từ cấu hình Web app trong Firebase console | Tự tạo |
 
-Frontend đọc `frontend/.env.local`: các giá trị `NEXT_PUBLIC_FIREBASE_*` lấy từ cấu hình Web app trong Firebase console, cùng `NEXT_PUBLIC_API_URL=http://localhost:8080/api`.
+`pnpm setup:env` tạo hai loại file đầu từ file mẫu, không bao giờ ghi đè. Các giá trị `NEXT_PUBLIC_*` là công khai theo thiết kế của Firebase; service account key thì tuyệt đối không commit và không dán vào chat.
 
-```dotenv
-# ---------- Chung ----------
-NODE_ENV=development
-LOG_LEVEL=debug
-TZ=Asia/Ho_Chi_Minh
+> Không commit `.env`, `backend/*/.env`, `frontend/.env.local` và thư mục `infra/keys/`. Các mục này đã có trong `.gitignore`, và `.dockerignore` loại mọi file `.env*` khỏi Docker build.
 
-# ---------- Hạ tầng ----------
-POSTGRES_USER=tms
-POSTGRES_PASSWORD=tms_secret
-MONGO_URL=mongodb://mongo:27017/academic_db
-RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
-REDIS_URL=redis://redis:6379
+## 4. Hạ tầng trong `docker-compose.yml`
 
-# ---------- Database từng service ----------
-IDENTITY_DB_URL=postgresql://identity:identity@postgres:5432/identity_db
-STUDENT_DB_URL=postgresql://student:student@postgres:5432/student_db
-CLASS_DB_URL=postgresql://class:class@postgres:5432/class_db
-SCHEDULE_DB_URL=postgresql://schedule:schedule@postgres:5432/schedule_db
-BILLING_DB_URL=postgresql://billing:billing@postgres:5432/billing_db
-NOTIFICATION_DB_URL=postgresql://notification:notification@postgres:5432/notification_db
+| Thành phần | Image | Ghi chú |
+|---|---|---|
+| PostgreSQL | `postgres:18-alpine` | [`infra/postgres/init.sql`](../infra/postgres/init.sql) tạo database + login role cho từng service ở lần khởi động đầu tiên; mỗi role chỉ kết nối được database của mình (`REVOKE CONNECT ... FROM PUBLIC`), kể cả database `postgres` mặc định ([ADR-0003](adr/0003-postgresql-database-per-service.md)). Role có `CREATEDB` để `prisma migrate dev` tạo shadow database. Volume gắn vào `/var/lib/postgresql` (PostgreSQL 18 lưu dữ liệu ở `/var/lib/postgresql/18/docker`). |
+| RabbitMQ | `rabbitmq:4.2-management-alpine` | [`infra/rabbitmq/definitions.json`](../infra/rabbitmq/definitions.json) tạo exchange `tms.events`, `tms.dlx` (topic, durable) và user `tms`. Khi nạp definitions lúc khởi động, RabbitMQ không tạo user `guest` (vốn cũng chỉ đăng nhập được từ localhost). |
+| Redis | `redis:7.4-alpine` | Rate limit của gateway; sau này thêm cache và hàng đợi hẹn giờ BullMQ (xem `docs/02` §1) |
+| Mailpit | `axllent/mailpit:v1.27` | Hộp thư giả: SMTP 1025, giao diện 8025 |
 
-# ---------- Firebase Authentication (ADR-0004) ----------
-FIREBASE_PROJECT_ID=private-tutor-management-sys
-GOOGLE_APPLICATION_CREDENTIALS=/run/keys/firebase-service-account.json
-# Cấu hình Web app (công khai), truyền vào image frontend lúc build
-NEXT_PUBLIC_FIREBASE_API_KEY=
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=private-tutor-management-sys.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=private-tutor-management-sys
-NEXT_PUBLIC_FIREBASE_APP_ID=
+Ứng dụng:
 
-# ---------- Nghiệp vụ ----------
-BILLING_INVOICE_DUE_DAY=10
-BILLING_CHARGE_ABSENT=true   # chỉ là giá trị mặc định cho lớp mới (BR-BI-08)
-ATTENDANCE_EDIT_WINDOW_HOURS=48
-REMINDER_BEFORE_MINUTES=60
+- Mỗi container chỉ nhận đúng biến môi trường nó cần (không dùng `env_file`): biến chung (`NODE_ENV`, `LOG_LEVEL`, `TZ`, `RABBITMQ_URL`), `PORT`, `DATABASE_URL` của riêng nó, và cấu hình Firebase cho gateway / identity-service. Nhờ vậy không container nào giữ mật khẩu database của service khác hay mật khẩu superuser PostgreSQL ([ADR-0003](adr/0003-postgresql-database-per-service.md)).
 
-# ---------- Tích hợp bên ngoài (để trống = tắt) ----------
-SMTP_HOST=mailpit
-SMTP_PORT=1025
-SMTP_FROM="TMS <no-reply@tms.local>"
-SENDGRID_API_KEY=
-SMS_PROVIDER=            # esms | speedsms | twilio
-SMS_API_KEY=
-ZALO_OA_ACCESS_TOKEN=
-FCM_SERVICE_ACCOUNT_PATH=
-PAYOS_CLIENT_ID=
-PAYOS_API_KEY=
-PAYOS_CHECKSUM_KEY=
-BANK_ACCOUNT_NO=
-BANK_BIN=
-S3_ENDPOINT=http://minio:9000
-S3_ACCESS_KEY=minio
-S3_SECRET_KEY=minio123
-SENTRY_DSN=
-```
-
-> Không commit `.env`, `frontend/.env.local` và thư mục `infra/keys/`. Các mục này đã có trong `.gitignore`.
-
-## 4. Khung `docker-compose.yml`
-
-```yaml
-name: tms
-
-# Mọi Dockerfile build từ thư mục gốc repo (cần pnpm workspace + lockfile),
-# nên context luôn là "." và chỉ đổi đường dẫn dockerfile.
-x-service: &service
-  restart: on-failure
-  env_file: .env
-  networks: [tms-net]
-  depends_on:
-    postgres: { condition: service_healthy }
-    rabbitmq: { condition: service_healthy }
-
-# Chỉ gateway và identity-service cần Firebase service account key (ADR-0004).
-x-firebase-key: &firebase-key
-  volumes:
-    - ./infra/keys:/run/keys:ro
-
-services:
-  # ---------- Hạ tầng ----------
-  postgres:
-    image: postgres:18-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - pg-data:/var/lib/postgresql   # PostgreSQL 18: dữ liệu nằm dưới /var/lib/postgresql/18/docker
-      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    ports: ["5432:5432"]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
-      interval: 5s
-      retries: 10
-    networks: [tms-net]
-
-  mongo:
-    image: mongo:7
-    volumes: [mongo-data:/data/db]
-    ports: ["27017:27017"]
-    networks: [tms-net]
-
-  rabbitmq:
-    image: rabbitmq:3.13-management-alpine
-    ports: ["5672:5672", "15672:15672"]
-    volumes:
-      - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      retries: 10
-    networks: [tms-net]
-
-  redis:
-    image: redis:7-alpine
-    ports: ["6379:6379"]
-    networks: [tms-net]
-
-  mailpit:
-    image: axllent/mailpit:latest
-    ports: ["1025:1025", "8025:8025"]
-    networks: [tms-net]
-
-  # ---------- Ứng dụng ----------
-  api-gateway:
-    <<: [*service, *firebase-key]
-    build: { context: ., dockerfile: backend/api-gateway/Dockerfile }
-    ports: ["8080:8080"]
-    depends_on: [identity-service, redis]
-
-  identity-service:
-    <<: [*service, *firebase-key]
-    build: { context: ., dockerfile: backend/identity-service/Dockerfile }
-    environment: { DATABASE_URL: "${IDENTITY_DB_URL}" }
-    ports: ["3001:3001"]
-
-  student-service:
-    <<: *service
-    build: { context: ., dockerfile: backend/student-service/Dockerfile }
-    environment: { DATABASE_URL: "${STUDENT_DB_URL}" }
-    ports: ["3002:3002"]
-
-  class-service:
-    <<: *service
-    build: { context: ., dockerfile: backend/class-service/Dockerfile }
-    environment: { DATABASE_URL: "${CLASS_DB_URL}" }
-    ports: ["3003:3003"]
-
-  schedule-service:
-    <<: *service
-    build: { context: ., dockerfile: backend/schedule-service/Dockerfile }
-    environment: { DATABASE_URL: "${SCHEDULE_DB_URL}" }
-    ports: ["3004:3004"]
-
-  billing-service:
-    <<: *service
-    build: { context: ., dockerfile: backend/billing-service/Dockerfile }
-    environment: { DATABASE_URL: "${BILLING_DB_URL}" }
-    ports: ["3006:3006"]
-
-  # academic-service (:3005, MongoDB) và notification-service (:3007) chỉ thêm
-  # nếu còn thời gian (BR-SYS-03); khi đó bật lại service mongo bên trên.
-
-  frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
-      args: # giá trị công khai, lấy từ .env gốc (cùng giá trị với frontend/.env.local)
-        NEXT_PUBLIC_API_URL: "http://localhost:8080/api"
-        NEXT_PUBLIC_FIREBASE_API_KEY: "${NEXT_PUBLIC_FIREBASE_API_KEY}"
-        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}"
-        NEXT_PUBLIC_FIREBASE_PROJECT_ID: "${NEXT_PUBLIC_FIREBASE_PROJECT_ID}"
-        NEXT_PUBLIC_FIREBASE_APP_ID: "${NEXT_PUBLIC_FIREBASE_APP_ID}"
-    ports: ["5173:5173"]
-    depends_on: [api-gateway]
-    networks: [tms-net]
-
-networks:
-  tms-net:
-
-volumes:
-  pg-data:
-  mongo-data:
-```
-
-`infra/postgres/init.sql` tạo database và login role riêng cho từng service; mỗi role chỉ kết nối được database của mình ([ADR-0003](adr/0003-postgresql-database-per-service.md)):
-
-```sql
-CREATE USER identity WITH PASSWORD 'identity';
-CREATE DATABASE identity_db OWNER identity;
-CREATE USER student WITH PASSWORD 'student';
-CREATE DATABASE student_db OWNER student;
--- ... class, schedule, billing, notification
-```
+- Mọi Dockerfile build từ **thư mục gốc repo** (`build: { context: ., dockerfile: backend/<service>/Dockerfile }`) vì cần pnpm workspace và lockfile.
+- Chỉ `api-gateway` và `identity-service` được gắn `infra/keys/` (Firebase service account key, [ADR-0004](adr/0004-firebase-authentication.md)).
+- Mỗi service nhận `DATABASE_URL` riêng từ `.env` (`IDENTITY_DB_URL`, `STUDENT_DB_URL`...).
+- Health check gọi `/docs-json` cho tới khi issue #4 thêm `/health/ready`; service phụ thuộc chỉ khởi động khi phía kia đã healthy. Health check của PostgreSQL đi qua TCP (`pg_isready -h 127.0.0.1`), nên chỉ báo sẵn sàng sau khi `init.sql` đã chạy xong.
+- Sau khi đổi Prisma schema của một service ở chế độ phát triển, chạy `docker compose up -d --build -V <service>`: cờ `-V` làm mới volume giữ Prisma client, nếu không container vẫn dùng client cũ.
+- `academic-service` và `notification-service` chưa có trong compose (BR-SYS-03).
 
 ## 5. Chạy một service ngoài Docker (để phát triển / debug)
 
-Hạ tầng vẫn chạy trong Docker, chỉ service đang sửa chạy trên máy với hot reload:
+Hạ tầng vẫn chạy trong Docker, chỉ service đang sửa chạy trên máy:
 
 ```bash
-# Chỉ bật hạ tầng
+# Chỉ bật hạ tầng (và tắt container của service sắp chạy trên host, nếu đang chạy)
 docker compose up -d postgres rabbitmq redis mailpit
 firebase emulators:start --only auth    # nếu service cần Firebase Auth
 
-# Chạy service cần sửa
+# Chạy service cần sửa (đọc backend/billing-service/.env do `pnpm setup:env` tạo)
 cd backend/billing-service
-cp .env.example .env          # đổi host thành localhost
-pnpm install
 pnpm migrate:dev
 pnpm dev                      # http://localhost:3006/docs
 ```
@@ -313,8 +156,8 @@ Nếu muốn các service khác (vẫn chạy trong Docker) gọi được servi
 docker compose logs -f billing-service           # xem log một service
 docker compose logs -f --since 5m | grep <corrId> # lần theo một request
 docker compose restart schedule-service
-docker compose up -d --build class-service        # build lại một service
-docker compose --profile observability up -d      # bật Prometheus / Grafana / Loki
+docker compose up -d --build class-service        # build lại một service (khi đổi package.json)
+docker compose --profile frontend-in-docker up -d # thêm frontend (image production, không hot reload)
 docker compose down                               # dừng (giữ dữ liệu)
 docker compose down -v                            # dừng và XÓA toàn bộ dữ liệu
 ```

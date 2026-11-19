@@ -21,12 +21,12 @@
 |---|---|---|
 | PostgreSQL 18 (container) | 5432 | Một container, mỗi service một database và một login role riêng ([ADR-0003](adr/0003-postgresql-database-per-service.md)) |
 | Firebase Authentication (dịch vụ ngoài) | – | Lưu mật khẩu, đăng nhập, cấp ID token ([ADR-0004](adr/0004-firebase-authentication.md)); gói Spark miễn phí |
-| MongoDB 7 | 27017 | Cho academic-service |
-| RabbitMQ 3.13 | 5672 / 15672 (UI) | Message broker, exchange `tms.events` loại topic |
-| Redis 7 | 6379 | Rate limit, cache, delayed job (BullMQ) |
+| MongoDB 7 (chưa có trong compose) | 27017 | Cho academic-service, chỉ thêm nếu còn thời gian (BR-SYS-03) |
+| RabbitMQ 4.2 | 5672 / 15672 (UI) | Message broker, exchange `tms.events` và `tms.dlx` loại topic; user `tms` |
+| Redis 7.4 | 6379 | Rate limit, cache, delayed job (BullMQ) |
 | Mailpit | 1025 (SMTP) / 8025 (UI) | Hộp thư giả để test email ở môi trường dev |
-| Prometheus + Grafana (tùy chọn) | 9090 / 3000 | Metrics |
-| Loki (tùy chọn) | 3100 | Log tập trung |
+| Prometheus + Grafana (tùy chọn, chưa có trong compose) | 9090 / 3000 | Metrics |
+| Loki (tùy chọn, chưa có trong compose) | 3100 | Log tập trung |
 
 **Nguyên tắc chung:**
 - Mỗi service sở hữu riêng DB của mình. **Không** service nào truy cập DB của service khác.
