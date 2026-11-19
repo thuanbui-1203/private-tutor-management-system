@@ -249,6 +249,30 @@ describe('Billing: Payments, Reversals and reports (#20)', () => {
     expect((await received(late.invoice.id)).at(-1).invoiceStatus).toBe('PARTIALLY_PAID');
   });
 
+  it('invoice detail lists the payment history with what is paid and still owed', async () => {
+    const { invoice } = await issued('2028-02'); // 400,000
+    const first = await pay(invoice.id, 150_000).expect(201);
+    await http()
+      .post(`/billing/payments/${first.body.payment.id}/reversal`)
+      .set(tutor)
+      .send({ reason: 'Ghi nhầm' })
+      .expect(201);
+    await pay(invoice.id, 100_000).expect(201);
+    const res = await http().get(`/billing/invoices/${invoice.id}`).set(tutor).expect(200);
+    expect(res.body).toMatchObject({ total: 400_000, paid: 100_000, outstanding: 300_000 });
+    expect(
+      res.body.payments.map((p: { kind: string; amount: number }) => [p.kind, p.amount]),
+    ).toEqual([
+      ['PAYMENT', 150_000],
+      ['REVERSAL', 150_000],
+      ['PAYMENT', 100_000],
+    ]);
+    expect(res.body.payments[1]).toMatchObject({
+      reversesPaymentId: first.body.payment.id,
+      note: 'Ghi nhầm',
+    });
+  });
+
   it('payments cannot be updated or deleted, only reversed', async () => {
     const { invoice } = await issued('2028-07');
     const p = await pay(invoice.id, 100_000).expect(201);

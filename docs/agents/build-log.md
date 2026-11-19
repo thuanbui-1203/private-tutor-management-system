@@ -178,3 +178,28 @@ measure and left to the user.
     captured once per card with `useState(Date.now)`.
   - 9 new browser tests (34 total, stable over two runs, all passed on the first run).
   - Mutation checks 11/11 caught (save despite overlaps, skip flag never sent, ending without confirmation, makeup without its link, start at any time, no missed panel, unnamed conflicting Class, partial sheet saved, never locked, raw 409 lock text, note dropped).
+- **#23 group 3 merged** as PR #46.
+- **#23 group 4 (Tutor billing)** on `feat/23-frontend-billing`:
+  - **Backend gap found and closed:** the invoice detail had no payment history, which the
+    Payer screens need too (story 68). `GET /billing/invoices/{id}` and the Enrollment
+    invoice now include `payments`, `paid` and `outstanding`. New billing integration test
+    (38/38); the mutation that counts reversals as payments is caught.
+  - Screens:
+    - Invoice list with period, status and kind filters.
+    - Invoice detail: FEE and ADJUSTMENT lines; each Adjustment says it corrects a Session,
+      an enrollment fee or a balance of an earlier period, without editing the issued
+      invoice. Paid and outstanding amounts, payment history.
+    - Record a payment: amounts over the outstanding balance are blocked in the page, and
+      the API's own 422 (someone paid meanwhile) is explained.
+    - Reverse a payment with a reason; void-and-replace with a reason, which opens the
+      replacement.
+    - VietQR drawn in the browser with `qrcode` 1.5.4 (added to the catalog); the 503 for an
+      unconfigured bank account is explained.
+    - Balance section on the Student page; revenue report by month range.
+  - UX bugs the tests caught: after a partial payment the form kept the old amount (it now
+    remounts and pre-fills what is left); the "reason required" errors of the reversal and
+    void dialogs appeared behind the dialog (now inside it).
+  - The Git Bash heredoc broke twice on JSX content; files are now written with the
+    Write tool.
+  - 8 new browser tests (42 total, stable over two runs).
+  - Mutation checks 9/9 caught after strengthening the reversal test (empty reason must not send; the reversal button must disappear once used). The two that first survived showed those gaps.
