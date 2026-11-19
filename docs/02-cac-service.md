@@ -101,8 +101,8 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 | PATCH | `/students/{id}` | Sửa thông tin | TUTOR (chủ sở hữu), ADMIN |
 | POST | `/students/{id}/parents` | Thêm / liên kết phụ huynh; `isPrimary: true` đổi phụ huynh chính | TUTOR (chủ sở hữu), ADMIN |
 | DELETE | `/students/{id}/parents/{parentId}` | Bỏ liên kết phụ huynh (không bỏ được phụ huynh chính) | TUTOR (chủ sở hữu), ADMIN |
-| POST | `/students/{id}/status` | Đổi trạng thái (PAUSED, GRADUATED...) – issue #10 | TUTOR, ADMIN |
-| DELETE | `/students/{id}` | Ẩn danh (kiểm tra công nợ) – issue #10 | ADMIN |
+| POST | `/students/{id}/status` | Đổi trạng thái theo sơ đồ (ACTIVE ↔ PAUSED, ACTIVE / PAUSED → DROPPED, ACTIVE → GRADUATED, DROPPED → ACTIVE; GRADUATED là trạng thái cuối); chuyển không hợp lệ → 409; phát `StudentStatusChanged` | TUTOR (chủ sở hữu), ADMIN |
+| DELETE | `/students/{id}` | Ẩn danh, không bao giờ xóa hẳn (BR-ST-08): chỉ học sinh DROPPED / GRADUATED và mọi hóa đơn đã PAID / VOID (hỏi billing-service `GET /internal/students/{id}/open-invoices`); xóa tên, liên hệ, ghi chú, ngày sinh, giữ id; phát `StudentUpdated` với tên giả để Billing thay bản sao | ADMIN |
 | GET | `/parents/me/children` | Danh sách con của phụ huynh đang đăng nhập | PARENT |
 | POST | `/parents`, PATCH `/parents/{id}` | Quản lý phụ huynh (đổi liên hệ của phụ huynh chính → phát lại `StudentUpdated`) | TUTOR, ADMIN |
 | GET | `/internal/students/{id}` | DTO `InternalStudentResponse` cho class-service | Nội bộ |
@@ -113,9 +113,11 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 - Lời mời (BR-ST-04): gửi cho học sinh nếu có email, nếu không thì cho phụ huynh chính có email; Identity lỗi thì học sinh vẫn được tạo, response ghi `invitation.status = failed`.
 - Nhập lại cùng một phụ huynh (cùng email) cho anh chị em thì dùng lại bản ghi cũ; cùng một người do hai giáo viên nhập là hai bản ghi, nhưng một tài khoản phụ huynh thấy con ở cả hai.
 
-**Phát event:** `StudentCreated`, `StudentUpdated` (cả khi đổi phụ huynh chính hoặc liên hệ của phụ huynh chính), `StudentStatusChanged` (#10)
+**Tác vụ định kỳ:** mỗi giờ chuyển học sinh `PAUSED` quá 60 ngày sang `DROPPED` (BR-ST-02).
+
+**Phát event:** `StudentCreated`, `StudentUpdated` (cả khi đổi phụ huynh chính, liên hệ của phụ huynh chính, hoặc khi ẩn danh), `StudentStatusChanged`
 **Nhận event:** `UserRegistered` (gắn `user_id` cho phụ huynh / học sinh theo email khi kích hoạt tài khoản)
-**Gọi đồng bộ:** identity-service `POST /internal/invitations`
+**Gọi đồng bộ:** identity-service `POST /internal/invitations`; billing-service `GET /internal/students/{id}/open-invoices` (khi ẩn danh)
 **Được gọi đồng bộ bởi:** class-service (`GET /internal/students/{id}`)
 ---
 

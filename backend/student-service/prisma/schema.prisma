@@ -25,26 +25,29 @@ enum Payer {
 }
 
 model Student {
-  id           String           @id @default(uuid()) @db.Uuid
-  tutorId      String           @map("tutor_id") @db.Uuid
+  id              String          @id @default(uuid()) @db.Uuid
+  tutorId         String          @map("tutor_id") @db.Uuid
   /// Identity users.id, linked when the Student accepts their invitation (UserRegistered).
-  userId       String?          @unique @map("user_id") @db.Uuid
-  fullName     String           @map("full_name") @db.VarChar(100)
-  email        String?          @db.VarChar(255)
-  dob          DateTime         @db.Date
-  school       String?          @db.VarChar(150)
-  grade        Int?             @db.SmallInt
+  userId          String?         @unique @map("user_id") @db.Uuid
+  fullName        String          @map("full_name") @db.VarChar(100)
+  email           String?         @db.VarChar(255)
+  dob             DateTime        @db.Date
+  school          String?         @db.VarChar(150)
+  grade           Int?            @db.SmallInt
   /// Visible to the Tutor and Admin only (BR-ST-07).
-  note         String?
-  payer        Payer
-  status       StudentStatus    @default(ACTIVE)
-  anonymisedAt DateTime?        @map("anonymised_at") @db.Timestamptz(6)
-  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
-  parents      StudentParent[]
+  note            String?
+  payer           Payer
+  status          StudentStatus   @default(ACTIVE)
+  /// When the status last changed; the 60-day PAUSED → DROPPED job reads it (BR-ST-02).
+  statusChangedAt DateTime        @default(now()) @map("status_changed_at") @db.Timestamptz(6)
+  anonymisedAt    DateTime?       @map("anonymised_at") @db.Timestamptz(6)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  parents         StudentParent[]
 
   @@index([tutorId])
   @@index([email])
+  @@index([status, statusChangedAt])
   @@map("students")
 }
 
