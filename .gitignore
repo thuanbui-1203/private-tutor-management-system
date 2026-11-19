@@ -9,3 +9,6 @@ infra/keys/
 **/generated/
 .DS_Store
 .claude/settings.local.json
+
+# Firebase emulator logs
+*-debug.log

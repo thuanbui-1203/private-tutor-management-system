@@ -7,7 +7,7 @@
 | Công cụ | Phiên bản | Ghi chú |
 |---|---|---|
 | Docker Desktop | ≥ 4.30 | Trên Windows bật WSL 2 backend; cấp ≥ 6 GB RAM cho Docker |
-| Node.js | 22 LTS | Cần trên máy để chạy migration, test và service ngoài Docker |
+| Node.js | 24 LTS (≥ 24.9) | Cần trên máy để chạy migration, test và service ngoài Docker. Test của Identity cần ≥ 24.9 vì `firebase-admin` dùng thư viện chỉ có bản ESM |
 | pnpm | 9.15.x | `npm i -g pnpm@9` (monorepo dùng pnpm workspace; phiên bản ghi trong `package.json` > `packageManager`) |
 | Git | bất kỳ | |
 | Firebase CLI | ≥ 15 | `npm i -g firebase-tools`; chạy Firebase Auth Emulator khi phát triển và test |
@@ -50,7 +50,8 @@ pnpm --filter @tms/frontend dev
 
 # 6. Migration (chạy từ máy host, PostgreSQL trong Docker mở cổng 5432) và dữ liệu mẫu
 pnpm migrate:all
-pnpm seed                  # có khi Identity làm xong (#6)
+pnpm emulators            # terminal riêng: Firebase Auth Emulator, project offline demo-tms
+pnpm seed                  # tạo tài khoản Admin (xem ghi chú bên dưới)
 ```
 
 **Hai chế độ chạy:**
@@ -84,7 +85,9 @@ Sau khi chạy xong:
 | PARENT | parent@tms.local | `Parent@123` |
 | STUDENT | student@tms.local | `Student@123` |
 
-> Seed tạo các tài khoản này trên Firebase Authentication (kèm custom claim `userId` và `role`) và bản ghi `users` tương ứng trong `identity_db`. Khi phát triển nên trỏ seed và test vào Firebase Auth Emulator (`firebase emulators:start --only auth`) để không tạo tài khoản rác trên project thật.
+> Hiện seed mới tạo tài khoản **ADMIN** (#6); các tài khoản còn lại được thêm khi Student Service và lời mời (#7, #9) làm xong. Seed chạy lặp lại được (không tạo trùng), tạo tài khoản trên Firebase Authentication kèm custom claim `userId` và `role`, cùng bản ghi `users` trong `identity_db`. Đổi email / mật khẩu bằng `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`.
+>
+> Khi phát triển nên chạy seed vào emulator để không tạo tài khoản trên project thật: bật `pnpm emulators`, rồi chạy `FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIREBASE_PROJECT_ID=demo-tms pnpm seed` (hoặc bỏ dấu `#` trước `FIREBASE_AUTH_EMULATOR_HOST` trong `backend/identity-service/.env`). Project `demo-tms` chỉ tồn tại trong emulator. Test tích hợp của Identity luôn dùng emulator.
 
 ## 3. Biến môi trường
 
@@ -115,7 +118,7 @@ Sau khi chạy xong:
 - Chỉ `api-gateway` và `identity-service` được gắn `infra/keys/` (Firebase service account key, [ADR-0004](adr/0004-firebase-authentication.md)).
 - Mỗi service nhận `DATABASE_URL` riêng từ `.env` (`IDENTITY_DB_URL`, `STUDENT_DB_URL`...).
 - Health check gọi `/health/ready` (từ `@tms/common`): service có database báo sẵn sàng khi kết nối được database của mình **và** RabbitMQ; service phụ thuộc chỉ khởi động khi phía kia đã healthy. Health check của PostgreSQL đi qua TCP (`pg_isready -h 127.0.0.1`), nên chỉ báo sẵn sàng sau khi `init.sql` đã chạy xong.
-- Sau khi đổi Prisma schema của một service ở chế độ phát triển, chạy `pnpm compose up -d --build -V <service>`: cờ `-V` làm mới volume giữ Prisma client, nếu không container vẫn dùng client cũ.
+- Ở chế độ phát triển, service có database gắn cả thư mục `prisma/` và sinh lại Prisma client mỗi lần container khởi động. Sau khi đổi Prisma schema: chạy migration (`pnpm migrate:dev` trong thư mục service), rồi `docker compose restart <service>`.
 - `academic-service` và `notification-service` chưa có trong compose (BR-SYS-03).
 
 ## 5. Chạy một service ngoài Docker (để phát triển / debug)
@@ -125,7 +128,7 @@ Hạ tầng vẫn chạy trong Docker, chỉ service đang sửa chạy trên m�
 ```bash
 # Chỉ bật hạ tầng (và tắt container của service sắp chạy trên host, nếu đang chạy)
 docker compose up -d postgres rabbitmq redis mailpit
-firebase emulators:start --only auth    # nếu service cần Firebase Auth
+pnpm emulators                          # nếu service cần Firebase Auth (thư mục gốc)
 
 # Chạy service cần sửa (đọc backend/billing-service/.env do `pnpm setup:env` tạo)
 cd backend/billing-service

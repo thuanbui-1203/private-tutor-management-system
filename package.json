@@ -4,7 +4,7 @@
   "description": "Tutor Management System: microservices monorepo",
   "packageManager": "pnpm@9.15.9",
   "engines": {
-    "node": ">=22"
+    "node": ">=24.9"
   },
   "scripts": {
     "build": "pnpm -r build",
@@ -15,7 +15,9 @@
     "format:check": "prettier --check .",
     "migrate:all": "pnpm -r --if-present migrate:deploy",
     "setup:env": "node scripts/setup-env.mjs",
-    "compose": "node scripts/compose.mjs"
+    "compose": "node scripts/compose.mjs",
+    "emulators": "firebase emulators:start --only auth --project demo-tms",
+    "seed": "pnpm -r --if-present seed"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

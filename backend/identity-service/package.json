@@ -11,10 +11,12 @@
     "build": "prisma generate && tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "dev": "nest start --watch",
-    "test": "jest",
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathIgnorePatterns=\\.int\\.spec\\.ts$",
     "prisma:generate": "prisma generate",
     "migrate:dev": "prisma migrate dev",
-    "migrate:deploy": "prisma migrate deploy"
+    "migrate:deploy": "prisma migrate deploy",
+    "test:int": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --testRegex=\\.int\\.spec\\.ts$ --runInBand",
+    "seed": "node --env-file-if-exists=.env dist/seed.js"
   },
   "dependencies": {
     "@nestjs/common": "catalog:",
@@ -25,6 +27,7 @@
     "@prisma/client": "catalog:",
     "@tms/common": "workspace:*",
     "@tms/contracts": "workspace:*",
+    "firebase-admin": "catalog:",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:"
   },
@@ -34,9 +37,11 @@
     "@types/express": "catalog:",
     "@types/jest": "catalog:",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
     "@types/supertest": "catalog:",
     "dotenv": "catalog:",
     "jest": "catalog:",
+    "pg": "catalog:",
     "prisma": "catalog:",
     "supertest": "catalog:",
     "ts-jest": "catalog:",

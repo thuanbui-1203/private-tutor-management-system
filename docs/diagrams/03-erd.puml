@@ -26,7 +26,7 @@ package "identity_db" #F5F9FF {
     * email : VARCHAR(255) <<UNIQUE>>
     <i>(mật khẩu nằm ở Firebase Auth, ADR-0004)</i>
     * role : ENUM(ADMIN, TUTOR, PARENT, STUDENT)
-    * status : ENUM(PENDING, ACTIVE, LOCKED, DISABLED)
+    * status : ENUM(PENDING, ACTIVE, DISABLED)
     created_at : TIMESTAMP
   }
   entity invitations {
