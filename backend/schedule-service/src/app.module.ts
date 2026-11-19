@@ -3,6 +3,7 @@ import { prismaDatabase, TmsCommonModule } from '@tms/common';
 import { PrismaModule } from './prisma/prisma.module';
 import { PrismaService } from './prisma/prisma.service';
 import { SchedulesModule } from './schedules/schedules.module';
+import { SessionsModule } from './sessions/sessions.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { SchedulesModule } from './schedules/schedules.module';
       }),
     }),
     SchedulesModule,
+    SessionsModule,
   ],
 })
 export class AppModule {}
