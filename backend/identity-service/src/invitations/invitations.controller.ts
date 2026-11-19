@@ -1,9 +1,8 @@
 import { Body, Controller, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
-import { CurrentUser, Public, Roles, type AuthUser } from '@tms/common';
+import { CurrentUser, Public, Roles, type AuthUser, ZodBody } from '@tms/common';
 import { InternalCreateInvitationRequest } from '@tms/contracts';
-import { ZodBody } from '../common/zod-body.pipe';
 import { InvitationsService } from './invitations.service';
 
 const InviteBody = InternalCreateInvitationRequest.omit({ invitedBy: true });

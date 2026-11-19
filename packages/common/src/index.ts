@@ -8,3 +8,4 @@ export * from './messaging/consumer';
 export * from './ops';
 export * from './outbox';
 export * from './tms-common.module';
+export * from './zod-body.pipe';

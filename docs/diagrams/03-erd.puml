@@ -48,10 +48,11 @@ package "student_db" #F5FFF5 {
   entity parents {
     * id : UUID <<PK>>
     --
-    user_id : UUID <<ref users>>
+    user_id : UUID <<ref users>> (không unique)
     * full_name : VARCHAR(100)
     * phone : VARCHAR(20)
     email : VARCHAR(255)
+    * created_by : UUID <<ref users>>
   }
   entity students {
     * id : UUID <<PK>>

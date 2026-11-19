@@ -91,23 +91,32 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 
 ## 4. Student Service
 
-**Dữ liệu:** `students`, `parents`, `student_parents` (nhiều phụ huynh, đúng 1 phụ huynh chính), `outbox_events`
+**Dữ liệu:** `students`, `parents`, `student_parents` (nhiều phụ huynh, đúng 1 phụ huynh chính: partial unique index trong database), `outbox_events`, `processed_events`
 
 | Method | Endpoint | Mô tả | Quyền |
 |---|---|---|---|
-| GET | `/students?status=&q=&page=` | Danh sách học sinh của giáo viên | TUTOR, ADMIN |
-| POST | `/students` | Tạo học sinh (kèm phụ huynh) | TUTOR, ADMIN |
-| GET | `/students/{id}` | Chi tiết học sinh | TUTOR (chủ sở hữu), PARENT (con), STUDENT (bản thân) |
-| PATCH | `/students/{id}` | Sửa thông tin | TUTOR, ADMIN |
-| POST | `/students/{id}/status` | Đổi trạng thái (PAUSED, GRADUATED...) | TUTOR, ADMIN |
-| DELETE | `/students/{id}` | Ẩn danh / xóa (kiểm tra công nợ) | ADMIN |
-| GET | `/parents/me/children` | Danh sách con của phụ huynh | PARENT |
-| POST | `/parents`, PATCH `/parents/{id}` | Quản lý phụ huynh | TUTOR, ADMIN |
+| GET | `/students?status=&q=&page=&pageSize=` | Danh sách học sinh (giáo viên chỉ thấy học sinh của mình) | TUTOR, ADMIN |
+| POST | `/students` | Tạo học sinh kèm phụ huynh (`parents`: liên kết `parentId` có sẵn hoặc nhập mới, `isPrimary`); mặc định gửi lời mời (`invite`) | TUTOR, ADMIN (Admin phải ghi `tutorId`) |
+| GET | `/students/{id}` | Chi tiết học sinh, mỗi người xem một phần (xem dưới) | TUTOR (chủ sở hữu), ADMIN, PARENT (con), STUDENT (bản thân) |
+| PATCH | `/students/{id}` | Sửa thông tin | TUTOR (chủ sở hữu), ADMIN |
+| POST | `/students/{id}/parents` | Thêm / liên kết phụ huynh; `isPrimary: true` đổi phụ huynh chính | TUTOR (chủ sở hữu), ADMIN |
+| DELETE | `/students/{id}/parents/{parentId}` | Bỏ liên kết phụ huynh (không bỏ được phụ huynh chính) | TUTOR (chủ sở hữu), ADMIN |
+| POST | `/students/{id}/status` | Đổi trạng thái (PAUSED, GRADUATED...) – issue #10 | TUTOR, ADMIN |
+| DELETE | `/students/{id}` | Ẩn danh (kiểm tra công nợ) – issue #10 | ADMIN |
+| GET | `/parents/me/children` | Danh sách con của phụ huynh đang đăng nhập | PARENT |
+| POST | `/parents`, PATCH `/parents/{id}` | Quản lý phụ huynh (đổi liên hệ của phụ huynh chính → phát lại `StudentUpdated`) | TUTOR, ADMIN |
+| GET | `/internal/students/{id}` | DTO `InternalStudentResponse` cho class-service | Nội bộ |
 
-**Phát event:** `StudentCreated`, `StudentUpdated`, `StudentStatusChanged`
-**Nhận event:** `UserRegistered` (gắn `user_id` cho phụ huynh / học sinh khi kích hoạt tài khoản)
+**Quy tắc đã cài đặt:**
+- Dưới 18 tuổi (tính theo ngày ở Việt Nam) bắt buộc có phụ huynh chính và người thanh toán là phụ huynh chính (BR-ST-04, BR-ST-05); đủ 18 tuổi có thể tự thanh toán nhưng khi đó phải có email; đủ 18 tuổi không tự đổi người thanh toán. Vi phạm → 422.
+- Ai xem được gì (BR-ST-06, BR-ST-07): giáo viên chủ sở hữu và Admin thấy tất cả kể cả `note`; phụ huynh chính thấy học phí (`payer`, `payerContact`) và liên hệ các phụ huynh; phụ huynh phụ không thấy học phí và liên hệ; học sinh thấy học phí chỉ khi tự thanh toán. Người không liên quan nhận 404 (không phải 403) để không lộ học sinh có tồn tại.
+- Lời mời (BR-ST-04): gửi cho học sinh nếu có email, nếu không thì cho phụ huynh chính có email; Identity lỗi thì học sinh vẫn được tạo, response ghi `invitation.status = failed`.
+- Nhập lại cùng một phụ huynh (cùng email) cho anh chị em thì dùng lại bản ghi cũ; cùng một người do hai giáo viên nhập là hai bản ghi, nhưng một tài khoản phụ huynh thấy con ở cả hai.
+
+**Phát event:** `StudentCreated`, `StudentUpdated` (cả khi đổi phụ huynh chính hoặc liên hệ của phụ huynh chính), `StudentStatusChanged` (#10)
+**Nhận event:** `UserRegistered` (gắn `user_id` cho phụ huynh / học sinh theo email khi kích hoạt tài khoản)
+**Gọi đồng bộ:** identity-service `POST /internal/invitations`
 **Được gọi đồng bộ bởi:** class-service (`GET /internal/students/{id}`)
-
 ---
 
 ## 5. Class Service

@@ -11,6 +11,76 @@ datasource db {
   provider = "postgresql"
 }
 
+enum StudentStatus {
+  ACTIVE
+  PAUSED
+  GRADUATED
+  DROPPED
+}
+
+/// Who receives and settles Invoices (BR-ST-05). A minor's Payer is always the primary Parent.
+enum Payer {
+  PRIMARY_PARENT
+  SELF
+}
+
+model Student {
+  id           String           @id @default(uuid()) @db.Uuid
+  tutorId      String           @map("tutor_id") @db.Uuid
+  /// Identity users.id, linked when the Student accepts their invitation (UserRegistered).
+  userId       String?          @unique @map("user_id") @db.Uuid
+  fullName     String           @map("full_name") @db.VarChar(100)
+  email        String?          @db.VarChar(255)
+  dob          DateTime         @db.Date
+  school       String?          @db.VarChar(150)
+  grade        Int?             @db.SmallInt
+  /// Visible to the Tutor and Admin only (BR-ST-07).
+  note         String?
+  payer        Payer
+  status       StudentStatus    @default(ACTIVE)
+  anonymisedAt DateTime?        @map("anonymised_at") @db.Timestamptz(6)
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  parents      StudentParent[]
+
+  @@index([tutorId])
+  @@index([email])
+  @@map("students")
+}
+
+model Parent {
+  id        String          @id @default(uuid()) @db.Uuid
+  /// Identity users.id, linked when the Parent accepts their invitation (UserRegistered).
+  /// Not unique: the same person can be entered by two Tutors, and one account must see
+  /// all their children.
+  userId    String?         @map("user_id") @db.Uuid
+  fullName  String          @map("full_name") @db.VarChar(100)
+  phone     String          @db.VarChar(20)
+  email     String?         @db.VarChar(255)
+  /// The Tutor (or Admin) who added this Parent.
+  createdBy String          @map("created_by") @db.Uuid
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  students  StudentParent[]
+
+  @@index([email])
+  @@index([userId])
+  @@map("parents")
+}
+
+/// A Student has any number of Parents and exactly one primary (BR-ST-06); a partial
+/// unique index in the migration enforces "at most one primary" in the database.
+model StudentParent {
+  studentId String  @map("student_id") @db.Uuid
+  parentId  String  @map("parent_id") @db.Uuid
+  isPrimary Boolean @map("is_primary")
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  parent    Parent  @relation(fields: [parentId], references: [id], onDelete: Cascade)
+
+  @@id([studentId, parentId])
+  @@map("student_parents")
+}
+
 /// Outbox (docs/02 §1, @tms/common): events written in the same transaction as the
 /// business change, published by the outbox relay. Same DDL as packages/common/sql/messaging.sql.
 model OutboxEvent {
