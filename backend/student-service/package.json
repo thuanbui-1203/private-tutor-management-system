@@ -23,6 +23,8 @@
     "@nestjs/swagger": "catalog:",
     "@prisma/adapter-pg": "catalog:",
     "@prisma/client": "catalog:",
+    "@tms/common": "workspace:*",
+    "@tms/contracts": "workspace:*",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:"
   },

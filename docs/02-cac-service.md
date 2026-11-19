@@ -35,6 +35,7 @@
 - Bên nhận event phải **idempotent**: lưu `eventId` đã xử lý vào `processed_events`.
 - Gateway chuyển xuống các header `X-User-Id`, `X-User-Role`, `X-Correlation-Id`.
 - Mọi service đều có `GET /health/live`, `GET /health/ready`, `GET /metrics` và tài liệu Swagger tại `/docs`.
+- Các nguyên tắc trên đã có sẵn trong package dùng chung [`@tms/common`](../packages/README.md): outbox + relay, consumer idempotent có retry và DLQ, `AuthGuard` đọc `X-User-*`, health / metrics, logger JSON mang `correlationId`, HTTP client nội bộ có timeout, retry và circuit breaker. Service không tự viết lại các phần này.
 
 ---
 

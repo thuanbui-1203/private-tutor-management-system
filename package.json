@@ -9,11 +9,13 @@
   "scripts": {
     "build": "pnpm -r build",
     "test": "pnpm -r test",
+    "test:int": "pnpm -r --if-present test:int",
     "lint": "eslint . && pnpm --filter @tms/frontend lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "migrate:all": "pnpm -r --if-present migrate:deploy",
-    "setup:env": "node scripts/setup-env.mjs"
+    "setup:env": "node scripts/setup-env.mjs",
+    "compose": "node scripts/compose.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

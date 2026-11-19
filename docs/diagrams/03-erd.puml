@@ -285,9 +285,11 @@ package "notification_db" #F0FAFA {
 
 note as OutboxNote
   Mỗi service phát event đều có thêm bảng
-  **outbox_events**(id, aggregate_type, aggregate_id,
-  event_type, payload JSONB, created_at, published_at)
-  ghi chung transaction với dữ liệu nghiệp vụ.
+  **outbox_events**(id = eventId, event_type, routing_key,
+  payload JSONB, created_at, published_at)
+  ghi chung transaction với dữ liệu nghiệp vụ,
+  và mỗi service nhận event có **processed_events**(event_id)
+  (DDL: packages/common/sql/messaging.sql).
 end note
 
 ' --- Tham chiếu logic giữa các service (không FK)

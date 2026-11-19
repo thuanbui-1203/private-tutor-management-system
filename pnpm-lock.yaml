@@ -39,18 +39,30 @@ catalogs:
     '@types/node':
       specifier: ^22.18.6
       version: 22.20.5
+    '@types/pg':
+      specifier: ^8.23.1
+      version: 8.23.1
     '@types/supertest':
       specifier: ^6.0.3
       version: 6.0.3
+    amqplib:
+      specifier: 2.2.1
+      version: 2.2.1
     dotenv:
       specifier: ^18.0.10
       version: 18.0.10
     jest:
       specifier: ^30.1.3
       version: 30.5.2
+    pg:
+      specifier: ^8.23.1
+      version: 8.23.1
     prisma:
       specifier: 7.10.1
       version: 7.10.1
+    prom-client:
+      specifier: ^15.1.3
+      version: 15.1.3
     reflect-metadata:
       specifier: ^0.2.2
       version: 0.2.2
@@ -110,6 +122,12 @@ importers:
       '@nestjs/swagger':
         specifier: 'catalog:'
         version: 11.4.8(@nestjs/common@11.2.10(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.10)(reflect-metadata@0.2.2)
+      '@tms/common':
+        specifier: workspace:*
+        version: link:../../packages/common
+      '@tms/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       reflect-metadata:
         specifier: 'catalog:'
         version: 0.2.2
@@ -168,6 +186,12 @@ importers:
       '@prisma/client':
         specifier: 'catalog:'
         version: 7.10.1(prisma@7.10.1(@types/node@22.20.5)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@5.9.3))(typescript@5.9.3)
+      '@tms/common':
+        specifier: workspace:*
+        version: link:../../packages/common
+      '@tms/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       reflect-metadata:
         specifier: 'catalog:'
         version: 0.2.2
@@ -232,6 +256,12 @@ importers:
       '@prisma/client':
         specifier: 'catalog:'
         version: 7.10.1(prisma@7.10.1(@types/node@22.20.5)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@5.9.3))(typescript@5.9.3)
+      '@tms/common':
+        specifier: workspace:*
+        version: link:../../packages/common
+      '@tms/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       reflect-metadata:
         specifier: 'catalog:'
         version: 0.2.2
@@ -296,6 +326,12 @@ importers:
       '@prisma/client':
         specifier: 'catalog:'
         version: 7.10.1(prisma@7.10.1(@types/node@22.20.5)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@5.9.3))(typescript@5.9.3)
+      '@tms/common':
+        specifier: workspace:*
+        version: link:../../packages/common
+      '@tms/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       reflect-metadata:
         specifier: 'catalog:'
         version: 0.2.2
@@ -360,6 +396,12 @@ importers:
       '@prisma/client':
         specifier: 'catalog:'
         version: 7.10.1(prisma@7.10.1(@types/node@22.20.5)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@5.9.3))(typescript@5.9.3)
+      '@tms/common':
+        specifier: workspace:*
+        version: link:../../packages/common
+      '@tms/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       reflect-metadata:
         specifier: 'catalog:'
         version: 0.2.2
@@ -424,6 +466,12 @@ importers:
       '@prisma/client':
         specifier: 'catalog:'
         version: 7.10.1(prisma@7.10.1(@types/node@22.20.5)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@5.9.3))(typescript@5.9.3)
+      '@tms/common':
+        specifier: workspace:*
+        version: link:../../packages/common
+      '@tms/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       reflect-metadata:
         specifier: 'catalog:'
         version: 0.2.2
@@ -472,7 +520,7 @@ importers:
     dependencies:
       next:
         specifier: ^16.4.6
-        version: 16.4.6(@babel/core@7.29.13)(@types/node@22.20.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 16.4.6(@babel/core@7.29.13)(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       react:
         specifier: ^19.3.1
         version: 19.3.1
@@ -495,6 +543,70 @@ importers:
       eslint-config-next:
         specifier: ^16.4.6
         version: 16.4.6(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/common:
+    dependencies:
+      '@nestjs/common':
+        specifier: 'catalog:'
+        version: 11.2.10(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/core':
+        specifier: 'catalog:'
+        version: 11.2.10(@nestjs/common@11.2.10(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@11.2.10)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@tms/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      amqplib:
+        specifier: 'catalog:'
+        version: 2.2.1
+      prom-client:
+        specifier: 'catalog:'
+        version: 15.1.3
+      reflect-metadata:
+        specifier: 'catalog:'
+        version: 0.2.2
+      rxjs:
+        specifier: 'catalog:'
+        version: 7.8.2
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
+    devDependencies:
+      '@nestjs/platform-express':
+        specifier: 'catalog:'
+        version: 11.2.10(@nestjs/common@11.2.10(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.10)
+      '@nestjs/testing':
+        specifier: 'catalog:'
+        version: 11.2.10(@nestjs/common@11.2.10(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.10)(@nestjs/platform-express@11.2.10)
+      '@types/express':
+        specifier: 'catalog:'
+        version: 5.0.6
+      '@types/jest':
+        specifier: 'catalog:'
+        version: 30.0.0
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.5
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.23.1
+      '@types/supertest':
+        specifier: 'catalog:'
+        version: 6.0.3
+      jest:
+        specifier: 'catalog:'
+        version: 30.5.2(@types/node@22.20.5)
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.1
+      supertest:
+        specifier: 'catalog:'
+        version: 7.3.2
+      ts-jest:
+        specifier: 'catalog:'
+        version: 29.4.15(@babel/core@7.29.13)(@jest/transform@30.5.2)(@jest/types@30.5.1)(babel-jest@30.5.2(@babel/core@7.29.13))(jest-util@30.5.1)(jest@30.5.2(@types/node@22.20.5))(typescript@5.9.3)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -1395,6 +1507,10 @@ packages:
     resolution: {integrity: sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA==}
     engines: {node: '>=12.4.0'}
 
+  '@opentelemetry/api@1.10.0':
+    resolution: {integrity: sha512-lMkyes8iHrG+mk6WH7X70MdCLI2RS0FwNBY1PyQ8UemaijE2m5mv5A0Niy3HtbYTFrgkUEQjFMXmSAk2hQDuPQ==}
+    engines: {node: '>=8.0.0'}
+
   '@paralleldrive/cuid2@2.3.1':
     resolution: {integrity: sha512-XO7cAxhnTZl0Yggq6jOgjiOHhbgcO4NqFqwSmQpjK3b6TEE6Uj/jfSk6wzYyemh3+I0sHirKSetjQwn5cZktFw==}
 
@@ -2091,6 +2207,10 @@ packages:
   ajv@8.20.0:
     resolution: {integrity: sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==}
 
+  amqplib@2.2.1:
+    resolution: {integrity: sha512-J3JjAydC2vJ/AgkgVAE0kVH5M4RNfm51zUaspHpwSai3W35lD3hKryvYY/xqMnYcNfR66NYL06Eik+Adn293dQ==}
+    engines: {node: '>=18'}
+
   ansi-colors@4.1.3:
     resolution: {integrity: sha512-/6w/C21Pm1A7aZitlI5Ni/2J6FFQN8i1Cvz3kHABAAbw93v/NlvKdVOqz7CCWz/3iv/JplRSEEZ83XION15ovw==}
     engines: {node: '>=6'}
@@ -2249,6 +2369,9 @@ packages:
 
   better-result@2.10.0:
     resolution: {integrity: sha512-oQhh0y1qo2/ZKdAAEvHZAqKKiHOFU5k/bW96fE2ScgQOVkJRiHwB+nOS1SgFsYqRlxMDWvefXi9Q3px7QvgNDw==}
+
+  bintrees@1.0.2:
+    resolution: {integrity: sha512-VOMgTMwjAaUG580SXn3LacVgjurrbMme7ZZNYGSSV7mmtY6QQRh0Eg3pwIcntQ77DErK1L0NxkbetjcoXzVwKw==}
 
   bl@4.1.0:
     resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
@@ -4075,6 +4198,11 @@ packages:
       typescript:
         optional: true
 
+  prom-client@15.1.3:
+    resolution: {integrity: sha512-6ZiOBfCywsD4k1BN9IX0uZhF+tJkV8q8llP64G5Hajs4JOeVLPCwpPVcpXy3BwYiUGgyJzsJJQeOIv7+hDSq8g==}
+    engines: {node: ^16 || ^18 || >=20}
+    deprecated: prom-client has been replaced by @prometheus-io/client
+
   prop-types@15.8.1:
     resolution: {integrity: sha512-oj87CgZICdulUohogVAR7AjlC0327U4el4L6eAvOqCeudMDVU0NThNaV+b9Df4dXgSP1gXMTnPdhfe/2qDH5cg==}
 
@@ -4493,6 +4621,9 @@ packages:
   tapable@2.3.4:
     resolution: {integrity: sha512-NHFiWnAbMJxNNpBwiO7jJVGDuqMxT9/oV8v57RR+fgBQShkJil5inGD8/xWy0hjLyHQyX1tu27QANhlz3KBqCg==}
     engines: {node: '>=6'}
+
+  tdigest@0.1.3:
+    resolution: {integrity: sha512-zbRt+lT+/H4fRItHshczHErVCQnitJk8MfMT24MqFJf3YL7SJJPqGIGeuOdvxXxM/AHFzKBl7WoyaYwqO9s3Kw==}
 
   terser-webpack-plugin@5.6.1:
     resolution: {integrity: sha512-201R5j+sJpK8nFWwKVyNfZot8FaJbLZDq5evriVzbV1wDtSXDjRUDRfJzHpAaxFDMEhsZL1QkeqM61wgsS3KaQ==}
@@ -5801,6 +5932,8 @@ snapshots:
 
   '@nolyfill/is-core-module@1.0.39': {}
 
+  '@opentelemetry/api@1.10.0': {}
+
   '@paralleldrive/cuid2@2.3.1':
     dependencies:
       '@noble/hashes': 1.8.0
@@ -6592,6 +6725,8 @@ snapshots:
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
+  amqplib@2.2.1: {}
+
   ansi-colors@4.1.3: {}
 
   ansi-escapes@4.3.2:
@@ -6777,6 +6912,8 @@ snapshots:
   baseline-browser-mapping@2.11.38: {}
 
   better-result@2.10.0: {}
+
+  bintrees@1.0.2: {}
 
   bl@4.1.0:
     dependencies:
@@ -8622,7 +8759,7 @@ snapshots:
 
   neo-async@2.6.2: {}
 
-  next@16.4.6(@babel/core@7.29.13)(@types/node@22.20.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
+  next@16.4.6(@babel/core@7.29.13)(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
     dependencies:
       '@next/env': 16.4.6
       '@swc/helpers': 0.5.23
@@ -8641,6 +8778,7 @@ snapshots:
       '@next/swc-linux-x64-musl': 16.4.6
       '@next/swc-win32-arm64-msvc': 16.4.6
       '@next/swc-win32-x64-msvc': 16.4.6
+      '@opentelemetry/api': 1.10.0
       sharp: 0.35.5(@types/node@22.20.5)
     transitivePeerDependencies:
       - '@babel/core'
@@ -8920,6 +9058,11 @@ snapshots:
       - magicast
       - react
       - react-dom
+
+  prom-client@15.1.3:
+    dependencies:
+      '@opentelemetry/api': 1.10.0
+      tdigest: 0.1.3
 
   prop-types@15.8.1:
     dependencies:
@@ -9417,6 +9560,10 @@ snapshots:
       '@pkgr/core': 0.3.6
 
   tapable@2.3.4: {}
+
+  tdigest@0.1.3:
+    dependencies:
+      bintrees: 1.0.2
 
   terser-webpack-plugin@5.6.1(webpack@5.106.2):
     dependencies:
