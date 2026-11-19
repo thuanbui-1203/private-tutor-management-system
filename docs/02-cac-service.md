@@ -205,19 +205,21 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 
 | Method | Endpoint | Mô tả | Quyền |
 |---|---|---|---|
-| GET | `/billing/invoices?period=&status=&kind=` | Danh sách hóa đơn (`kind` = `MONTHLY` / `ENROLLMENT`) | TUTOR, ADMIN |
+| GET | `/billing/invoices?period=&status=&kind=&studentId=` | Danh sách hóa đơn (`kind` = `MONTHLY` / `ENROLLMENT`); giáo viên chỉ thấy hóa đơn của học sinh mình | TUTOR, ADMIN |
 | GET | `/billing/invoices/{id}` | Chi tiết hóa đơn và các dòng phí (FEE, ADJUSTMENT) | TUTOR, ADMIN, Payer |
 | GET | `/billing/enrollments/{enrollmentId}/invoice` | Hóa đơn ghi danh của một ghi danh `MONTHLY` | TUTOR, ADMIN, Payer |
 | GET | `/billing/invoices/{id}/qr` | Mã VietQR chuyển khoản | TUTOR, Payer |
 | POST | `/billing/invoices/{id}/payments` | Ghi nhận thanh toán thủ công (không vượt số còn nợ) | TUTOR, ADMIN |
 | POST | `/billing/payments/{id}/reversal` | Tạo bút toán đảo cho khoản ghi sai | TUTOR, ADMIN |
-| POST | `/billing/invoices/{id}/void` | Hủy hóa đơn và phát hành hóa đơn thay thế | TUTOR, ADMIN |
+| POST | `/billing/invoices/{id}/void` | Hủy hóa đơn đã phát hành mà chưa thanh toán (kèm `reason`) và phát hành hóa đơn thay thế cùng các dòng phí, tên / người thanh toán mới nhất, `replaces_invoice_id`, hạn = max(hạn cũ, hôm nay + 7 ngày), phát `InvoiceIssued`. Hóa đơn nháp, đã hủy, hoặc đã có thanh toán → 409 (đảo thanh toán trước) (BR-BI-04) | TUTOR, ADMIN |
 | GET | `/billing/students/{id}/balance` | Công nợ học sinh | TUTOR, PARENT |
 | GET | `/billing/reports/revenue?from=&to=` | Báo cáo doanh thu | TUTOR, ADMIN |
 | POST | `/webhooks/payments/{provider}` | Nhận webhook từ cổng thanh toán / ngân hàng | Chữ ký webhook |
 
 **Hai loại hóa đơn:**
-- **Hóa đơn tháng** (`MONTHLY`): `DRAFT` trong tháng, chốt ngày 1, hạn ngày 10.
+- **Hóa đơn tháng** (`MONTHLY`): `DRAFT` trong tháng, chốt 00:00 ngày 1, hạn ngày 10 (`BILLING_INVOICE_DUE_DAY`). Khi chốt: thêm dòng phí lớp `MONTHLY`, đánh dấu tháng đã chốt (`period_closes`: phí đến muộn đi vào tháng kế tiếp, không mở lại tháng cũ), rồi `DRAFT → ISSUED` và phát `InvoiceIssued`; tổng bằng 0 thì `VOID` (BR-BI-02); tổng âm thì chuyển số dư sang hóa đơn tháng sau (không hoàn tiền) rồi `VOID`. Chạy lại vô hại.
+- **Quá hạn** (cả hai loại): từ 08:00 hằng ngày, hóa đơn chưa trả đủ sau `due_date` → `OVERDUE`; `InvoiceOverdue` phát đúng một lần cho mỗi mốc hạn + 1, + 5, + 10 ngày (`invoice_reminders`); nếu service ngừng chạy vài ngày thì chỉ gửi mốc muộn nhất đã tới (BR-BI-03).
+- **Hủy và thay thế:** dòng phí của hóa đơn bị hủy được chép sang hóa đơn thay thế và đánh dấu `superseded`; chỉ bản chép được tính khi đối chiếu điểm danh, nên không tính trùng. Dòng của hóa đơn tự `VOID` vì tổng 0 vẫn được tính (chúng bù trừ nhau).
 - **Hóa đơn ghi danh** (`ENROLLMENT`): tạo khi nhận `StudentEnrolled` của lớp `MONTHLY`, `ISSUED` ngay với phí tháng đầu theo tỉ lệ số buổi từ ngày vào lớp đến cuối tháng trên tổng số buổi của tháng (lớp mới chưa có buổi nào thì theo số ngày), hạn 7 ngày, phát `InvoiceIssued` (BR-BI-06). Vào lớp sau buổi cuối cùng của tháng thì hóa đơn ghi danh thu trọn tháng sau. Hóa đơn tháng không lặp lại tháng đã thu ở đây. Lớp `PER_SESSION` không có hóa đơn ghi danh.
 - Rút khỏi lớp (`StudentWithdrawn`, kể cả lý do `UNPAID`): hóa đơn ghi danh không bị sửa hay xóa; nếu đã thu nhiều buổi hơn số buổi học sinh còn được học thì phần chênh lệch là dòng `ADJUSTMENT` âm trên hóa đơn `DRAFT` kế tiếp (BR-BI-05, không hoàn tiền mặt).
 
@@ -232,7 +234,7 @@ Hóa đơn đã `ISSUED` không bao giờ bị sửa. Sửa sai được ghi th�
 
 **Phát event:** `InvoiceIssued` (kèm `kind`), `PaymentReceived` (kèm `invoiceKind`, `enrollmentId`, `invoiceStatus`), `InvoiceOverdue`
 **Nhận event:** `StudentCreated`, `StudentUpdated`, `StudentStatusChanged`, `ClassCreated`, `ClassUpdated`, `StudentEnrolled`, `StudentWithdrawn`, `AttendanceRecorded`, `AttendanceCorrected`, `SessionScheduled`, `SessionCancelled`, `SessionRescheduled`
-**Tác vụ định kỳ:** 00:00 ngày 1 chốt hóa đơn; 08:00 hằng ngày đánh dấu hóa đơn quá hạn và gửi nhắc
+**Tác vụ định kỳ:** mỗi 5 phút kiểm tra: chốt tháng trước nếu chưa chốt (00:00 ngày 1); từ 08:00 đánh dấu hóa đơn quá hạn và gửi nhắc. Cả hai idempotent.
 
 ---
 
