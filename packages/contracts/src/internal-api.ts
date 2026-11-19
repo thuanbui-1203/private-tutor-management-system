@@ -52,3 +52,19 @@ export const InternalCreateInvitationResponse = z.object({
   expiresAt: IsoDateTime,
 });
 export type InternalCreateInvitationResponse = z.infer<typeof InternalCreateInvitationResponse>;
+
+/**
+ * student-service `GET /internal/students/{id}/access?userId=`: how a signed-in user
+ * relates to a Student, so other services (Class, Schedule, Billing) can apply the
+ * same visibility rules (BR-ST-06, BR-SC-10) without knowing who the Parents are.
+ * `relation` is null when the user may not see the Student at all.
+ */
+export const StudentRelation = z.enum(['tutor', 'primary-parent', 'secondary-parent', 'self']);
+export type StudentRelation = z.infer<typeof StudentRelation>;
+
+export const InternalStudentAccessResponse = z.object({
+  studentId: Id,
+  userId: Id,
+  relation: StudentRelation.nullable(),
+});
+export type InternalStudentAccessResponse = z.infer<typeof InternalStudentAccessResponse>;

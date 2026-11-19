@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { prismaDatabase, TmsCommonModule } from '@tms/common';
 import { ClassesModule } from './classes/classes.module';
+import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PrismaService } from './prisma/prisma.service';
 
@@ -17,6 +18,7 @@ import { PrismaService } from './prisma/prisma.service';
       }),
     }),
     ClassesModule,
+    EnrollmentsModule,
   ],
 })
 export class AppModule {}

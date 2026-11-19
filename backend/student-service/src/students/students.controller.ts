@@ -122,4 +122,10 @@ export class InternalStudentsController {
   get(@Param('id', ParseUUIDPipe) id: string) {
     return this.students.internal(id);
   }
+
+  /** InternalStudentAccessResponse: the caller's relation to the Student, or null. */
+  @Get(':id/access')
+  access(@Param('id', ParseUUIDPipe) id: string, @Query('userId', ParseUUIDPipe) userId: string) {
+    return this.students.access(id, userId);
+  }
 }

@@ -5,7 +5,11 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { enqueueEvent, type AuthUser, type SqlExecutor } from '@tms/common';
-import type { Contact, InternalStudentResponse } from '@tms/contracts';
+import type {
+  Contact,
+  InternalStudentAccessResponse,
+  InternalStudentResponse,
+} from '@tms/contracts';
 import type { Parent, Prisma, Student, StudentParent } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { IdentityClient, type InvitationOutcome } from './identity.client';
@@ -209,6 +213,28 @@ export class StudentsService {
       status: student.status,
       payerContact: payerContact(student),
     };
+  }
+
+  /**
+   * Other services (Class, Schedule, Billing) ask how a user relates to a Student, so they
+   * apply the same visibility rules. Admins are not resolved here: callers already know the
+   * role and let Admins see everything.
+   */
+  async access(id: string, userId: string): Promise<InternalStudentAccessResponse> {
+    const student = await this.prisma.student.findUnique({ where: { id }, include: WITH_PARENTS });
+    if (!student || student.anonymisedAt) throw new NotFoundException('student not found');
+    const link = student.parents.find((p) => p.parent.userId === userId);
+    const relation =
+      student.tutorId === userId
+        ? 'tutor'
+        : student.userId === userId
+          ? 'self'
+          : link
+            ? link.isPrimary
+              ? 'primary-parent'
+              : 'secondary-parent'
+            : null;
+    return { studentId: id, userId, relation };
   }
 
   /** Re-publishes StudentUpdated for every Student whose Payer contact may have changed. */

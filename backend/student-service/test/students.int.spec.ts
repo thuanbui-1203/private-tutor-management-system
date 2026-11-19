@@ -308,6 +308,28 @@ describe('Student: Student and Parent records (#9)', () => {
     await http().delete(`/students/${s.id}/parents/${first.id}`).set(tutor).expect(200);
   });
 
+  it('tells other services how a user relates to a Student (/internal/.../access)', async () => {
+    const lan = `lan.${randomUUID().slice(0, 6)}@example.com`;
+    const binh = `binh.${randomUUID().slice(0, 6)}@example.com`;
+    const kid = `kid.${randomUUID().slice(0, 6)}@example.com`;
+    const { body: s } = await minorWithParents([parent(true, lan), parent(false, binh)], {
+      email: kid,
+    }).expect(201);
+    const relationOf = async (userId: string) =>
+      (await http().get(`/internal/students/${s.id}/access?userId=${userId}`).expect(200)).body
+        .relation;
+    expect(await relationOf(tutor['x-user-id'])).toBe('tutor');
+    expect(await relationOf((await activate('PARENT', lan))['x-user-id'])).toBe('primary-parent');
+    expect(await relationOf((await activate('PARENT', binh))['x-user-id'])).toBe(
+      'secondary-parent',
+    );
+    expect(await relationOf((await activate('STUDENT', kid))['x-user-id'])).toBe('self');
+    expect(await relationOf(randomUUID())).toBeNull();
+    await http()
+      .get(`/internal/students/${randomUUID()}/access?userId=${randomUUID()}`)
+      .expect(404);
+  });
+
   it('enforces one primary Parent in the database too', async () => {
     const { body: s } = await minorWithParents([parent(true), parent(false)]).expect(201);
     await expect(
