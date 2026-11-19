@@ -142,8 +142,9 @@ Nếu muốn các service khác (vẫn chạy trong Docker) gọi được servi
 
 | Loại | Lệnh | Phạm vi | Trạng thái |
 |---|---|---|---|
-| Unit / smoke test | `pnpm test` (thư mục gốc chạy mọi package; hoặc trong từng service) | Logic nghiệp vụ: tính phí, kiểm tra trùng lịch, chuyển trạng thái | Đã có (hiện mới có test khởi động app) |
-| Integration | `pnpm test:int` (cần `docker compose up -d postgres rabbitmq`) | PostgreSQL và RabbitMQ thật, mỗi lần chạy một database riêng ([ADR-0003](adr/0003-postgresql-database-per-service.md)); đăng nhập qua Firebase Auth Emulator, không dùng project thật | Đã có cho `@tms/common` (outbox, consumer, retry, DLQ); các service thêm dần |
+| Unit / smoke test | `pnpm test` (thư mục gốc chạy mọi package; hoặc trong từng service) | Logic thuần: lịch Việt Nam, contract, gateway | Đã có |
+| Integration | `pnpm test:int` (cần `docker compose up -d postgres rabbitmq` và `pnpm emulators`) | PostgreSQL và RabbitMQ thật, mỗi lần chạy một database riêng ([ADR-0003](adr/0003-postgresql-database-per-service.md)); đăng nhập qua Firebase Auth Emulator, không dùng project thật | Đã có cho mọi service backend |
+| Giao diện (trình duyệt) | `pnpm --filter @tms/frontend test:e2e` (cần `pnpm emulators`; lần đầu `pnpm --filter @tms/frontend exec playwright install chromium`) | Playwright điều khiển frontend thật; mọi lời gọi `/api/*` được stub trong từng test, đăng nhập qua Auth Emulator (project `demo-tms`), không cần backend. Test tự chạy `next dev` ở cổng 5174 (thư mục build `.next-e2e`) | Đã có (#23) |
 | Contract test | nằm trong `pnpm test` | Kiểm tra schema event trong `packages/contracts` và so khớp với bảng event trong `docs/01` | Đã có (#3) |
 | End-to-end | dự kiến `pnpm test:e2e` (thư mục gốc) | Kịch bản: tạo học sinh → ghi danh → điểm danh → hóa đơn | Làm trong issue #21 |
 | Kiểm tra mã | `pnpm lint`, `pnpm format:check`, `pnpm build` | ESLint (backend + frontend), Prettier, build toàn bộ | Đã có |

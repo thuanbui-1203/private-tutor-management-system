@@ -6,3 +6,6 @@ pnpm-lock.yaml
 frontend/next-env.d.ts
 **/generated/
 .claude/
+**/.next-e2e/
+**/test-results/
+**/playwright-report/

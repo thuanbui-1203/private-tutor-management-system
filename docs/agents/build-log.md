@@ -104,3 +104,38 @@ measure and left to the user.
   Migration `payments` applied; student + billing rebuilt. Live: student-service has
   `BILLING_SERVICE_URL=http://billing-service:3006` and gets `{"invoiceIds":[]}` from
   billing over the compose network; the gateway still answers 404 for `/api/internal/...`.
+- **#20 merged** as PR #43 (closes #20). Backend issues #2–#20 are all closed.
+- **#23 frontend, group 1 (auth + shell)** on `feat/23-frontend-auth`:
+  - Added `firebase` 13.4.0 and `@playwright/test` 1.65.1 to the catalog; frontend depends
+    on `@tms/contracts` for status enums (type-only imports, so no Node code reaches the
+    browser). The frontend Dockerfile now builds `@tms/frontend...` so contracts are built
+    first, and takes an optional `NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST` build arg.
+  - Read `node_modules/next/dist/docs` first (Next 16: `useParams` in client components,
+    `useSearchParams` needs `<Suspense>`, `middleware` → `proxy`; not used here).
+  - Modules: auth (Firebase client SDK + claims), API client (Bearer, typed errors, 401 →
+    sign out), role gate, app shell, shared UI; pages: login, register (incl. "finish
+    sign-up" for an account without a role), forgot password, invitation, role homes.
+  - Browser tests (Playwright, one seam): `/api/*` stubbed per test with a recorder that
+    returns 501 for anything unstubbed; accounts and claims created in the Auth Emulator
+    through its REST API (`Bearer owner`), never the real project.
+  - Problems found and fixed while testing:
+    1. All tests failed at first: Next 16 dev blocks dev resources for origins other
+       than `localhost` (the HMR socket failed and the page never hydrated, so the form
+       did a native submit). Tests now use `http://localhost:5174`.
+    2. Next's dev route announcer also has `role="alert"`; tests scope to `main`.
+    3. A field hint was part of the input's accessible name ("Mật khẩu Ít nhất 8 ký tự").
+       `Field` now links the hint with `aria-describedby` (real accessibility fix).
+    4. Sign-out raced with the role gate (ended at `/login?next=…`). The auth module now
+       remembers a deliberate sign-out.
+  - Result: 14/14 browser tests, stable over two runs.
+  - Lint (React Compiler rules) rejected the first `useLoad` (ref written during render,
+    synchronous setState in an effect). Rewritten with a reload counter and state set only
+    from promise callbacks; stale responses are ignored. One test had relied on Strict
+    Mode's double effect (first call 503, second OK); it now keeps the stub failing until
+    the test brings the "service" back.
+  - Mutation checks 6/6 caught (no Bearer, 401 not signing out, gate letting every role
+    in, sign-up without claim refresh, token sent on the public invitation call, 403 shown
+    as a plain error). The invitation one first survived because nobody was signed in; the
+    test now opens the invitation while another user is still signed in.
+  - Gate: format, lint, 9/9 builds, unit tests; `tms-frontend` image builds (contracts built
+    first) and serves `/`, `/login`, `/register`, `/tutor`, `/invite/x` with 200.
