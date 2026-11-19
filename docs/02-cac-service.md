@@ -208,12 +208,13 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 | GET | `/billing/invoices?period=&status=&kind=&studentId=` | Danh sách hóa đơn (`kind` = `MONTHLY` / `ENROLLMENT`); giáo viên chỉ thấy hóa đơn của học sinh mình | TUTOR, ADMIN |
 | GET | `/billing/invoices/{id}` | Chi tiết hóa đơn và các dòng phí (FEE, ADJUSTMENT) | TUTOR, ADMIN, Payer |
 | GET | `/billing/enrollments/{enrollmentId}/invoice` | Hóa đơn ghi danh của một ghi danh `MONTHLY` | TUTOR, ADMIN, Payer |
-| GET | `/billing/invoices/{id}/qr` | Mã VietQR chuyển khoản | TUTOR, Payer |
-| POST | `/billing/invoices/{id}/payments` | Ghi nhận thanh toán thủ công (không vượt số còn nợ) | TUTOR, ADMIN |
-| POST | `/billing/payments/{id}/reversal` | Tạo bút toán đảo cho khoản ghi sai | TUTOR, ADMIN |
+| GET | `/billing/invoices/{id}/qr` | Chuỗi VietQR (NAPAS 247, chuẩn EMVCo) để chuyển khoản số còn nợ, nội dung `TMS <8 ký tự đầu id>`; tài khoản nhận lấy từ `BILLING_BANK_BIN` / `BILLING_BANK_ACCOUNT` / `BILLING_BANK_ACCOUNT_NAME`, chưa cấu hình → 503; hóa đơn đã trả đủ / nháp / hủy → 409 | TUTOR, ADMIN, Payer |
+| POST | `/billing/invoices/{id}/payments` | Ghi nhận thanh toán thủ công `{amount, method, paidAt?, note?}` trên hóa đơn `ISSUED` / `PARTIALLY_PAID` / `OVERDUE`; vượt số còn nợ → 422 kèm `outstanding`; `paidAt` ở tương lai → 422; phát `PaymentReceived` (BR-BI-07) | TUTOR, ADMIN |
+| POST | `/billing/payments/{id}/reversal` | Bút toán đảo cho khoản ghi sai (kèm `reason`), mỗi khoản chỉ đảo một lần, không đảo bút toán đảo; trạng thái hóa đơn tính lại (có thể về `ISSUED` / `OVERDUE`); không phát `PaymentReceived` | TUTOR, ADMIN |
 | POST | `/billing/invoices/{id}/void` | Hủy hóa đơn đã phát hành mà chưa thanh toán (kèm `reason`) và phát hành hóa đơn thay thế cùng các dòng phí, tên / người thanh toán mới nhất, `replaces_invoice_id`, hạn = max(hạn cũ, hôm nay + 7 ngày), phát `InvoiceIssued`. Hóa đơn nháp, đã hủy, hoặc đã có thanh toán → 409 (đảo thanh toán trước) (BR-BI-04) | TUTOR, ADMIN |
-| GET | `/billing/students/{id}/balance` | Công nợ học sinh | TUTOR, PARENT |
-| GET | `/billing/reports/revenue?from=&to=` | Báo cáo doanh thu | TUTOR, ADMIN |
+| GET | `/billing/students/{id}/balance` | Công nợ học sinh: tổng còn nợ, phần quá hạn, từng hóa đơn chưa trả đủ, và số phí tạm tính của tháng này (chưa phải trả) | TUTOR, ADMIN, Payer |
+| GET | `/billing/reports/revenue?from=YYYY-MM&to=YYYY-MM` | Doanh thu theo tháng: `billed` = các dòng của hóa đơn đã phát hành theo tháng của khoản phí; `collected` = thanh toán trừ bút toán đảo theo tháng nhận tiền (giờ Việt Nam). Giáo viên chỉ thấy dòng của mình (`tutor_id`) và tiền của học sinh mình | TUTOR, ADMIN |
+| GET | `/internal/students/{id}/open-invoices` | Hóa đơn chưa `PAID` / `VOID` của học sinh (kể cả nháp có phí), student-service dùng để chặn ẩn danh hóa (BR-ST-08) | Nội bộ |
 | POST | `/webhooks/payments/{provider}` | Nhận webhook từ cổng thanh toán / ngân hàng | Chữ ký webhook |
 
 **Hai loại hóa đơn:**
@@ -228,7 +229,7 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 - Sửa điểm danh (`AttendanceCorrected`): nếu dòng phí còn trên hóa đơn `DRAFT` thì sửa / xóa ngay dòng đó; nếu hóa đơn đã phát hành thì phần chênh lệch thành dòng `ADJUSTMENT` (có thể âm, `adjusts_item_id` trỏ dòng gốc) trên hóa đơn `DRAFT` kế tiếp. Điểm danh đến sau khi đã chốt (buổi `MISSED` điểm danh bổ sung) được tính ở hóa đơn `DRAFT` kế tiếp, `service_period` vẫn là tháng của buổi học.
 - Lớp `MONTHLY`: điểm danh không sinh phí. Khi chốt tháng, mỗi ghi danh có một dòng phí cố định; vào / rời giữa tháng thì tính theo tỉ lệ số buổi trong `session_calendar` (ngày rời lớp không tính). Tháng đã được hóa đơn ghi danh thu thì bỏ qua (`UNIQUE(enrollment_id, service_period)`).
 
-Hóa đơn đã `ISSUED` không bao giờ bị sửa. Sửa sai được ghi thành dòng `ADJUSTMENT` trên hóa đơn `DRAFT` kế tiếp ([ADR-0002](adr/0002-immutable-invoices-with-adjustments.md)). Trạng thái hóa đơn luôn suy ra từ các khoản `PAYMENT` và `REVERSAL`.
+Hóa đơn đã `ISSUED` không bao giờ bị sửa. Sửa sai được ghi thành dòng `ADJUSTMENT` trên hóa đơn `DRAFT` kế tiếp ([ADR-0002](adr/0002-immutable-invoices-with-adjustments.md)). Trạng thái hóa đơn luôn suy ra từ các khoản `PAYMENT` và `REVERSAL`: trả đủ → `PAID`; chưa đủ mà đã quá hạn → `OVERDUE`; có trả một phần → `PARTIALLY_PAID`; chưa trả → `ISSUED`. Bảng `payments` chỉ được thêm: trigger trong database từ chối `UPDATE` / `DELETE`. Hủy hóa đơn chỉ được khi số đã thu (sau khi đảo) bằng 0.
 
 **Người xem hóa đơn:** Admin, giáo viên của học sinh, và người thanh toán (phụ huynh chính của học sinh do phụ huynh trả, hoặc học sinh tự trả), kiểm tra qua `isPayer` của student-service. Người khác, kể cả phụ huynh phụ, nhận 404.
 

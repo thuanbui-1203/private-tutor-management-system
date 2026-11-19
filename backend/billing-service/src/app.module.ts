@@ -3,6 +3,7 @@ import { prismaDatabase, TmsCommonModule } from '@tms/common';
 import { ChargesModule } from './charges/charges.module';
 import { CopiesModule } from './copies/copies.module';
 import { InvoicesModule } from './invoices/invoices.module';
+import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PrismaService } from './prisma/prisma.service';
 
@@ -21,6 +22,7 @@ import { PrismaService } from './prisma/prisma.service';
     CopiesModule,
     ChargesModule,
     InvoicesModule,
+    PaymentsModule,
   ],
 })
 export class AppModule {}

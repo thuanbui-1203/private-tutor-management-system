@@ -63,3 +63,44 @@ measure and left to the user.
   `pnpm migrate:all` applied `invoice_lifecycle`; billing rebuilt; whole stack started again
   after the restart: identity 3001, student 3002, class 3003, schedule 3004, billing 3006
   ready, gateway healthy on 8080.
+- **#19 merged** as PR #42 (closes #19).
+- **#20 started** on `feat/20-payments`. Design decisions:
+  - `payments` is insert-only, enforced by a database trigger (UPDATE/DELETE raise), plus
+    CHECKs (`amount > 0`, `reverses_payment_id` iff `REVERSAL`) and a unique
+    `reverses_payment_id` (one Reversal per Payment).
+  - One status rule for every money movement (`deriveStatus`): fully paid → PAID; else past
+    due → OVERDUE; else some money → PARTIALLY_PAID; else ISSUED. A partial payment on an
+    overdue invoice keeps it OVERDUE (reminders continue); `PaymentReceived.invoiceStatus`
+    still says PARTIALLY_PAID / PAID, as the contract requires. Diagram 09 updated.
+  - Void now checks net money received instead of the status (an OVERDUE invoice can hold
+    a partial payment).
+  - Revenue report: `billed` by month of service from issued invoices' lines (`tutor_id`),
+    `collected` by month received (Vietnam time) from Payments minus Reversals.
+  - VietQR: EMVCo payload built in-house (NAPAS GUID `A000000727`, service `QRIBFTTA`,
+    CRC-16/CCITT-FALSE verified against the standard check value `29B1`); bank account
+    from `BILLING_BANK_*` env, empty → 503. No real account is committed.
+  - student-service now gets `BILLING_SERVICE_URL` in compose, so its BR-ST-08 check calls
+    billing's new `/internal/students/{id}/open-invoices` instead of the stub.
+- **#20 test fixes while writing:** two revenue-test setups were wrong, not the code: an
+  attendance recorded after January had closed went (correctly) to February; and another
+  test's Monthly enrollment (same tutor) was (correctly) billed for January. The revenue
+  test now uses two tutors of its own. 37/37 billing tests, stable over reruns.
+- **Auth decision, refined after reading the compose file.** Compose already runs in one of
+  two modes: the real Firebase project by default (Auth only, free on Spark, Admin SDK key in
+  the gitignored `infra/keys/`), or the emulator when `FIREBASE_AUTH_EMULATOR_HOST` is set.
+  Final setup:
+  1. **Running the app** (the "deployed" local stack): the real project
+     `private-tutor-management-sys`, as compose does today. Real sign-in works in the browser.
+  2. **End-to-end tests (#21) and offline dev:** a compose *profile* `emulator` adds a
+     `firebase-emulator` container (project `demo-tms`) bound to 0.0.0.0 inside the compose
+     network only, published to the host as `127.0.0.1:9099`; the services get
+     `FIREBASE_AUTH_EMULATOR_HOST=firebase-emulator:9099`. Tests never touch the real project.
+  The host `firebase.json` stays on 127.0.0.1, so nothing listens on the LAN.
+- **#20 mutation checks:** 17/17 caught (overpayment, paying drafts, future `paidAt`, event
+  status, missing `enrollmentId`, double reversal, reversing a reversal, status not
+  refreshed, reversals ignored, PAID boundary, OVERDUE after reversal, balance access,
+  revenue scope, QR amount, CRC init, open-invoice filter, void with money).
+- **#20 gate:** format, lint, 9/9 builds, unit tests, 145 integration tests (billing 37).
+  Migration `payments` applied; student + billing rebuilt. Live: student-service has
+  `BILLING_SERVICE_URL=http://billing-service:3006` and gets `{"invoiceIds":[]}` from
+  billing over the compose network; the gateway still answers 404 for `/api/internal/...`.

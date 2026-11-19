@@ -162,6 +162,7 @@ model Invoice {
   createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
   items             InvoiceItem[]
+  payments          Payment[]
 
   @@index([studentId, period])
   @@index([tutorId, period])
@@ -217,4 +218,37 @@ model InvoiceReminder {
 
   @@id([invoiceId, daysOverdue])
   @@map("invoice_reminders")
+}
+
+enum PaymentKind {
+  PAYMENT
+  REVERSAL
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  MOMO
+}
+
+/// Money in, insert-only (BR-BI-07, ADR-0002): a wrong entry is cancelled by a REVERSAL,
+/// never edited or deleted (a trigger in the migration refuses UPDATE and DELETE).
+model Payment {
+  id                String        @id @default(uuid()) @db.Uuid
+  invoiceId         String        @map("invoice_id") @db.Uuid
+  invoice           Invoice       @relation(fields: [invoiceId], references: [id])
+  kind              PaymentKind
+  /// REVERSAL only: the PAYMENT it cancels (at most one Reversal per Payment).
+  reversesPaymentId String?       @unique @map("reverses_payment_id") @db.Uuid
+  /// VND, always positive; a REVERSAL subtracts it.
+  amount            Int
+  method            PaymentMethod
+  paidAt            DateTime      @map("paid_at") @db.Timestamptz(6)
+  recordedBy        String        @map("recorded_by") @db.Uuid
+  note              String?       @db.VarChar(500)
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([invoiceId])
+  @@index([paidAt])
+  @@map("payments")
 }

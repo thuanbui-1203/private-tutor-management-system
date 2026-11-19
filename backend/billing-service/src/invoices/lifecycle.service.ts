@@ -202,7 +202,7 @@ export class LifecycleService {
         throw new ConflictException('a draft is still open: nothing to void');
       }
       if (old.status === 'VOID') throw new ConflictException('the invoice is already void');
-      if (old.status === 'PARTIALLY_PAID' || old.status === 'PAID') {
+      if ((await this.ledger.paidOf(tx, id)) > 0) {
         throw new ConflictException('reverse the payments on this invoice before voiding it');
       }
       const student = await tx.studentSnapshot.findUnique({ where: { studentId: old.studentId } });

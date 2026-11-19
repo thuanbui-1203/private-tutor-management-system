@@ -46,9 +46,8 @@ export class BillingOpenInvoicesChecker implements OpenInvoicesChecker {
 }
 
 /**
- * TODO(#20): billing-service does not expose /internal/students/{id}/open-invoices yet.
- * Until it does, BILLING_SERVICE_URL stays unset and this stub reports no open Invoices.
- * Once #20 lands, set BILLING_SERVICE_URL for student-service in docker-compose.yml.
+ * Used only when BILLING_SERVICE_URL is unset (host-run tests without billing); docker
+ * compose sets it, so the real check against billing-service runs there.
  */
 export class NoOpenInvoicesStub implements OpenInvoicesChecker {
   private warned = false;
@@ -56,7 +55,7 @@ export class NoOpenInvoicesStub implements OpenInvoicesChecker {
   async openInvoiceIds(): Promise<string[]> {
     if (!this.warned) {
       new Logger('OpenInvoicesChecker').warn(
-        'BILLING_SERVICE_URL not set: BR-ST-08 open-invoice check is stubbed (see #20)',
+        'BILLING_SERVICE_URL not set: BR-ST-08 open-invoice check is stubbed',
       );
       this.warned = true;
     }

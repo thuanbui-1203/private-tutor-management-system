@@ -280,13 +280,15 @@ package "billing_db" #FFF8EE {
     --
     * invoice_id : UUID <<FK>>
     * kind : ENUM(PAYMENT, REVERSAL)
-    reverses_payment_id : UUID <<FK payments>>
-    * amount : DECIMAL(12,0)
+    reverses_payment_id : UUID <<FK payments, UNIQUE>>
+    * amount : DECIMAL(12,0) (> 0)
     * method : ENUM(CASH, BANK_TRANSFER, MOMO)
     * paid_at : TIMESTAMP
     * recorded_by : UUID <<ref users>>
+    note : VARCHAR(500) (lý do đảo)
     ..
-    Chỉ INSERT; tổng PAYMENT - REVERSAL <= total
+    Chỉ INSERT (trigger chặn UPDATE / DELETE);
+    tổng PAYMENT - REVERSAL <= total
   }
   entity period_closes {
     * period : CHAR(7) <<PK>>
