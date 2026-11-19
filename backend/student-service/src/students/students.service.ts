@@ -143,7 +143,7 @@ export class StudentsService {
   }
 
   async update(actor: AuthUser, id: string, body: UpdateStudent) {
-    const current = await this.staffOnly(actor, id);
+    const current = await this.staffRecord(actor, id);
     const next = {
       dob: body.dob ?? dateOnly(current.dob),
       payer: (body.payer ?? current.payer) as PayerKind,
@@ -167,7 +167,7 @@ export class StudentsService {
   }
 
   async addParent(actor: AuthUser, id: string, link: ParentLink) {
-    await this.staffOnly(actor, id);
+    await this.staffRecord(actor, id);
     const updated = await this.prisma.$transaction(async (tx) => {
       if (link.isPrimary) {
         await tx.studentParent.updateMany({ where: { studentId: id }, data: { isPrimary: false } });
@@ -181,7 +181,7 @@ export class StudentsService {
   }
 
   async removeParent(actor: AuthUser, id: string, parentId: string) {
-    const current = await this.staffOnly(actor, id);
+    const current = await this.staffRecord(actor, id);
     const link = current.parents.find((p) => p.parentId === parentId);
     if (!link) throw new NotFoundException('this Parent is not linked to the Student');
     if (link.isPrimary) {
@@ -243,7 +243,8 @@ export class StudentsService {
     throw new NotFoundException('student not found');
   }
 
-  private async staffOnly(actor: AuthUser, id: string): Promise<StudentRecord> {
+  /** The Student, if the caller is their Tutor or an Admin; 404 otherwise. */
+  async staffRecord(actor: AuthUser, id: string): Promise<StudentRecord> {
     const { student, relation } = await this.visible(actor, id);
     if (relation !== 'staff') throw new NotFoundException('student not found');
     return student;

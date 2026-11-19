@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { prismaDatabase, TmsCommonModule } from '@tms/common';
+import { LifecycleModule } from './lifecycle/lifecycle.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PrismaService } from './prisma/prisma.service';
 import { StudentsModule } from './students/students.module';
@@ -17,6 +18,7 @@ import { StudentsModule } from './students/students.module';
       }),
     }),
     StudentsModule,
+    LifecycleModule,
   ],
 })
 export class AppModule {}
