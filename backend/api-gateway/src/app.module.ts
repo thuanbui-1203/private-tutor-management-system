@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
+import { TmsCommonModule } from '@tms/common';
 
-// Feature modules are added by the issues that own this service (see GitHub #1).
-@Module({})
+// The gateway verifies Firebase ID tokens itself (#8), so the X-User-* guard is off here.
+@Module({
+  imports: [TmsCommonModule.forRoot({ service: 'api-gateway', auth: false })],
+})
 export class AppModule {}

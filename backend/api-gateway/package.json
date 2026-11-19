@@ -16,6 +16,8 @@
     "@nestjs/core": "catalog:",
     "@nestjs/platform-express": "catalog:",
     "@nestjs/swagger": "catalog:",
+    "@tms/common": "workspace:*",
+    "@tms/contracts": "workspace:*",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:"
   },

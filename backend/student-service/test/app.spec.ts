@@ -22,4 +22,9 @@ describe(SERVICE_NAME, () => {
     const res = await request(app.getHttpServer()).get('/docs-json').expect(200);
     expect(res.body.info.title).toBe(SERVICE_NAME);
   });
+
+  it('answers /health/live without authentication', async () => {
+    const res = await request(app.getHttpServer()).get('/health/live').expect(200);
+    expect(res.body.status).toBe('ok');
+  });
 });

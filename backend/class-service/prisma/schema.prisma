@@ -10,3 +10,25 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+/// Outbox (docs/02 §1, @tms/common): events written in the same transaction as the
+/// business change, published by the outbox relay. Same DDL as packages/common/sql/messaging.sql.
+model OutboxEvent {
+  id          String    @id @db.Uuid
+  eventType   String    @map("event_type")
+  routingKey  String    @map("routing_key")
+  payload     Json
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+
+  @@index([publishedAt, createdAt])
+  @@map("outbox_events")
+}
+
+/// Events this service has already handled (idempotent consumer, @tms/common).
+model ProcessedEvent {
+  eventId     String   @id @map("event_id") @db.Uuid
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@map("processed_events")
+}
