@@ -84,8 +84,15 @@ describe('student access DTO', () => {
       studentId: ids.student,
       userId: ids.user,
       relation: 'secondary-parent' as const,
+      isPayer: false,
     };
     expect(InternalStudentAccessResponse.parse(JSON.parse(JSON.stringify(value)))).toEqual(value);
+    // An older student-service without the flag never grants Payer rights.
+    const withoutFlag = { studentId: value.studentId, userId: value.userId, relation: 'self' };
+    expect(InternalStudentAccessResponse.parse(withoutFlag).isPayer).toBe(false);
+    expect(InternalStudentAccessResponse.safeParse({ ...value, isPayer: 'yes' }).success).toBe(
+      false,
+    );
     expect(InternalStudentAccessResponse.parse({ ...value, relation: null }).relation).toBeNull();
     expect(InternalStudentAccessResponse.safeParse({ ...value, relation: 'admin' }).success).toBe(
       false,

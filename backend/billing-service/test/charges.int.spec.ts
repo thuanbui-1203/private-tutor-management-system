@@ -323,9 +323,8 @@ describe('Billing: charges from Attendance and Adjustments (#17)', () => {
       expect(await monthlyLines(leaver, '2026-12')).toMatchObject([
         { amount: 400_000, description: 'Học phí tháng 12/2026 (2/5 buổi)' },
       ]);
-      // December is the mid-month joiner's first month: billed by their Enrollment invoice (#18)
-      // when one exists; without one, this run bills the prorated share.
-      expect((await monthlyLines(midJoiner, '2026-12'))[0].amount).toBe(600_000);
+      // December is the mid-month joiner's first month: their Enrollment invoice (#18) billed it.
+      expect(await monthlyLines(midJoiner, '2026-12')).toEqual([]);
       // January: the leaver is gone.
       await charges().addMonthlyFees('2027-01');
       expect(await monthlyLines(leaver, '2027-01')).toEqual([]);
@@ -335,32 +334,11 @@ describe('Billing: charges from Attendance and Adjustments (#17)', () => {
       const { classId } = await monthlyClass(DEC);
       const studentId = await student();
       const enrollmentId = await enroll(classId, studentId, '2026-12-09');
-      // What the Enrollment invoice (#18) records for the first month.
-      const enrollmentInvoice = await prisma().invoice.create({
-        data: {
-          kind: 'ENROLLMENT',
-          studentId,
-          tutorId,
-          enrollmentId,
-          studentName: 'An',
-          payerContact: { name: 'Lan' },
-          period: '2026-12',
-          status: 'ISSUED',
-        },
+      // The Enrollment invoice (#18) already billed December (3 of 5 Sessions).
+      const enrollmentLine = await prisma().invoiceItem.findFirst({
+        where: { enrollmentId, invoice: { kind: 'ENROLLMENT' } },
       });
-      await prisma().invoiceItem.create({
-        data: {
-          invoiceId: enrollmentInvoice.id,
-          type: 'FEE',
-          studentId,
-          tutorId,
-          classId,
-          enrollmentId,
-          servicePeriod: '2026-12',
-          amount: 600_000,
-          description: 'Học phí tháng 12/2026 (3/5 buổi)',
-        },
-      });
+      expect(enrollmentLine).toMatchObject({ servicePeriod: '2026-12', amount: 600_000 });
       await charges().addMonthlyFees('2026-12');
       expect(await monthlyLines(studentId, '2026-12')).toEqual([]);
       await charges().addMonthlyFees('2027-01');

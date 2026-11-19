@@ -8,6 +8,10 @@ type Tx = Prisma.TransactionClient;
 /** Day-precision Date for a `YYYY-MM-DD` string (Prisma @db.Date). */
 export const day = (date: string) => new Date(`${date}T00:00:00Z`);
 export const dateOnly = (d: Date) => d.toISOString().slice(0, 10);
+export function addDays(date: string, days: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  return dateOnly(new Date(Date.UTC(y, m - 1, d + days)));
+}
 /** Last calendar day of a `YYYY-MM` period. */
 export function lastDayOf(period: string): string {
   const [y, m] = period.split('-').map(Number);

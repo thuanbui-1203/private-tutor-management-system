@@ -66,5 +66,11 @@ export const InternalStudentAccessResponse = z.object({
   studentId: Id,
   userId: Id,
   relation: StudentRelation.nullable(),
+  /**
+   * Whether the user receives and settles this Student's Invoices (BR-ST-05): the primary
+   * Parent of a Student paid for by their Parent, or the Student who pays for themselves.
+   * Defaults to false so an older student-service never grants Payer rights by accident.
+   */
+  isPayer: z.boolean().default(false),
 });
 export type InternalStudentAccessResponse = z.infer<typeof InternalStudentAccessResponse>;

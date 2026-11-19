@@ -106,7 +106,7 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 | GET | `/parents/me/children` | Danh sách con của phụ huynh đang đăng nhập | PARENT |
 | POST | `/parents`, PATCH `/parents/{id}` | Quản lý phụ huynh (đổi liên hệ của phụ huynh chính → phát lại `StudentUpdated`) | TUTOR, ADMIN |
 | GET | `/internal/students/{id}` | DTO `InternalStudentResponse` cho class-service | Nội bộ |
-| GET | `/internal/students/{id}/access?userId=` | Quan hệ của người dùng với học sinh (`tutor`, `primary-parent`, `secondary-parent`, `self` hoặc null), để class / schedule / billing áp cùng quy tắc xem | Nội bộ |
+| GET | `/internal/students/{id}/access?userId=` | Quan hệ của người dùng với học sinh (`tutor`, `primary-parent`, `secondary-parent`, `self` hoặc null) và `isPayer` (người đó có phải người thanh toán không, BR-ST-05), để class / schedule / billing áp cùng quy tắc xem | Nội bộ |
 
 **Quy tắc đã cài đặt:**
 - Dưới 18 tuổi (tính theo ngày ở Việt Nam) bắt buộc có phụ huynh chính và người thanh toán là phụ huynh chính (BR-ST-04, BR-ST-05); đủ 18 tuổi có thể tự thanh toán nhưng khi đó phải có email; đủ 18 tuổi không tự đổi người thanh toán. Vi phạm → 422.
@@ -218,7 +218,8 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 
 **Hai loại hóa đơn:**
 - **Hóa đơn tháng** (`MONTHLY`): `DRAFT` trong tháng, chốt ngày 1, hạn ngày 10.
-- **Hóa đơn ghi danh** (`ENROLLMENT`): tạo khi nhận `StudentEnrolled` của lớp `MONTHLY`, `ISSUED` ngay với phí tháng đầu theo tỉ lệ, hạn 7 ngày (BR-BI-06). Hóa đơn tháng sau không lặp lại dòng phí đã thu ở đây.
+- **Hóa đơn ghi danh** (`ENROLLMENT`): tạo khi nhận `StudentEnrolled` của lớp `MONTHLY`, `ISSUED` ngay với phí tháng đầu theo tỉ lệ số buổi từ ngày vào lớp đến cuối tháng trên tổng số buổi của tháng (lớp mới chưa có buổi nào thì theo số ngày), hạn 7 ngày, phát `InvoiceIssued` (BR-BI-06). Vào lớp sau buổi cuối cùng của tháng thì hóa đơn ghi danh thu trọn tháng sau. Hóa đơn tháng không lặp lại tháng đã thu ở đây. Lớp `PER_SESSION` không có hóa đơn ghi danh.
+- Rút khỏi lớp (`StudentWithdrawn`, kể cả lý do `UNPAID`): hóa đơn ghi danh không bị sửa hay xóa; nếu đã thu nhiều buổi hơn số buổi học sinh còn được học thì phần chênh lệch là dòng `ADJUSTMENT` âm trên hóa đơn `DRAFT` kế tiếp (BR-BI-05, không hoàn tiền mặt).
 
 **Cách tính phí trên hóa đơn tháng:**
 - Lớp `PER_SESSION`: mỗi `AttendanceRecorded` tính phí của kỳ chứa buổi học (`fee_policies`) cho `PRESENT`, `LATE`, và `ABSENT` nếu lớp bật `charge_absent`; `EXCUSED` không tính. Mỗi (buổi, học sinh) tối đa một dòng `FEE` (BR-BI-01), nên event gửi trùng không tạo thêm dòng. Học sinh `DROPPED` vẫn bị tính các buổi đã học (BR-BI-09).
@@ -226,6 +227,8 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 - Lớp `MONTHLY`: điểm danh không sinh phí. Khi chốt tháng, mỗi ghi danh có một dòng phí cố định; vào / rời giữa tháng thì tính theo tỉ lệ số buổi trong `session_calendar` (ngày rời lớp không tính). Tháng đã được hóa đơn ghi danh thu thì bỏ qua (`UNIQUE(enrollment_id, service_period)`).
 
 Hóa đơn đã `ISSUED` không bao giờ bị sửa. Sửa sai được ghi thành dòng `ADJUSTMENT` trên hóa đơn `DRAFT` kế tiếp ([ADR-0002](adr/0002-immutable-invoices-with-adjustments.md)). Trạng thái hóa đơn luôn suy ra từ các khoản `PAYMENT` và `REVERSAL`.
+
+**Người xem hóa đơn:** Admin, giáo viên của học sinh, và người thanh toán (phụ huynh chính của học sinh do phụ huynh trả, hoặc học sinh tự trả), kiểm tra qua `isPayer` của student-service. Người khác, kể cả phụ huynh phụ, nhận 404.
 
 **Phát event:** `InvoiceIssued` (kèm `kind`), `PaymentReceived` (kèm `invoiceKind`, `enrollmentId`, `invoiceStatus`), `InvoiceOverdue`
 **Nhận event:** `StudentCreated`, `StudentUpdated`, `StudentStatusChanged`, `ClassCreated`, `ClassUpdated`, `StudentEnrolled`, `StudentWithdrawn`, `AttendanceRecorded`, `AttendanceCorrected`, `SessionScheduled`, `SessionCancelled`, `SessionRescheduled`
