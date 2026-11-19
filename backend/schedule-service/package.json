@@ -11,10 +11,11 @@
     "build": "prisma generate && tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "dev": "nest start --watch",
-    "test": "jest",
+    "test": "jest --testPathIgnorePatterns=.int.spec.ts$",
     "prisma:generate": "prisma generate",
     "migrate:dev": "prisma migrate dev",
-    "migrate:deploy": "prisma migrate deploy"
+    "migrate:deploy": "prisma migrate deploy",
+    "test:int": "jest --testRegex=.int.spec.ts$ --runInBand"
   },
   "dependencies": {
     "@nestjs/common": "catalog:",
@@ -26,7 +27,8 @@
     "@tms/common": "workspace:*",
     "@tms/contracts": "workspace:*",
     "reflect-metadata": "catalog:",
-    "rxjs": "catalog:"
+    "rxjs": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@nestjs/cli": "catalog:",
@@ -34,9 +36,12 @@
     "@types/express": "catalog:",
     "@types/jest": "catalog:",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
     "@types/supertest": "catalog:",
+    "amqplib": "catalog:",
     "dotenv": "catalog:",
     "jest": "catalog:",
+    "pg": "catalog:",
     "prisma": "catalog:",
     "supertest": "catalog:",
     "ts-jest": "catalog:",

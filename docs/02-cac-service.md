@@ -154,13 +154,14 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 
 ## 6. Schedule & Attendance Service
 
-**Dữ liệu:** `schedules`, `sessions`, `attendances`, `class_roster_view`, `outbox_events`, `processed_events`
+**Dữ liệu:** `class_view` (bản sao lớp từ `ClassCreated` / `ClassUpdated` / `ClassClosed`), `schedules`, `sessions` (ngày giờ địa phương + `starts_at` / `ends_at` theo UTC), `attendances`, `class_roster_view`, `outbox_events`, `processed_events`
 
 | Method | Endpoint | Mô tả | Quyền |
 |---|---|---|---|
-| POST | `/schedules` | Tạo lịch lặp, sinh buổi học (có kiểm tra trùng) | TUTOR |
-| POST | `/schedules/preview` | Xem trước các buổi sẽ sinh và các buổi bị trùng | TUTOR |
-| DELETE | `/schedules/{id}` | Ngừng lịch lặp (hủy các buổi tương lai) | TUTOR |
+| GET | `/schedules?classId=` | Lịch lặp của giáo viên | TUTOR, ADMIN |
+| POST | `/schedules` | Tạo lịch lặp (`weekday` 1 = thứ Hai … 7 = Chủ nhật, giờ `HH:MM` theo giờ Việt Nam, `fromDate`, `toDate`), sinh buổi học 3 tháng tới, phát `SessionScheduled` mỗi buổi kèm danh sách lớp; trùng giờ với buổi khác của giáo viên → 409 kèm danh sách buổi trùng, hoặc `skipConflicts: true` để bỏ qua các buổi trùng (BR-SC-01) | TUTOR, ADMIN |
+| POST | `/schedules/preview` | Xem trước các buổi sẽ sinh và các buổi bị trùng, không ghi gì | TUTOR, ADMIN |
+| DELETE | `/schedules/{id}` | Kết thúc lịch lặp (lịch bất biến, BR-SC-07) và hủy các buổi tương lai (`SessionCancelled` mỗi buổi) | TUTOR, ADMIN |
 | GET | `/sessions?from=&to=&classId=` | Lịch theo tuần / tháng | Mọi vai trò (lọc theo quyền) |
 | POST | `/sessions` | Tạo buổi lẻ hoặc buổi bù (`makeupOf`) | TUTOR |
 | POST | `/sessions/{id}/start` | Mở buổi học | TUTOR |
