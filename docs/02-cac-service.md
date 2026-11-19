@@ -162,19 +162,19 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 | POST | `/schedules` | Tạo lịch lặp (`weekday` 1 = thứ Hai … 7 = Chủ nhật, giờ `HH:MM` theo giờ Việt Nam, `fromDate`, `toDate`), sinh buổi học 3 tháng tới, phát `SessionScheduled` mỗi buổi kèm danh sách lớp; trùng giờ với buổi khác của giáo viên → 409 kèm danh sách buổi trùng, hoặc `skipConflicts: true` để bỏ qua các buổi trùng (BR-SC-01) | TUTOR, ADMIN |
 | POST | `/schedules/preview` | Xem trước các buổi sẽ sinh và các buổi bị trùng, không ghi gì | TUTOR, ADMIN |
 | DELETE | `/schedules/{id}` | Kết thúc lịch lặp (lịch bất biến, BR-SC-07) và hủy các buổi tương lai (`SessionCancelled` mỗi buổi) | TUTOR, ADMIN |
-| GET | `/sessions?from=&to=&classId=` | Lịch theo tuần / tháng | Mọi vai trò (lọc theo quyền) |
-| POST | `/sessions` | Tạo buổi lẻ hoặc buổi bù (`makeupOf`) | TUTOR |
-| POST | `/sessions/{id}/start` | Mở buổi học | TUTOR |
-| POST | `/sessions/{id}/cancel` | Hủy buổi | TUTOR |
-| POST | `/sessions/{id}/reschedule` | Dời buổi | TUTOR |
+| GET | `/sessions?from=&to=&classId=&studentId=` | Lịch theo tuần / tháng (mặc định 30 ngày từ hôm nay, tối đa 93 ngày). Giáo viên thấy buổi của mình, Admin thấy tất cả; phụ huynh / học sinh phải truyền `studentId` (kiểm tra quyền qua Student) và chỉ thấy buổi của các lớp trong thời gian học sinh còn ghi danh, không kèm dữ liệu học sinh khác (BR-SC-10) | Mọi vai trò (lọc theo quyền) |
+| POST | `/sessions` | Tạo buổi lẻ hoặc buổi bù (`makeupOf` = buổi `CANCELLED` / `MISSED` cùng lớp, mỗi buổi gốc chỉ một buổi bù còn hiệu lực, BR-SC-05); giờ phải ở tương lai, trùng giờ → 409 (BR-SC-01); phát `SessionScheduled` | TUTOR, ADMIN |
+| POST | `/sessions/{id}/start` | Mở buổi học (`SCHEDULED` → `IN_PROGRESS`), từ 15 phút trước giờ bắt đầu đến giờ kết thúc | TUTOR, ADMIN |
+| POST | `/sessions/{id}/cancel` | Hủy buổi kèm `reason` (từ `SCHEDULED`, `IN_PROGRESS`, hoặc `MISSED` trong 48h sau giờ kết thúc), phát `SessionCancelled`, không tính phí (BR-SC-04) | TUTOR, ADMIN |
+| POST | `/sessions/{id}/reschedule` | Dời buổi `SCHEDULED` sang giờ mới: buổi cũ → `RESCHEDULED`, tạo buổi mới (`makeup_of` = buổi cũ), phát **một** `SessionRescheduled` (không phát `SessionCancelled` / `SessionScheduled`); kiểm tra trùng giờ, bỏ qua chính buổi cũ | TUTOR, ADMIN |
 | PUT | `/sessions/{id}/attendance` | Lưu / sửa điểm danh (≤ 48h) | TUTOR |
 | GET | `/students/{id}/attendance?month=` | Lịch sử chuyên cần | TUTOR, PARENT, STUDENT |
 | GET | `/calendar/{token}.ics` | Lịch dạng iCal để đồng bộ Google / Apple Calendar | Token riêng |
 
 **Phát event:** `SessionScheduled`, `SessionCancelled`, `SessionRescheduled` (dời buổi: thay cho cặp hủy + tạo mới), `AttendanceRecorded`, `AttendanceCorrected`, `EnrollmentConfirmed`
 **Nhận event:** `StudentEnrolled`, `StudentWithdrawn`, `ClassClosed`
-**Gọi đồng bộ:** class-service (khi chưa có roster trong `class_roster_view`)
-**Tác vụ định kỳ:** mỗi giờ quét các buổi quá hạn và chuyển sang `MISSED`; mỗi tuần sinh thêm buổi cho lịch lặp
+**Gọi đồng bộ:** student-service `GET /internal/students/{id}/access` (phụ huynh / học sinh xem lịch, lịch sử chuyên cần); lớp và roster lấy từ bản sao cục bộ, không gọi class-service
+**Tác vụ định kỳ:** mỗi giờ chuyển các buổi `SCHEDULED` / `IN_PROGRESS` đã quá giờ kết thúc 24h mà chưa điểm danh sang `MISSED` (BR-SC-06); mỗi ngày sinh thêm buổi cho lịch lặp để luôn đủ 3 tháng
 
 ---
 

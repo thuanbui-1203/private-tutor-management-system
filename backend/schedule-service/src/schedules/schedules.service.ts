@@ -202,26 +202,14 @@ export class SchedulesService {
   /** Creates Sessions and publishes SessionScheduled for each, with the current roster. */
   async insertSessions(
     tx: Tx,
-    owner: { id?: string; classId: string; tutorId: string },
+    owner: { id?: string | null; classId: string; tutorId: string },
     sessions: PlannedSession[],
     makeupOf?: string,
   ): Promise<Session[]> {
     const roster = await this.roster(tx, owner.classId);
     const created: Session[] = [];
     for (const s of sessions) {
-      const session = await tx.session.create({
-        data: {
-          scheduleId: owner.id ?? null,
-          classId: owner.classId,
-          tutorId: owner.tutorId,
-          date: new Date(`${s.date}T00:00:00Z`),
-          startTime: s.startTime,
-          endTime: s.endTime,
-          startsAt: s.startsAt,
-          endsAt: s.endsAt,
-          makeupOf: makeupOf ?? null,
-        },
-      });
+      const session = await this.createSession(tx, owner, s, makeupOf);
       await enqueueEvent(exec(tx), 'SessionScheduled', {
         sessionId: session.id,
         classId: owner.classId,
@@ -231,6 +219,28 @@ export class SchedulesService {
       created.push(session);
     }
     return created;
+  }
+
+  /** Inserts one Session without publishing anything (a reschedule publishes its own event). */
+  createSession(
+    tx: Tx,
+    owner: { id?: string | null; classId: string; tutorId: string },
+    s: PlannedSession,
+    makeupOf?: string,
+  ): Promise<Session> {
+    return tx.session.create({
+      data: {
+        scheduleId: owner.id ?? null,
+        classId: owner.classId,
+        tutorId: owner.tutorId,
+        date: new Date(`${s.date}T00:00:00Z`),
+        startTime: s.startTime,
+        endTime: s.endTime,
+        startsAt: s.startsAt,
+        endsAt: s.endsAt,
+        makeupOf: makeupOf ?? null,
+      },
+    });
   }
 
   /** Cancels future SCHEDULED Sessions matching `where`; SessionCancelled for each. */
