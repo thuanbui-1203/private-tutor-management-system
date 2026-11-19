@@ -1,9 +1,16 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { enqueueEvent } from '@tms/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { enqueueEvent, type AuthUser } from '@tms/common';
 import type { DecodedIdToken } from 'firebase-admin/auth';
 import { FirebaseAuthService } from '../firebase/firebase-auth.service';
 import type { User } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { OPEN_CLASSES_CHECKER, type OpenClassesChecker } from './open-classes.checker';
 
 export type UserView = Pick<User, 'id' | 'email' | 'role' | 'status' | 'createdAt'>;
 
@@ -22,6 +29,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly firebase: FirebaseAuthService,
+    @Inject(OPEN_CLASSES_CHECKER) private readonly openClasses: OpenClassesChecker,
   ) {}
 
   /**
@@ -58,4 +66,47 @@ export class UsersService {
     if (!user) throw new NotFoundException('user not found');
     return toView(user);
   }
+
+  /**
+   * Admin changes a role and / or disables or re-enables a user. Every change also
+   * revokes the user's Firebase sessions, so the gateway (checkRevoked) rejects
+   * tokens issued before it immediately, not after the 1-hour token lifetime.
+   */
+  async update(actor: AuthUser, id: string, change: UserChange): Promise<UserView> {
+    if (actor.id === id) throw new BadRequestException('admins cannot change their own account');
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('user not found');
+    if (user.status === 'PENDING' && change.status) {
+      throw new ConflictException(
+        'a pending invitation is activated by accepting it, not by an admin',
+      );
+    }
+
+    const role = change.role ?? user.role;
+    const status = change.status ?? user.status;
+    if (status === 'DISABLED' && user.status !== 'DISABLED' && user.role === 'TUTOR') {
+      const open = await this.openClasses.openClassIds(user.id);
+      if (open.length > 0) {
+        throw new ConflictException({
+          message: "move this Tutor's open classes to another Tutor before disabling (BR-CL-08)",
+          openClassIds: open,
+        });
+      }
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const saved = await tx.user.update({ where: { id }, data: { role, status } });
+      if (role !== user.role) await this.firebase.setClaims(user.firebaseUid, { userId: id, role });
+      if (status !== user.status)
+        await this.firebase.setDisabled(user.firebaseUid, status === 'DISABLED');
+      await this.firebase.revokeSessions(user.firebaseUid);
+      return saved;
+    });
+    return toView(updated);
+  }
+}
+
+export interface UserChange {
+  role?: User['role'];
+  status?: 'ACTIVE' | 'DISABLED';
 }

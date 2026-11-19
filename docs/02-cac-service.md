@@ -66,10 +66,11 @@
 | Method | Endpoint | Mô tả | Quyền |
 |---|---|---|---|
 | POST | `/auth/register` | Giáo viên tự đăng ký: tạo tài khoản Firebase ở frontend, rồi gọi endpoint này để tạo bản ghi `users` và gán vai trò `TUTOR` | ID token hợp lệ, chưa có vai trò |
-| POST | `/auth/invitations` | Mời phụ huynh hoặc học sinh: tạo tài khoản Firebase chưa có mật khẩu + lời mời riêng (1 lần, 7 ngày, BR-AU-02) | TUTOR, ADMIN |
-| POST | `/auth/invitations/{token}/accept` | Kích hoạt tài khoản từ lời mời: đặt mật khẩu qua Firebase Admin SDK, gán vai trò | Public |
+| POST | `/auth/invitations` | Mời phụ huynh hoặc học sinh (body `email`, `fullName`, `role` = `PARENT` / `STUDENT`): tạo tài khoản Firebase chưa có mật khẩu, bản ghi `users` `PENDING` và lời mời riêng (1 lần, 7 ngày, chỉ lưu SHA-256 của token, BR-AU-02); phát `InvitationCreated`. Gửi lại cho người còn `PENDING` sẽ thu hồi link cũ. Ngoài production, response kèm `acceptUrl` (chưa có Notification để gửi email) | TUTOR, ADMIN |
+| POST | `/internal/invitations` | Như trên, cho student-service khi tạo học sinh (BR-ST-04); body thêm `invitedBy`. Gateway chặn `/internal/**` | Nội bộ |
+| POST | `/auth/invitations/{token}/accept` | Kích hoạt tài khoản từ lời mời (body `password`, tối thiểu 8 ký tự): đặt mật khẩu qua Firebase Admin SDK, gán claim `userId` + `role`, chuyển `ACTIVE`, phát `UserRegistered`. Token không tồn tại → 404; đã dùng, đã thu hồi hoặc hết hạn → 410 | Public |
 | GET | `/users/me` | Thông tin người đang đăng nhập | Đã đăng nhập |
-| GET/PATCH | `/users/{id}` | Quản lý người dùng; đổi vai trò hoặc vô hiệu hóa giáo viên (`DISABLED`, chỉ khi không còn lớp mở, BR-CL-08) sẽ cập nhật custom claim và thu hồi phiên Firebase | ADMIN |
+| GET/PATCH | `/users/{id}` | Quản lý người dùng; PATCH body `role` và / hoặc `status` (`ACTIVE` / `DISABLED`). Đổi vai trò cập nhật claim; vô hiệu hóa khóa tài khoản Firebase (giáo viên chỉ khi không còn lớp mở, BR-CL-08, gọi class-service `GET /internal/tutors/{id}/open-classes`); mọi thay đổi đều thu hồi phiên đăng nhập. Admin không tự sửa tài khoản của mình | ADMIN |
 
 **Phát event:** `UserRegistered`, `InvitationCreated`
 **Nhận event:** không có
