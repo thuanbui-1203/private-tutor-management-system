@@ -96,3 +96,101 @@ model SessionCalendar {
   @@index([classId, date])
   @@map("session_calendar")
 }
+
+enum InvoiceKind {
+  MONTHLY
+  ENROLLMENT
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum ItemType {
+  FEE
+  ADJUSTMENT
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  EXCUSED
+  ABSENT
+}
+
+/// Billing's copy of each Enrollment (StudentEnrolled / StudentWithdrawn): who is in which
+/// Class and when, for Monthly fees and proration (BR-BI-05, BR-BI-06).
+model EnrollmentCopy {
+  enrollmentId String    @id @map("enrollment_id") @db.Uuid
+  classId      String    @map("class_id") @db.Uuid
+  studentId    String    @map("student_id") @db.Uuid
+  feeType      FeeType   @map("fee_type")
+  joinedAt     DateTime  @map("joined_at") @db.Date
+  /// First day no longer enrolled (Vietnam date of the StudentWithdrawn event).
+  leftAt       DateTime? @map("left_at") @db.Date
+
+  @@index([classId])
+  @@index([studentId])
+  @@map("enrollment_copies")
+}
+
+/// One Monthly invoice per Student per period (partial unique index in the migration),
+/// plus Enrollment invoices. Never edited once ISSUED (ADR-0002).
+model Invoice {
+  id                String        @id @default(uuid()) @db.Uuid
+  kind              InvoiceKind
+  studentId         String        @map("student_id") @db.Uuid
+  /// The Student's Tutor (scopes what a Tutor sees).
+  tutorId           String        @map("tutor_id") @db.Uuid
+  /// ENROLLMENT invoices only.
+  enrollmentId      String?       @map("enrollment_id") @db.Uuid
+  studentName       String        @map("student_name_snapshot") @db.VarChar(100)
+  payerContact      Json          @map("payer_contact_snapshot")
+  period            String        @db.Char(7)
+  /// VND; the sum of the items.
+  total             Int           @default(0)
+  status            InvoiceStatus @default(DRAFT)
+  issuedAt          DateTime?     @map("issued_at") @db.Timestamptz(6)
+  dueDate           DateTime?     @map("due_date") @db.Date
+  replacesInvoiceId String?       @map("replaces_invoice_id") @db.Uuid
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  items             InvoiceItem[]
+
+  @@index([studentId, period])
+  @@index([tutorId, period])
+  @@map("invoices")
+}
+
+/// A FEE line (one per Session and Student, BR-BI-01; one per Enrollment and month for
+/// Monthly fees) or an ADJUSTMENT correcting an earlier, already issued line (ADR-0002).
+model InvoiceItem {
+  id               String            @id @default(uuid()) @db.Uuid
+  invoiceId        String            @map("invoice_id") @db.Uuid
+  invoice          Invoice           @relation(fields: [invoiceId], references: [id])
+  type             ItemType
+  studentId        String            @map("student_id") @db.Uuid
+  tutorId          String            @map("tutor_id") @db.Uuid
+  classId          String            @map("class_id") @db.Uuid
+  sessionId        String?           @map("session_id") @db.Uuid
+  enrollmentId     String?           @map("enrollment_id") @db.Uuid
+  adjustsItemId    String?           @map("adjusts_item_id") @db.Uuid
+  /// The month the charge is for (may differ from the invoice's period for late lines).
+  servicePeriod    String            @map("service_period") @db.Char(7)
+  attendanceStatus AttendanceStatus? @map("attendance_status")
+  description      String            @db.VarChar(255)
+  /// VND; an ADJUSTMENT may be negative.
+  amount           Int
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([invoiceId])
+  @@index([sessionId, studentId])
+  @@index([enrollmentId])
+  @@map("invoice_items")
+}

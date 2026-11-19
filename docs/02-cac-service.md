@@ -220,6 +220,11 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 - **Hóa đơn tháng** (`MONTHLY`): `DRAFT` trong tháng, chốt ngày 1, hạn ngày 10.
 - **Hóa đơn ghi danh** (`ENROLLMENT`): tạo khi nhận `StudentEnrolled` của lớp `MONTHLY`, `ISSUED` ngay với phí tháng đầu theo tỉ lệ, hạn 7 ngày (BR-BI-06). Hóa đơn tháng sau không lặp lại dòng phí đã thu ở đây.
 
+**Cách tính phí trên hóa đơn tháng:**
+- Lớp `PER_SESSION`: mỗi `AttendanceRecorded` tính phí của kỳ chứa buổi học (`fee_policies`) cho `PRESENT`, `LATE`, và `ABSENT` nếu lớp bật `charge_absent`; `EXCUSED` không tính. Mỗi (buổi, học sinh) tối đa một dòng `FEE` (BR-BI-01), nên event gửi trùng không tạo thêm dòng. Học sinh `DROPPED` vẫn bị tính các buổi đã học (BR-BI-09).
+- Sửa điểm danh (`AttendanceCorrected`): nếu dòng phí còn trên hóa đơn `DRAFT` thì sửa / xóa ngay dòng đó; nếu hóa đơn đã phát hành thì phần chênh lệch thành dòng `ADJUSTMENT` (có thể âm, `adjusts_item_id` trỏ dòng gốc) trên hóa đơn `DRAFT` kế tiếp. Điểm danh đến sau khi đã chốt (buổi `MISSED` điểm danh bổ sung) được tính ở hóa đơn `DRAFT` kế tiếp, `service_period` vẫn là tháng của buổi học.
+- Lớp `MONTHLY`: điểm danh không sinh phí. Khi chốt tháng, mỗi ghi danh có một dòng phí cố định; vào / rời giữa tháng thì tính theo tỉ lệ số buổi trong `session_calendar` (ngày rời lớp không tính). Tháng đã được hóa đơn ghi danh thu thì bỏ qua (`UNIQUE(enrollment_id, service_period)`).
+
 Hóa đơn đã `ISSUED` không bao giờ bị sửa. Sửa sai được ghi thành dòng `ADJUSTMENT` trên hóa đơn `DRAFT` kế tiếp ([ADR-0002](adr/0002-immutable-invoices-with-adjustments.md)). Trạng thái hóa đơn luôn suy ra từ các khoản `PAYMENT` và `REVERSAL`.
 
 **Phát event:** `InvoiceIssued` (kèm `kind`), `PaymentReceived` (kèm `invoiceKind`, `enrollmentId`, `invoiceStatus`), `InvoiceOverdue`
