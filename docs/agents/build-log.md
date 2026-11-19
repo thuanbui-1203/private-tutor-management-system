@@ -139,3 +139,22 @@ measure and left to the user.
     test now opens the invitation while another user is still signed in.
   - Gate: format, lint, 9/9 builds, unit tests; `tms-frontend` image builds (contracts built
     first) and serves `/`, `/login`, `/register`, `/tutor`, `/invite/x` with 200.
+- **#23 group 1 merged** as PR #44.
+- **#23 group 2 (Tutor: Students, Classes, enrollment)** on `feat/23-frontend-students-classes`:
+  - Read the real request/response shapes from student-service and class-service first
+    (schemas, `viewFor`, enrollment errors, what class-service does on each Student status)
+    so screen texts describe what the backend actually does.
+  - Screens:
+    - Students: list with search, status filter and paging; create with Parents (the
+      minor-needs-primary-Parent rule is checked before sending); detail with payer, private
+      note, edit, status change behind a confirmation that explains the effect, invitation
+      resend, Parents, Classes.
+    - Classes: list, create, detail with the current fee and its start period; a fee change
+      tells the Tutor it applies from the next period.
+    - Enrollment: the 201 ACTIVE, 201 AWAITING_PAYMENT (deadline in Vietnam time), 202
+      PENDING and 409 outcomes; pause, resume and withdraw; closing a Class lists its
+      consequences first.
+  - Next.js only allows certain exports from page files, so helpers live in `src/lib/rules.ts`
+    and `src/components/badges.tsx`. The menu highlights a role home only on itself.
+  - 11 new browser tests (25 total, stable over two runs); mutation checks 8/8 caught. One
+    mutation pattern broke on shell quoting and was rewritten as "the dialog never opens".

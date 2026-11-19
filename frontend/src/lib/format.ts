@@ -49,3 +49,16 @@ export function addDays(date: string, days: number): string {
   const [y, m, d] = date.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
+
+/** Whole years between a birth date and today (both Vietnam calendar dates). */
+export function ageOn(dob: string, today = todayVn()): number {
+  const [by, bm, bd] = dob.split('-').map(Number);
+  const [ty, tm, td] = today.split('-').map(Number);
+  return ty - by - (tm < bm || (tm === bm && td < bd) ? 1 : 0);
+}
+
+/** `YYYY-MM` of the month after `period`. */
+export function nextPeriod(period: string): string {
+  const [y, m] = period.split('-').map(Number);
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+}
