@@ -34,17 +34,20 @@ export class LedgerService {
   }
 
   /**
-   * The Student's DRAFT Monthly invoice that can still take lines for `period`: the one for
-   * that period if it is still a draft, otherwise the first later period whose invoice is not
-   * issued yet (created on demand). Never returns an issued invoice (ADR-0002).
+   * The Student's DRAFT Monthly invoice that can still take lines for `period`: that period's
+   * draft, or (once the period is closed or its invoice issued) the first later open period's,
+   * created on demand. Never returns an issued invoice (ADR-0002).
    */
   async openDraft(tx: Tx, studentId: string, period: string): Promise<Invoice> {
     for (let p = period; ; p = nextPeriod(p)) {
-      const existing = await tx.invoice.findFirst({
-        where: { studentId, period: p, kind: 'MONTHLY', status: { not: 'VOID' } },
+      const invoices = await tx.invoice.findMany({
+        where: { studentId, period: p, kind: 'MONTHLY' },
       });
-      if (existing?.status === 'DRAFT') return existing;
-      if (!existing) return this.createDraft(tx, studentId, p);
+      const draft = invoices.find((i) => i.status === 'DRAFT');
+      if (draft) return draft;
+      if (invoices.some((i) => i.status !== 'VOID')) continue; // issued (or its replacement)
+      if (await tx.periodClose.findUnique({ where: { period: p } })) continue;
+      return this.createDraft(tx, studentId, p);
     }
   }
 

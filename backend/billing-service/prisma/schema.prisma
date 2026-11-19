@@ -158,6 +158,7 @@ model Invoice {
   issuedAt          DateTime?     @map("issued_at") @db.Timestamptz(6)
   dueDate           DateTime?     @map("due_date") @db.Date
   replacesInvoiceId String?       @map("replaces_invoice_id") @db.Uuid
+  voidReason        String?       @map("void_reason") @db.VarChar(500)
   createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
   items             InvoiceItem[]
@@ -176,7 +177,8 @@ model InvoiceItem {
   type             ItemType
   studentId        String            @map("student_id") @db.Uuid
   tutorId          String            @map("tutor_id") @db.Uuid
-  classId          String            @map("class_id") @db.Uuid
+  /// Null only for balance carried between months (no single Class).
+  classId          String?           @map("class_id") @db.Uuid
   sessionId        String?           @map("session_id") @db.Uuid
   enrollmentId     String?           @map("enrollment_id") @db.Uuid
   adjustsItemId    String?           @map("adjusts_item_id") @db.Uuid
@@ -186,6 +188,9 @@ model InvoiceItem {
   description      String            @db.VarChar(255)
   /// VND; an ADJUSTMENT may be negative.
   amount           Int
+  /// Copied onto a replacement invoice (void-and-replace): the copy counts, this row no longer
+  /// does. Lines of an invoice voided for a zero total still count (they net to zero).
+  superseded       Boolean           @default(false)
   createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -193,4 +198,23 @@ model InvoiceItem {
   @@index([sessionId, studentId])
   @@index([enrollmentId])
   @@map("invoice_items")
+}
+
+/// Months already closed (00:00 on the 1st): no new draft is opened for them; late charges
+/// go to the next open month.
+model PeriodClose {
+  period   String   @id @db.Char(7)
+  closedAt DateTime @default(now()) @map("closed_at") @db.Timestamptz(6)
+
+  @@map("period_closes")
+}
+
+/// Overdue reminders already sent (BR-BI-03: due + 1, + 5, + 10 days), so a re-run sends none twice.
+model InvoiceReminder {
+  invoiceId   String   @map("invoice_id") @db.Uuid
+  daysOverdue Int      @map("days_overdue") @db.SmallInt
+  sentAt      DateTime @default(now()) @map("sent_at") @db.Timestamptz(6)
+
+  @@id([invoiceId, daysOverdue])
+  @@map("invoice_reminders")
 }

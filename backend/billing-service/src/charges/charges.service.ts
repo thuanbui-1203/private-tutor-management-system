@@ -77,7 +77,7 @@ export class ChargesService implements OnModuleInit {
       where: {
         sessionId: a.sessionId,
         studentId: a.studentId,
-        invoice: { status: { not: 'VOID' } },
+        superseded: false,
       },
       include: { invoice: true },
     });
@@ -153,7 +153,12 @@ export class ChargesService implements OnModuleInit {
         if (!policy || policy.feeType !== 'MONTHLY') return 0;
         await this.ledger.lockStudent(tx, e.studentId);
         const billed = await tx.invoiceItem.findFirst({
-          where: { enrollmentId: e.enrollmentId, servicePeriod: period, type: 'FEE' },
+          where: {
+            enrollmentId: e.enrollmentId,
+            servicePeriod: period,
+            type: 'FEE',
+            superseded: false,
+          },
         });
         if (billed) return 0;
         const amount = await this.prorate(tx, e.classId, policy.feeAmount, period, from, to);
