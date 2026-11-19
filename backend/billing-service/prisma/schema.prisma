@@ -32,3 +32,67 @@ model ProcessedEvent {
 
   @@map("processed_events")
 }
+
+enum FeeType {
+  PER_SESSION
+  MONTHLY
+}
+
+enum StudentStatus {
+  ACTIVE
+  PAUSED
+  GRADUATED
+  DROPPED
+}
+
+enum CalendarStatus {
+  SCHEDULED
+  CANCELLED
+  RESCHEDULED
+}
+
+/// Fee history per Class, from ClassCreated / ClassUpdated. A row applies from its
+/// period on, until a later row (BR-CL-04: a fee change applies from the next period).
+model FeePolicy {
+  classId       String   @map("class_id") @db.Uuid
+  /// YYYY-MM: the first period this fee applies to.
+  effectiveFrom String   @map("effective_from") @db.Char(7)
+  tutorId       String   @map("tutor_id") @db.Uuid
+  feeType       FeeType  @map("fee_type")
+  /// VND, integer.
+  feeAmount     Int      @map("fee_amount")
+  /// BR-BI-08: whether ABSENT is charged (per Class).
+  chargeAbsent  Boolean  @map("charge_absent")
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([classId, effectiveFrom])
+  @@map("fee_policies")
+}
+
+/// Student name and Payer contact as Billing prints them on Invoices
+/// (StudentCreated / StudentUpdated / StudentStatusChanged).
+model StudentSnapshot {
+  studentId    String        @id @map("student_id") @db.Uuid
+  tutorId      String        @map("tutor_id") @db.Uuid
+  fullName     String        @map("full_name") @db.VarChar(100)
+  /// { name, email?, phone? }
+  payerContact Json          @map("payer_contact")
+  status       StudentStatus @default(ACTIVE)
+  updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("student_snapshots")
+}
+
+/// Local copy of Sessions (SessionScheduled / SessionCancelled / SessionRescheduled), used
+/// to prorate Monthly fees by Session count (BR-BI-05, BR-BI-06); no call to Schedule.
+model SessionCalendar {
+  sessionId String         @id @map("session_id") @db.Uuid
+  classId   String         @map("class_id") @db.Uuid
+  /// Local Vietnam date of the Session.
+  date      DateTime       @db.Date
+  status    CalendarStatus @default(SCHEDULED)
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([classId, date])
+  @@map("session_calendar")
+}
