@@ -106,6 +106,7 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 | GET | `/parents/me/children` | Danh sách con của phụ huynh đang đăng nhập | PARENT |
 | POST | `/parents`, PATCH `/parents/{id}` | Quản lý phụ huynh (đổi liên hệ của phụ huynh chính → phát lại `StudentUpdated`) | TUTOR, ADMIN |
 | GET | `/internal/students/{id}` | DTO `InternalStudentResponse` cho class-service | Nội bộ |
+| GET | `/internal/students/{id}/access?userId=` | Quan hệ của người dùng với học sinh (`tutor`, `primary-parent`, `secondary-parent`, `self` hoặc null), để class / schedule / billing áp cùng quy tắc xem | Nội bộ |
 
 **Quy tắc đã cài đặt:**
 - Dưới 18 tuổi (tính theo ngày ở Việt Nam) bắt buộc có phụ huynh chính và người thanh toán là phụ huynh chính (BR-ST-04, BR-ST-05); đủ 18 tuổi có thể tự thanh toán nhưng khi đó phải có email; đủ 18 tuổi không tự đổi người thanh toán. Vi phạm → 422.
@@ -135,8 +136,8 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 | GET | `/classes/{id}/students` | Học sinh đang giữ chỗ hoặc tạm nghỉ trong lớp | TUTOR (chủ sở hữu), ADMIN |
 | GET | `/internal/tutors/{id}/open-classes` | Lớp đang mở của giáo viên, cho identity-service trước khi vô hiệu hóa (BR-CL-08) | Nội bộ |
 | POST | `/classes/{id}/enrollments` | Ghi danh học sinh. Trả `201` với `status = ACTIVE` (lớp `PER_SESSION`) hoặc `AWAITING_PAYMENT` (lớp `MONTHLY`); trả `202` với `PENDING` khi Student Service không phản hồi | TUTOR, ADMIN |
-| PATCH | `/classes/{id}/enrollments/{eid}` | Tạm dừng / rút khỏi lớp | TUTOR, ADMIN |
-| GET | `/students/{studentId}/classes` | Các lớp của một học sinh | TUTOR, PARENT, STUDENT |
+| PATCH | `/classes/{id}/enrollments/{eid}` | `status`: `PAUSED` (từ ACTIVE), `ACTIVE` (từ PAUSED), `WITHDRAWN` (lý do `REQUESTED`, phát `StudentWithdrawn`); chuyển khác → 409 | TUTOR (chủ sở hữu), ADMIN |
+| GET | `/students/{studentId}/classes` | Các lớp của một học sinh; phụ huynh / học sinh được kiểm tra qua student-service `GET /internal/students/{id}/access` | TUTOR (lớp của mình), ADMIN, PARENT (con), STUDENT (bản thân) |
 
 **Ghi danh lớp `MONTHLY`** ([sơ đồ Saga](diagrams/07-sequence-enrollment-saga.puml)):
 - Ghi danh tạo ở trạng thái `AWAITING_PAYMENT` với `payment_deadline = now + 7 ngày` (BR-CL-07). Học sinh vẫn được vào roster và đi học trong thời gian này.

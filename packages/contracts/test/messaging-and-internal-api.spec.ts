@@ -76,3 +76,19 @@ describe('internal API DTOs', () => {
     });
   });
 });
+
+describe('student access DTO', () => {
+  it('round-trips and allows a null relation', async () => {
+    const { InternalStudentAccessResponse } = await import('../src');
+    const value = {
+      studentId: ids.student,
+      userId: ids.user,
+      relation: 'secondary-parent' as const,
+    };
+    expect(InternalStudentAccessResponse.parse(JSON.parse(JSON.stringify(value)))).toEqual(value);
+    expect(InternalStudentAccessResponse.parse({ ...value, relation: null }).relation).toBeNull();
+    expect(InternalStudentAccessResponse.safeParse({ ...value, relation: 'admin' }).success).toBe(
+      false,
+    );
+  });
+});
