@@ -141,6 +141,16 @@ export class StudentsService {
     };
   }
 
+  /** GET /students/me: the Student linked to this account (after accepting their Invitation). */
+  async me(actor: AuthUser) {
+    const student = await this.prisma.student.findFirst({
+      where: { userId: actor.id, anonymisedAt: null },
+      include: WITH_PARENTS,
+    });
+    if (!student) throw new NotFoundException('no Student is linked to this account');
+    return viewFor(student, 'self');
+  }
+
   async get(actor: AuthUser, id: string) {
     const { student, relation } = await this.visible(actor, id);
     return viewFor(student, relation);

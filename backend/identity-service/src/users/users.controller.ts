@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -24,6 +25,11 @@ const UserChangeBody = z
   .refine((c) => c.role !== undefined || c.status !== undefined, {
     message: 'give a role and / or a status',
   });
+
+const UserQuery = z.object({
+  role: Role.optional(),
+  status: z.enum(['PENDING', 'ACTIVE', 'DISABLED']).optional(),
+});
 
 @ApiTags('users')
 @Controller()
@@ -53,6 +59,13 @@ export class UsersController {
   @Get('users/me')
   me(@CurrentUser() user: AuthUser): Promise<UserView> {
     return this.users.findById(user.id);
+  }
+
+  /** Admin: users by role / status (e.g. the Tutors list), newest first. */
+  @Roles('ADMIN')
+  @Get('users')
+  list(@Query(new ZodBody(UserQuery)) query: z.infer<typeof UserQuery>): Promise<UserView[]> {
+    return this.users.list(query);
   }
 
   @Roles('ADMIN')

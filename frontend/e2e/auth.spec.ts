@@ -28,12 +28,20 @@ test('a wrong password shows a clear message and stays on the sign-in page', asy
 
 test('each role lands on its own home', async ({ page }) => {
   for (const [role, path, heading] of [
-    ['PARENT', '/parent', 'Tổng quan phụ huynh'],
-    ['STUDENT', '/student', 'Tổng quan học sinh'],
-    ['ADMIN', '/admin', 'Tổng quan quản trị'],
+    ['PARENT', '/parent', 'Lịch học của An'],
+    ['STUDENT', '/student', 'Lịch học của An'],
+    ['ADMIN', '/admin', 'Giáo viên'],
   ] as const) {
     const user = await createUser(role);
-    await stubApi(page, { 'GET /users/me': { body: meOf(user) } });
+    const an = { id: 'st1', fullName: 'An', parents: [], status: 'ACTIVE', dob: '2012-01-01' };
+    await stubApi(page, {
+      'GET /users/me': { body: meOf(user) },
+      'GET /users': { body: [] },
+      'GET /parents/me/children': { body: [an] },
+      'GET /students/me': { body: an },
+      'GET /students/:id/classes': { body: [] },
+      'GET /sessions': { body: [] },
+    });
     await signIn(page, user);
     await expect(page).toHaveURL(new RegExp(`${path}$`));
     await expect(page.getByRole('heading', { name: heading })).toBeVisible();

@@ -35,6 +35,13 @@ export class InvoicesController {
     return this.lifecycle.voidAndReplace(actor, id, body);
   }
 
+  /** One Student's issued Invoices, for the Payer's billing screen. */
+  @Get('students/:id/invoices')
+  @Roles('TUTOR', 'ADMIN', 'PARENT', 'STUDENT')
+  ofStudent(@CurrentUser() actor: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.invoices.ofStudent(actor, id);
+  }
+
   /** The Enrollment invoice of a Monthly-fee Enrollment (BR-BI-06). */
   @Get('enrollments/:enrollmentId/invoice')
   @Roles('TUTOR', 'ADMIN', 'PARENT', 'STUDENT')

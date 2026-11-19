@@ -61,6 +61,18 @@ export class UsersService {
     }
   }
 
+  async list(query: { role?: User['role']; status?: User['status'] }): Promise<UserView[]> {
+    const rows = await this.prisma.user.findMany({
+      where: {
+        ...(query.role && { role: query.role }),
+        ...(query.status && { status: query.status }),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+    return rows.map(toView);
+  }
+
   async findById(id: string): Promise<UserView> {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('user not found');
