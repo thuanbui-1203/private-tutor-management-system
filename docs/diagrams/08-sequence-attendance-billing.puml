@@ -16,17 +16,17 @@ participant "Academic Service" as Ac
 participant "Notification Service" as No
 actor "Phụ huynh" as P
 
-U -> GW : POST /sessions/{id}/attendance\n[{studentId, status}]
+U -> GW : PUT /sessions/{id}/attendance\n[{studentId, status}]
 GW -> Sc : forward
 Sc -> ScDB : SELECT session (status, tutor_id)
-alt Session đã COMPLETED / CANCELLED
+alt Chưa đến giờ học / đã hủy / quá 48h sau giờ kết thúc
   Sc --> GW : 409 Conflict
-  GW --> U : "Buổi học đã đóng"
+  GW --> U : "Buổi học chưa mở hoặc đã khóa"
 else Hợp lệ
   Sc -> ScDB : BEGIN
   Sc -> ScDB : INSERT attendances
   Sc -> ScDB : UPDATE session.status = COMPLETED
-  Sc -> ScDB : INSERT outbox_events (AttendanceRecorded x N)
+  Sc -> ScDB : INSERT outbox_events (AttendanceRecorded x N,\nhoặc AttendanceCorrected cho dòng đổi trạng thái khi sửa)
   Sc -> ScDB : COMMIT
   Sc --> GW : 200 OK
   GW --> U : "Đã lưu điểm danh"

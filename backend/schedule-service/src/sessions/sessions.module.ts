@@ -38,6 +38,6 @@ class SessionJobs implements OnApplicationBootstrap, OnApplicationShutdown {
   imports: [SchedulesModule],
   controllers: [SessionsController],
   providers: [SessionsService, StudentClient, SessionJobs],
-  exports: [SessionsService],
+  exports: [SessionsService, StudentClient],
 })
 export class SessionsModule {}

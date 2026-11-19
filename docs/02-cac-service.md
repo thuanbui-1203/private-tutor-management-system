@@ -167,8 +167,9 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 | POST | `/sessions/{id}/start` | Mở buổi học (`SCHEDULED` → `IN_PROGRESS`), từ 15 phút trước giờ bắt đầu đến giờ kết thúc | TUTOR, ADMIN |
 | POST | `/sessions/{id}/cancel` | Hủy buổi kèm `reason` (từ `SCHEDULED`, `IN_PROGRESS`, hoặc `MISSED` trong 48h sau giờ kết thúc), phát `SessionCancelled`, không tính phí (BR-SC-04) | TUTOR, ADMIN |
 | POST | `/sessions/{id}/reschedule` | Dời buổi `SCHEDULED` sang giờ mới: buổi cũ → `RESCHEDULED`, tạo buổi mới (`makeup_of` = buổi cũ), phát **một** `SessionRescheduled` (không phát `SessionCancelled` / `SessionScheduled`); kiểm tra trùng giờ, bỏ qua chính buổi cũ | TUTOR, ADMIN |
-| PUT | `/sessions/{id}/attendance` | Lưu / sửa điểm danh (≤ 48h) | TUTOR |
-| GET | `/students/{id}/attendance?month=` | Lịch sử chuyên cần | TUTOR, PARENT, STUDENT |
+| GET | `/sessions/{id}/attendance` | Phiếu điểm danh: danh sách lớp đúng ngày của buổi (tên, trạng thái hiện tại) và hạn sửa | TUTOR, ADMIN |
+| PUT | `/sessions/{id}/attendance` | Lưu điểm danh: `records` gồm đúng một dòng cho mỗi học sinh trong danh sách lớp ngày hôm đó (`PRESENT`, `LATE`, `EXCUSED`, `ABSENT`, kèm `note`); thiếu / thừa học sinh → 422. Lần đầu: buổi → `COMPLETED`, phát `AttendanceRecorded` mỗi học sinh. Các lần sau là sửa: phát `AttendanceCorrected` cho dòng đổi trạng thái. Chưa đến giờ học, buổi đã hủy / dời, hoặc quá 48h sau giờ kết thúc (kể cả buổi `MISSED`) → 409 (BR-SC-02, BR-SC-03, BR-SC-09) | TUTOR, ADMIN |
+| GET | `/students/{id}/attendance?month=YYYY-MM` | Lịch sử chuyên cần một tháng (mặc định tháng này) kèm tổng theo trạng thái. Chỉ có dòng của chính học sinh đó, không lộ học sinh khác trong lớp nhóm (BR-SC-10); giáo viên chỉ thấy buổi của mình | TUTOR, ADMIN, PARENT, STUDENT |
 | GET | `/calendar/{token}.ics` | Lịch dạng iCal để đồng bộ Google / Apple Calendar | Token riêng |
 
 **Phát event:** `SessionScheduled`, `SessionCancelled`, `SessionRescheduled` (dời buổi: thay cho cặp hủy + tạo mới), `AttendanceRecorded`, `AttendanceCorrected`, `EnrollmentConfirmed`
