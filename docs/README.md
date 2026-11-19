@@ -10,6 +10,7 @@ Hệ thống quản lý học sinh quy mô nhỏ cho gia sư / giáo viên dạy
 | 2 | [02-cac-service.md](02-cac-service.md) | Danh mục service, port, DB, API endpoint, event phát / nhận, quy ước RabbitMQ, cấu trúc thư mục |
 | 3 | [03-cach-chay.md](03-cach-chay.md) | Yêu cầu môi trường, chạy bằng Docker Compose, biến môi trường, chạy riêng một service, kiểm thử, xử lý sự cố |
 | 4 | [04-tich-hop-ben-ngoai.md](04-tich-hop-ben-ngoai.md) | Email, thanh toán / VietQR, Zalo, SMS, push, lịch, lưu trữ, PDF, hóa đơn điện tử, AI, giám sát |
+| 5 | [05-phan-cong-doc-tai-lieu.md](05-phan-cong-doc-tai-lieu.md) | Chia tài liệu cho 3 người đọc theo nhóm service: phần chung, phần riêng, câu hỏi tự kiểm tra, các luồng giao nhau |
 
 ## Quyết định kiến trúc (ADR)
 
