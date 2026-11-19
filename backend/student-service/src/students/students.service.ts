@@ -234,7 +234,10 @@ export class StudentsService {
               ? 'primary-parent'
               : 'secondary-parent'
             : null;
-    return { studentId: id, userId, relation };
+    const isPayer =
+      (relation === 'primary-parent' && student.payer === 'PRIMARY_PARENT') ||
+      (relation === 'self' && student.payer === 'SELF');
+    return { studentId: id, userId, relation, isPayer };
   }
 
   /** Re-publishes StudentUpdated for every Student whose Payer contact may have changed. */

@@ -315,16 +315,35 @@ describe('Student: Student and Parent records (#9)', () => {
     const { body: s } = await minorWithParents([parent(true, lan), parent(false, binh)], {
       email: kid,
     }).expect(201);
-    const relationOf = async (userId: string) =>
-      (await http().get(`/internal/students/${s.id}/access?userId=${userId}`).expect(200)).body
-        .relation;
-    expect(await relationOf(tutor['x-user-id'])).toBe('tutor');
-    expect(await relationOf((await activate('PARENT', lan))['x-user-id'])).toBe('primary-parent');
-    expect(await relationOf((await activate('PARENT', binh))['x-user-id'])).toBe(
+    const accessOf = async (userId: string, id = s.id) => {
+      const { body } = await http()
+        .get(`/internal/students/${id}/access?userId=${userId}`)
+        .expect(200);
+      return [body.relation, body.isPayer];
+    };
+    // A minor: the primary Parent pays (BR-ST-05).
+    expect(await accessOf(tutor['x-user-id'])).toEqual(['tutor', false]);
+    expect(await accessOf((await activate('PARENT', lan))['x-user-id'])).toEqual([
+      'primary-parent',
+      true,
+    ]);
+    expect(await accessOf((await activate('PARENT', binh))['x-user-id'])).toEqual([
       'secondary-parent',
-    );
-    expect(await relationOf((await activate('STUDENT', kid))['x-user-id'])).toBe('self');
-    expect(await relationOf(randomUUID())).toBeNull();
+      false,
+    ]);
+    expect(await accessOf((await activate('STUDENT', kid))['x-user-id'])).toEqual(['self', false]);
+    expect(await accessOf(randomUUID())).toEqual([null, false]);
+    // An adult paying for themselves.
+    const hoa = `hoa.${randomUUID().slice(0, 6)}@example.com`;
+    const { body: adult } = await createStudent({
+      fullName: 'Lê Hoa',
+      dob: ADULT_DOB,
+      email: hoa,
+    }).expect(201);
+    expect(await accessOf((await activate('STUDENT', hoa))['x-user-id'], adult.id)).toEqual([
+      'self',
+      true,
+    ]);
     await http()
       .get(`/internal/students/${randomUUID()}/access?userId=${randomUUID()}`)
       .expect(404);

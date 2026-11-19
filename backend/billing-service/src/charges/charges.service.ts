@@ -183,6 +183,7 @@ export class ChargesService implements OnModuleInit {
   /**
    * The Monthly fee for the days [from, to] of `period`: the whole fee for the whole month,
    * otherwise fee × Sessions in [from, to] / Sessions in the month (BR-BI-05, BR-BI-06).
+   * When no Session of that month is known yet (a brand-new Class), by calendar days instead.
    */
   async prorate(
     db: Tx | PrismaService,
@@ -191,20 +192,20 @@ export class ChargesService implements OnModuleInit {
     period: string,
     from: string,
     to: string,
-  ): Promise<{ value: number; note: string; sessions?: number; ofSessions?: number }> {
+  ): Promise<{ value: number; note: string }> {
     const first = `${period}-01`;
     const last = lastDayOf(period);
     if (from <= first && to >= last) return { value: fee, note: '' };
+    if (from > to) return { value: 0, note: '' };
     const [part, whole] = await Promise.all([
       this.copies.countSessions(db, classId, from, to),
       this.copies.countSessions(db, classId, first, last),
     ]);
-    if (whole === 0) return { value: 0, note: '', sessions: 0, ofSessions: 0 };
-    return {
-      value: Math.round((fee * part) / whole),
-      note: ` (${part}/${whole} buổi)`,
-      sessions: part,
-      ofSessions: whole,
-    };
+    if (whole > 0) {
+      return { value: Math.round((fee * part) / whole), note: ` (${part}/${whole} buổi)` };
+    }
+    const days = (a: string, b: string) => (day(b).getTime() - day(a).getTime()) / 86_400_000 + 1;
+    const [d, of] = [days(from, to), days(first, last)];
+    return { value: Math.round((fee * d) / of), note: ` (${d}/${of} ngày)` };
   }
 }
