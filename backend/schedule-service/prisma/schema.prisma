@@ -33,6 +33,13 @@ model ProcessedEvent {
   @@map("processed_events")
 }
 
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  EXCUSED
+  ABSENT
+}
+
 enum SessionStatus {
   SCHEDULED
   IN_PROGRESS
@@ -94,6 +101,7 @@ model Session {
   cancelReason String?       @map("cancel_reason") @db.VarChar(500)
   createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  attendances  Attendance[]
 
   @@index([tutorId, startsAt])
   @@index([classId, startsAt])
@@ -112,4 +120,21 @@ model RosterEntry {
 
   @@id([classId, studentId])
   @@map("class_roster_view")
+}
+
+/// One Student's Attendance at one Session (BR-SC-02/03/08/09). Corrections overwrite it
+/// in place; the history lives in the AttendanceCorrected events Billing receives.
+model Attendance {
+  sessionId  String           @map("session_id") @db.Uuid
+  session    Session          @relation(fields: [sessionId], references: [id])
+  studentId  String           @map("student_id") @db.Uuid
+  status     AttendanceStatus
+  note       String?          @db.VarChar(500)
+  recordedBy String           @map("recorded_by") @db.Uuid
+  recordedAt DateTime         @default(now()) @map("recorded_at") @db.Timestamptz(6)
+  updatedAt  DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([sessionId, studentId])
+  @@index([studentId])
+  @@map("attendances")
 }
