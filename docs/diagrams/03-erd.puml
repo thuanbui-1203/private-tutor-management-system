@@ -197,12 +197,23 @@ package "academic_db (MongoDB)" #F8F5FF {
 package "billing_db" #FFF8EE {
   entity fee_policies {
     * class_id : UUID <<PK, ref classes>>
+    * effective_from : CHAR(7) <<PK>> (YYYY-MM)
     --
+    * tutor_id : UUID <<ref users>>
     * fee_type : ENUM(PER_SESSION, MONTHLY)
     * fee_amount : DECIMAL(12,0)
     * charge_absent : BOOLEAN
-    effective_from : CHAR(7) (YYYY-MM)
-    <i>(bản sao từ ClassCreated/Updated)</i>
+    <i>(bản sao từ ClassCreated/Updated; giữ lịch sử,</i>
+    <i>kỳ P dùng dòng có effective_from <= P mới nhất)</i>
+  }
+  entity student_snapshots {
+    * student_id : UUID <<PK, ref students>>
+    --
+    * tutor_id : UUID <<ref users>>
+    * full_name : VARCHAR(100)
+    * payer_contact : JSONB
+    * status : ENUM(ACTIVE, PAUSED, GRADUATED, DROPPED)
+    <i>(bản sao từ StudentCreated/Updated/StatusChanged)</i>
   }
   entity session_calendar {
     * session_id : UUID <<PK, ref sessions>>

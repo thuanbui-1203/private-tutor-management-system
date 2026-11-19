@@ -199,9 +199,9 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 
 ## 8. Billing Service
 
-**Dữ liệu:** `fee_policies`, `session_calendar`, `invoices`, `invoice_items`, `payments`, `processed_events`, `outbox_events`
+**Dữ liệu:** `fee_policies` (lịch sử phí theo kỳ), `student_snapshots` (tên, người thanh toán, trạng thái), `session_calendar`, `invoices`, `invoice_items`, `payments`, `processed_events`, `outbox_events`
 
-`session_calendar` là bản sao cục bộ các buổi học (từ `SessionScheduled` / `SessionCancelled` / `SessionRescheduled`). Billing dùng nó để tính phí `MONTHLY` theo tỉ lệ số buổi khi vào / rời lớp giữa tháng (BR-BI-05, BR-BI-06), không gọi đồng bộ sang Schedule.
+`session_calendar` là bản sao cục bộ các buổi học (từ `SessionScheduled` / `SessionCancelled` / `SessionRescheduled`). Billing dùng nó để tính phí `MONTHLY` theo tỉ lệ số buổi khi vào / rời lớp giữa tháng (BR-BI-05, BR-BI-06), không gọi đồng bộ sang Schedule. `SessionRescheduled` đánh dấu buổi cũ `RESCHEDULED` và thêm buổi mới, nên buổi bị dời chỉ được đếm một lần; buổi `CANCELLED` không được đếm, buổi bù được đếm. Mọi bản sao được cập nhật từ event, xử lý lại một event không làm thay đổi dữ liệu; event đến trước bản ghi nó cần (ví dụ `StudentStatusChanged` trước `StudentCreated`) được thử lại sau.
 
 | Method | Endpoint | Mô tả | Quyền |
 |---|---|---|---|
