@@ -249,6 +249,7 @@ package "billing_db" #FFF8EE {
     issued_at : TIMESTAMP
     due_date : DATE
     replaces_invoice_id : UUID <<FK invoices>>
+    void_reason : VARCHAR(500)
     ..
     UNIQUE(student_id, period) WHERE kind = MONTHLY
      AND status <> VOID
@@ -261,7 +262,7 @@ package "billing_db" #FFF8EE {
     * type : ENUM(FEE, ADJUSTMENT)
     * student_id : UUID <<ref students>>
     * tutor_id : UUID <<ref users>>
-    * class_id : UUID <<ref classes>>
+    class_id : UUID <<ref classes>> (null: số dư chuyển kỳ)
     session_id : UUID <<ref sessions>>
     enrollment_id : UUID <<ref enrollments>>
     adjusts_item_id : UUID <<FK invoice_items>>
@@ -269,9 +270,10 @@ package "billing_db" #FFF8EE {
     attendance_status : ENUM(PRESENT, LATE, EXCUSED, ABSENT)
     * description : VARCHAR(255)
     * amount : DECIMAL(12,0) (ADJUSTMENT có thể âm)
+    * superseded : BOOLEAN (đã chép sang hóa đơn thay thế)
     ..
-    UNIQUE(session_id, student_id) WHERE type = FEE
-    UNIQUE(enrollment_id, service_period) WHERE type = FEE
+    UNIQUE(session_id, student_id) WHERE type = FEE AND NOT superseded
+    UNIQUE(enrollment_id, service_period) WHERE type = FEE AND NOT superseded
   }
   entity payments {
     * id : UUID <<PK>>
@@ -285,6 +287,18 @@ package "billing_db" #FFF8EE {
     * recorded_by : UUID <<ref users>>
     ..
     Chỉ INSERT; tổng PAYMENT - REVERSAL <= total
+  }
+  entity period_closes {
+    * period : CHAR(7) <<PK>>
+    --
+    * closed_at : TIMESTAMP
+    <i>(tháng đã chốt: không mở hóa đơn nháp mới)</i>
+  }
+  entity invoice_reminders {
+    * invoice_id : UUID <<PK, FK invoices>>
+    * days_overdue : SMALLINT <<PK>> (1, 5, 10)
+    --
+    * sent_at : TIMESTAMP
   }
   entity processed_events {
     * event_id : UUID <<PK>>

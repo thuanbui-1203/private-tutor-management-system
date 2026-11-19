@@ -107,12 +107,13 @@ title State Diagram - Vòng đời Hóa đơn (Billing Service)
 
 DRAFT --> DRAFT : Thêm invoice_item\n(FEE hoặc ADJUSTMENT)
 DRAFT --> ISSUED : Cron ngày 1 chốt hóa đơn\n/ publish InvoiceIssued (hạn ngày 10)
-DRAFT --> VOID : Không phát sinh phí (total = 0)
+DRAFT --> VOID : Chốt với total = 0 (BR-BI-02)\n[total < 0: chuyển số dư sang kỳ sau rồi VOID]
 
 ISSUED --> PARTIALLY_PAID : Thanh toán < total\n/ publish PaymentReceived
 ISSUED --> PAID : Thanh toán đủ\n/ publish PaymentReceived
-ISSUED --> OVERDUE : Ngày sau due_date\n/ publish InvoiceOverdue
-ISSUED --> VOID : Hủy do sai sót\n/ phát hành hóa đơn thay thế
+ISSUED --> OVERDUE : Ngày sau due_date (job 08:00)\n/ publish InvoiceOverdue (hạn +1, +5, +10)
+ISSUED --> VOID : Hủy do sai sót (chưa thanh toán)\n/ phát hành hóa đơn thay thế (replaces_invoice_id)\n/ publish InvoiceIssued cho hóa đơn mới
+OVERDUE --> VOID : Hủy do sai sót (chưa thanh toán)\n/ phát hành hóa đơn thay thế
 
 PARTIALLY_PAID --> PAID : Thanh toán phần còn lại
 PARTIALLY_PAID --> OVERDUE : Quá due_date

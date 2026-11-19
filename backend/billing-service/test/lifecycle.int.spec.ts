@@ -181,6 +181,20 @@ describe('Billing: monthly close, overdue and void-and-replace (#19)', () => {
     ).toEqual([['2027-03', 'DRAFT', '2027-02']]);
   });
 
+  it('two closes at once (two instances, or overlapping ticks) issue each invoice once', async () => {
+    const racers = [await student(), await student(), await student()];
+    for (const r of racers) await attend(r, '2028-01-12', 'PRESENT');
+    await Promise.all([
+      lifecycle().closeMonth(vn('2028-02-01T00:02:00')),
+      lifecycle().closeMonth(vn('2028-02-01T00:02:00')),
+    ]);
+    for (const r of racers) {
+      const [jan] = await invoicesOf(r);
+      expect(jan).toMatchObject({ period: '2028-01', status: 'ISSUED' });
+      expect(await events('InvoiceIssued', jan.id)).toHaveLength(1);
+    }
+  });
+
   it('a month with more credit than charges carries the balance forward instead of issuing', async () => {
     const studentId = await student();
     const s = await attend(studentId, '2027-04-28', 'PRESENT');
