@@ -11,6 +11,36 @@ datasource db {
   provider = "postgresql"
 }
 
+/// One role per user (BR-AU-01). Mirrors the `role` custom claim on the Firebase account.
+enum Role {
+  ADMIN
+  TUTOR
+  PARENT
+  STUDENT
+}
+
+/// PENDING: invited, not yet activated. DISABLED: Tutor deactivated (BR-CL-08), never deleted.
+/// Lockout after failed logins is Firebase's job (ADR-0004), so there is no LOCKED state.
+enum UserStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+}
+
+/// A person who can sign in. `id` is the user id used everywhere else in the system
+/// (X-User-Id, events, other services' columns); `firebase_uid` never leaves Identity.
+model User {
+  id          String     @id @default(uuid()) @db.Uuid
+  firebaseUid String     @unique @map("firebase_uid")
+  email       String     @unique
+  role        Role
+  status      UserStatus @default(PENDING)
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("users")
+}
+
 /// Outbox (docs/02 §1, @tms/common): events written in the same transaction as the
 /// business change, published by the outbox relay. Same DDL as packages/common/sql/messaging.sql.
 model OutboxEvent {

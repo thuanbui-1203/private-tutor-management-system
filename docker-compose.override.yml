@@ -5,11 +5,12 @@
 # Production-like run without these overrides: `docker compose -f docker-compose.yml up -d`.
 #
 # Docker Desktop on Windows does not forward file-change events from the host into
-# containers, so the watchers poll. src/generated (Prisma client built in the image)
-# stays in an anonymous volume so the host mount does not hide it on a fresh clone.
-# Compose reuses that volume across `up --build`, so after a Prisma schema change run
-#   docker compose up -d --build -V <service>
-# (-V renews anonymous volumes) or the container keeps the old client.
+# containers, so the watchers poll.
+#
+# Services with a database also mount prisma/ and regenerate the Prisma client at
+# every start, into src/generated (an anonymous volume, so the host mount of src/
+# never hides it). After a schema change: run the migration, then
+#   docker compose restart <service>
 
 x-dev-backend: &dev-backend
   build: { target: build }
@@ -27,37 +28,42 @@ services:
 
   identity-service:
     <<: *dev-backend
-    command: pnpm --filter @tms/identity-service dev
+    command: sh -c "pnpm --filter @tms/identity-service prisma:generate && pnpm --filter @tms/identity-service dev"
     volumes:
       - ./backend/identity-service/src:/repo/backend/identity-service/src
+      - ./backend/identity-service/prisma:/repo/backend/identity-service/prisma
       - /repo/backend/identity-service/src/generated
 
   student-service:
     <<: *dev-backend
-    command: pnpm --filter @tms/student-service dev
+    command: sh -c "pnpm --filter @tms/student-service prisma:generate && pnpm --filter @tms/student-service dev"
     volumes:
       - ./backend/student-service/src:/repo/backend/student-service/src
+      - ./backend/student-service/prisma:/repo/backend/student-service/prisma
       - /repo/backend/student-service/src/generated
 
   class-service:
     <<: *dev-backend
-    command: pnpm --filter @tms/class-service dev
+    command: sh -c "pnpm --filter @tms/class-service prisma:generate && pnpm --filter @tms/class-service dev"
     volumes:
       - ./backend/class-service/src:/repo/backend/class-service/src
+      - ./backend/class-service/prisma:/repo/backend/class-service/prisma
       - /repo/backend/class-service/src/generated
 
   schedule-service:
     <<: *dev-backend
-    command: pnpm --filter @tms/schedule-service dev
+    command: sh -c "pnpm --filter @tms/schedule-service prisma:generate && pnpm --filter @tms/schedule-service dev"
     volumes:
       - ./backend/schedule-service/src:/repo/backend/schedule-service/src
+      - ./backend/schedule-service/prisma:/repo/backend/schedule-service/prisma
       - /repo/backend/schedule-service/src/generated
 
   billing-service:
     <<: *dev-backend
-    command: pnpm --filter @tms/billing-service dev
+    command: sh -c "pnpm --filter @tms/billing-service prisma:generate && pnpm --filter @tms/billing-service dev"
     volumes:
       - ./backend/billing-service/src:/repo/backend/billing-service/src
+      - ./backend/billing-service/prisma:/repo/backend/billing-service/prisma
       - /repo/backend/billing-service/src/generated
 
   # In development the frontend runs on the host (`pnpm --filter @tms/frontend dev`,

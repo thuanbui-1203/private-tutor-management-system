@@ -1,5 +1,5 @@
 # Build from the repo root: docker build -f backend/api-gateway/Dockerfile .
-FROM node:22-alpine AS base
+FROM node:24-alpine AS base
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /repo
 
@@ -11,7 +11,7 @@ RUN pnpm install --offline --frozen-lockfile --filter @tms/api-gateway...
 RUN pnpm --filter @tms/api-gateway... build
 RUN pnpm --filter @tms/api-gateway deploy --prod /out
 
-FROM node:22-alpine AS runtime
+FROM node:24-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build --chown=node:node /out .
