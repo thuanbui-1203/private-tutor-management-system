@@ -62,3 +62,29 @@ export function nextPeriod(period: string): string {
   const [y, m] = period.split('-').map(Number);
   return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
 }
+
+/** ISO weekday of a calendar date: 1 = Monday … 7 = Sunday. */
+export function isoWeekday(date: string): number {
+  const [y, m, d] = date.split('-').map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return day === 0 ? 7 : day;
+}
+
+/** Monday of the week containing `date`. */
+export const mondayOf = (date: string) => addDays(date, 1 - isoWeekday(date));
+
+export const WEEKDAY_LABEL: Record<number, string> = {
+  1: 'Thứ Hai',
+  2: 'Thứ Ba',
+  3: 'Thứ Tư',
+  4: 'Thứ Năm',
+  5: 'Thứ Sáu',
+  6: 'Thứ Bảy',
+  7: 'Chủ nhật',
+};
+
+/** Last day of the month of `date`. */
+export function monthEnd(date: string): string {
+  const [y, m] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+}

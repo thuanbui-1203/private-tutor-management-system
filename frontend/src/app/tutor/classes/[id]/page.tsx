@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { EnrollmentBadge } from '@/components/badges';
+import { SchedulesSection } from '@/components/schedules';
 import {
   ActionButton,
   Badge,
@@ -93,6 +94,8 @@ export default function ClassDetailPage() {
               }}
             />
           )}
+
+          <SchedulesSection classId={c.id} open={c.status === 'OPEN'} />
 
           <h2>Danh sách lớp</h2>
           {c.status === 'OPEN' && (

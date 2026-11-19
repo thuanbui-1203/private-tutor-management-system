@@ -102,3 +102,66 @@ export interface StudentClassView {
   paymentDeadline: string | null;
   class: Pick<ClassView, 'id' | 'name' | 'subject' | 'type' | 'feeType' | 'tutorId'>;
 }
+
+export type SessionStatus =
+  'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED' | 'MISSED';
+
+export interface SessionView {
+  id: string;
+  classId: string;
+  scheduleId: string | null;
+  /** Local Vietnam date and times. */
+  date: string;
+  startTime: string;
+  endTime: string;
+  /** The same instants in UTC. */
+  startsAt: string;
+  endsAt: string;
+  status: SessionStatus;
+  makeupOf: string | null;
+  cancelReason: string | null;
+}
+
+export interface ScheduleView {
+  id: string;
+  classId: string;
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  fromDate: string;
+  toDate: string | null;
+  endedAt: string | null;
+}
+
+export interface Conflict {
+  date: string;
+  startTime: string;
+  endTime: string;
+  conflictsWith: { sessionId: string; classId: string; startTime: string; endTime: string };
+}
+
+export interface AttendanceSheet {
+  session: SessionView;
+  editableUntil: string;
+  students: {
+    studentId: string;
+    studentName: string | null;
+    status: AttendanceStatus | null;
+    note: string | null;
+  }[];
+}
+
+export interface AttendanceHistory {
+  studentId: string;
+  month: string;
+  summary: Record<AttendanceStatus, number>;
+  records: {
+    sessionId: string;
+    classId: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    status: AttendanceStatus;
+    note: string | null;
+  }[];
+}

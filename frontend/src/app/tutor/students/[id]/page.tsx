@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
+import { AttendanceHistoryView } from '@/components/attendance-history';
 import { EnrollmentBadge, StudentStatusBadge } from '@/components/badges';
 import {
   ActionButton,
@@ -208,6 +209,12 @@ export default function StudentDetailPage() {
                 </table>
               </div>
             )}
+
+            <h2>Chuyên cần</h2>
+            <AttendanceHistoryView
+              studentId={s.id}
+              classNames={new Map((classes.data ?? []).map((c) => [c.class.id, c.class.name]))}
+            />
 
             <h2>Lớp đang học</h2>
             <Loaded state={classes}>

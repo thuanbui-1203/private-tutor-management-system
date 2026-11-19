@@ -158,3 +158,23 @@ measure and left to the user.
     and `src/components/badges.tsx`. The menu highlights a role home only on itself.
   - 11 new browser tests (25 total, stable over two runs); mutation checks 8/8 caught. One
     mutation pattern broke on shell quoting and was rewritten as "the dialog never opens".
+- **#23 group 2 merged** as PR #45.
+- **#23 group 3 (Tutor: Schedules, calendar, Attendance)** on `feat/23-frontend-schedule`:
+  - Teaching calendar (`/tutor/schedule`): week or month, filter by Class, Sessions grouped
+    by day with their Class and status. Actions: open the Session (only from 15 minutes
+    before the start), take Attendance, cancel with a reason (says nobody is charged, then
+    offers a makeup linked by `makeupOf`), reschedule (a 409 lists the overlapping Session
+    and its Class), and one-off Sessions. A panel lists missed Sessions of the last 3 days
+    for late Attendance before the 48h lock.
+  - Recurring Schedules on the Class page: the BR-SC-07 notice, preview with the Sessions
+    it would create and their overlaps; saving is blocked while there are overlaps unless
+    the Tutor chooses "save and skip N"; ending a Schedule asks first.
+  - Attendance sheet: four statuses per Student plus a note, "the rest are present", one
+    PUT with every Student; correction mode says until when; after 48h the inputs are
+    disabled, there is no save button, and missed Sessions say they are not charged. A 409
+    lock from the API is explained too.
+  - Attendance history (month picker, totals, per-Session rows) on the Student page.
+  - Lint: the React Compiler purity rule rejects `Date.now()` during render; "now" is
+    captured once per card with `useState(Date.now)`.
+  - 9 new browser tests (34 total, stable over two runs, all passed on the first run).
+  - Mutation checks 11/11 caught (save despite overlaps, skip flag never sent, ending without confirmation, makeup without its link, start at any time, no missed panel, unnamed conflicting Class, partial sheet saved, never locked, raw 409 lock text, note dropped).
