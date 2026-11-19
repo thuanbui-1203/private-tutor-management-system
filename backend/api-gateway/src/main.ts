@@ -6,7 +6,7 @@ import { configureApp, DEFAULT_PORT, SERVICE_NAME } from './app.setup';
 
 async function bootstrap(): Promise<void> {
   const logger = new JsonLogger(SERVICE_NAME);
-  const app = await NestFactory.create(AppModule, { logger });
+  const app = await NestFactory.create(AppModule, { logger, bodyParser: false });
   configureApp(app);
   const port = Number(process.env.PORT ?? DEFAULT_PORT);
   await app.listen(port);

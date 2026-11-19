@@ -9,7 +9,8 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "dev": "nest start --watch",
-    "test": "jest"
+    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathIgnorePatterns=.int.spec.ts$",
+    "test:int": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --testRegex=.int.spec.ts$ --runInBand"
   },
   "dependencies": {
     "@nestjs/common": "catalog:",
@@ -18,6 +19,8 @@
     "@nestjs/swagger": "catalog:",
     "@tms/common": "workspace:*",
     "@tms/contracts": "workspace:*",
+    "firebase-admin": "catalog:",
+    "ioredis": "catalog:",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:"
   },
