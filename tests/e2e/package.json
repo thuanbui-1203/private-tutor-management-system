@@ -1,0 +1,25 @@
+{
+  "name": "@tms/e2e-tests",
+  "version": "0.1.0",
+  "private": true,
+  "description": "End-to-end tests (#21): the real stack through the API gateway. Run with `pnpm test:e2e` from the repo root.",
+  "scripts": {
+    "test:e2e": "jest --runInBand"
+  },
+  "devDependencies": {
+    "@types/jest": "catalog:",
+    "@types/node": "catalog:",
+    "jest": "catalog:",
+    "ts-jest": "catalog:",
+    "typescript": "catalog:"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "roots": [
+      "<rootDir>/src"
+    ],
+    "testRegex": "\\.e2e\\.spec\\.ts$",
+    "testTimeout": 120000
+  }
+}

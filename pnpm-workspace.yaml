@@ -2,6 +2,7 @@ packages:
   - backend/*
   - frontend
   - packages/*
+  - tests/*
 
 # Shared dependency versions. Services reference these as "catalog:" so every
 # agent builds against the same versions. Bump here, never in a service.

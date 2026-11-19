@@ -232,3 +232,42 @@ measure and left to the user.
     billing and frontend rebuilt. Live: `/students/me` 404 unlinked,
     `/billing/students/{id}/invoices` 404 unknown, `/users?role=TUTOR` lists 1 tutor,
     frontend `/parent` and `/admin` 200.
+- **#23 merged** (group 5, PR #48); issue #23 closed. Frontend: 49 browser tests.
+- **#21 end-to-end** on `feat/21-e2e`:
+  - Design:
+    - A separate compose project `tms-e2e` (`docker-compose.e2e.yml` overlay): its own
+      databases and broker, production images, every host port moved to 2xxxx and bound
+      to 127.0.0.1 (Compose `!override` / `!reset`).
+    - A Firebase Auth Emulator container (`infra/firebase-emulator`, firebase-tools
+      15.36.0, project `demo-tms`) reached as `firebase-emulator:9099`. This is how the
+      delegated auth decision is implemented: the emulator binds 0.0.0.0 only inside the
+      container, and the host `firebase.json` is unchanged.
+  - Time control: test-only hooks `/internal/test/*`, mounted only when `E2E_HOOKS=true`
+    (set only by the e2e overlay, never routed by the gateway):
+    - class: run the expire-unpaid and reconcile-PENDING jobs at a given instant;
+    - billing: close a month at a given instant, and count `session_calendar`;
+    - schedule: create a Session at any instant (one already under way).
+    Everything else goes through the gateway with real emulator ID tokens.
+  - `pnpm test:e2e` (scripts/e2e.mjs): fresh project → infrastructure → Prisma migrations
+    against `127.0.0.1:25432` → services (healthy) → `tests/e2e` (Jest, new workspace
+    folder `tests/*`) → teardown unless `--keep`.
+  - Problems while bringing it up:
+    1. Compose v5 built through Bake and demanded `--allow=fs.read=<Dockerfile>` when
+       launched straight from Git Bash, but not when launched by pnpm. Ruled out `PWD`,
+       `SHELL`, `_` and the docker binary (same file); the environments differ only in
+       `PATH` and pnpm's own variables. The script now runs Docker through the existing
+       `pnpm compose` wrapper. The emulator image also builds from the repo root like the
+       others.
+    2. Six images built in parallel crashed BuildKit ("rpc error ... EOF", out of memory).
+       Bake ignores `COMPOSE_PARALLEL_LIMIT`, so the script builds one image at a time.
+  - **Result:** all 6 scenarios pass (5 tests; scenarios 1 and 2 share one) on the first
+    run that reached the tests, and again from scratch with the documented `pnpm test:e2e`
+    (5/5 in 30.6s, stack removed afterwards).
+  - Proof the suite can fail: with billing-service stopped on the kept stack, scenario 1
+    fails (no Enrollment invoice); it passes again once billing is back.
+  - The hooks are absent in the normal stack: on the rebuilt dev containers,
+    `POST /internal/test/{jobs,sessions,close-month}` answer 404, and so does
+    `/api/internal/test/jobs` through the gateway.
+  - Gate: format, lint, 9/9 builds, unit tests, 148 integration tests.
+  - Known limit: scenario 4 creates a Session that started 10 minutes ago, so running it
+    between 00:00 and 00:10 Vietnam time puts the Session on the previous day.
