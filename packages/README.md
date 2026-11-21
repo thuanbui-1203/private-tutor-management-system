@@ -46,6 +46,29 @@ const student = await students.get(`/internal/students/${id}`, InternalStudentRe
 // HttpError (4xx) → câu trả lời thật của service kia, không retry
 ```
 
+**Change record (ADR-0005):** mọi thay đổi do người dùng gây ra phải ghi một Change record trong CÙNG transaction:
+
+```ts
+import { recordChange } from '@tms/common';
+
+await prisma.$transaction(async (tx) => {
+  const before = await tx.student.findUniqueOrThrow({ where: { id } });
+  const after = await tx.student.update({ where: { id }, data });
+  await recordChange(tx, {
+    action: 'student.update',
+    entityType: 'Student',
+    entityId: id,
+    before,
+    after,
+  });
+});
+// Người thực hiện và correlation id lấy từ request (AuthGuard); ngoài request là SYSTEM.
+// Chỉ lưu các trường đã đổi; dữ liệu cá nhân (PERSONAL_FIELDS, thêm bằng `personal: [...]`)
+// ghi là '[personal]', bí mật là '[secret]', số tài khoản là '••••1234'.
+```
+
+Bảng `audit_log` (DDL tham chiếu: `common/sql/audit.sql`, chỉ được thêm) nằm trong migration `audit` của từng service; `GET /internal/audit` có sẵn để audit-service đọc.
+
 Có sẵn, không cần viết thêm: `GET /health/live`, `GET /health/ready` (database + broker), `GET /metrics`, header `X-Correlation-Id` đi theo request → log → event, và logger JSON (`JsonLogger`).
 
 **Bảng outbox / processed_events:** đã có trong Prisma schema và migration `messaging` của từng service (DDL tham chiếu: `common/sql/messaging.sql`).

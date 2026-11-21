@@ -10,6 +10,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { Id, Role } from '@tms/contracts';
+import { setCurrentActor } from './correlation';
 
 /** The signed-in user, as forwarded by the API gateway (ADR-0004). */
 export interface AuthUser {
@@ -53,6 +54,7 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('missing or invalid X-User-Id / X-User-Role');
     }
     req.user = { id: id.data, role: role.data };
+    setCurrentActor(req.user);
 
     const allowed = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES_KEY, targets);
     if (allowed && !allowed.includes(role.data)) {

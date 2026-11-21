@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import type { EventType, ServiceName } from '@tms/contracts';
+import { AuditController } from './audit';
 import { AuthGuard } from './auth';
 import { correlationMiddleware } from './correlation';
 import type { Database } from './database';
@@ -38,7 +39,8 @@ export interface TmsCommonRuntimeOptions {
 }
 
 export interface TmsCommonModuleOptions {
-  service: ServiceName | 'api-gateway';
+  /** `audit` is audit-service: no outbox, relay or event consumer (ADR-0005). */
+  service: ServiceName | 'api-gateway' | 'audit';
   /** Install the X-User-* AuthGuard globally. Default true; false for the gateway, which authenticates itself. */
   auth?: boolean;
   imports?: ModuleMetadata['imports'];
@@ -63,7 +65,7 @@ export class Messaging implements OnApplicationBootstrap, OnApplicationShutdown 
     metrics: MetricsService,
   ) {
     const { database, rabbit, service } = runtime;
-    if (database && rabbit && service !== 'api-gateway') {
+    if (database && rabbit && service !== 'api-gateway' && service !== 'audit') {
       this.consumer = new EventConsumer(service as ServiceName, database, rabbit, logger, {
         ...options.consumer,
         onSettled: (eventType, outcome) =>
@@ -103,7 +105,8 @@ export class Messaging implements OnApplicationBootstrap, OnApplicationShutdown 
 
 /**
  * Shared plumbing for every service: correlation ids, X-User-* auth guard,
- * /health/live, /health/ready, /metrics, outbox relay and event consumers.
+ * /health/live, /health/ready, /metrics, outbox relay, event consumers and
+ * `GET /internal/audit` (Change records, ADR-0005).
  *
  * ```ts
  * TmsCommonModule.forRoot({
@@ -124,7 +127,14 @@ export class TmsCommonModule implements NestModule {
     return {
       module: TmsCommonModule,
       imports: options.imports ?? [],
-      controllers: [HealthController, MetricsController],
+      controllers: [
+        HealthController,
+        MetricsController,
+        // Every business service exposes its Change records (ADR-0005).
+        ...(options.service === 'api-gateway' || options.service === 'audit'
+          ? []
+          : [AuditController]),
+      ],
       providers: [
         {
           provide: RUNTIME_OPTIONS,

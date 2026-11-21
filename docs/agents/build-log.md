@@ -286,3 +286,24 @@ measure and left to the user.
     The status code alone was not conclusive on the stale image, so the check compares
     against known-bad routes.
   - The e2e test hooks are absent from this stack (404).
+- **Audit trail + bank details with consent (tracking #51, 2026-11-22):** the user asked that
+  every user action be logged and that bank details be stored only with consent. Decisions
+  (asked, not assumed): bank details for both Tutor and Payer; log every request including
+  `GET`; store at the gateway (Access records → new audit-service) *and* per service
+  (Change records); on consent withdrawal mask and keep. Issues #52–#58, blockers wired.
+  - Other sessions were editing the shared checkout at the same time (monitoring work), so
+    this work runs in its own worktree `../microservices_final-audit`.
+- **#52 foundation** on `feat/52-audit-foundation`:
+  - `@tms/contracts`: `AccessRecord`, `ChangeRecord`, `InternalAuditQuery/Response`,
+    exchange `tms.audit`, queue `audit.access-recorded`.
+  - `@tms/common`: actor in the request context (AuthGuard), `recordChange(tx, …)` (only
+    changed fields; personal data → `[personal]`, secrets → `[secret]`, account numbers →
+    `••••1234`), `GET /internal/audit` in business services, `sql/audit.sql` with a trigger
+    that rejects UPDATE/DELETE/TRUNCATE.
+  - Personal values are never stored in Change records: `audit_log` is immutable, so storing
+    them would make Anonymisation (BR-ST-08) impossible. Recorded in ADR-0005.
+  - ADR-0005 (audit log), ADR-0006 (bank details with consent), GLOSSARY section
+    "Nhật ký và dữ liệu nhạy cảm", docs/01 §6 rows.
+  - Tests: 45 unit (common) incl. 12 new, 8 integration incl. 4 new (rollback leaves no
+    record; UPDATE/DELETE/TRUNCATE fail), contracts 104. Mutation checks: removing the
+    actor hand-off in AuthGuard, the personal mask, or the unchanged-field skip each fails tests.
