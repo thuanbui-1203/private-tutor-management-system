@@ -5,7 +5,13 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { enqueueEvent, todayInVietnam, type AuthUser, type SqlExecutor } from '@tms/common';
+import {
+  enqueueEvent,
+  recordChange,
+  todayInVietnam,
+  type AuthUser,
+  type SqlExecutor,
+} from '@tms/common';
 import { z } from 'zod';
 import type { Prisma, Schedule, Session } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -98,6 +104,12 @@ export class SchedulesService {
         schedule,
         candidates.filter((c) => !clash.has(c.date)),
       );
+      await recordChange(tx as unknown as SqlExecutor, {
+        action: 'schedule.create',
+        entityType: 'Schedule',
+        entityId: schedule.id,
+        after: { ...schedule, sessionIds: created.map((c) => c.id) },
+      });
       return { schedule, sessionsCreated: created.length, skipped: conflicts };
     });
   }
@@ -124,6 +136,13 @@ export class SchedulesService {
         'Lịch lặp đã kết thúc',
         actor.id,
       );
+      await recordChange(tx as unknown as SqlExecutor, {
+        action: 'schedule.end',
+        entityType: 'Schedule',
+        entityId: id,
+        before: schedule,
+        after: { ...ended, sessionsCancelled: cancelled },
+      });
       return { schedule: ended, sessionsCancelled: cancelled };
     });
   }

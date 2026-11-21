@@ -178,4 +178,45 @@ describe('Student: lifecycle and Anonymisation (#10)', () => {
     const sib = await http().get(`/students/${sibling}`).set(tutor).expect(200);
     expect(sib.body.parents[0]).toMatchObject({ fullName: 'Nguyễn Thị Lan', phone: '0901234567' });
   });
+
+  /** Change records of one entity (ADR-0005), oldest first. */
+  const changeRecords = async (entityId: string) =>
+    (
+      await env.db.query(
+        `SELECT actor_id, actor_role, correlation_id, action, changes
+           FROM audit_log WHERE entity_id = $1 ORDER BY occurred_at, id`,
+        [entityId],
+      )
+    ).rows;
+
+  it('Change records: who changed what, never the personal values; a refused change leaves none', async () => {
+    const correlationId = randomUUID();
+    const { body } = await http()
+      .post('/students')
+      .set(tutor)
+      .set('x-correlation-id', correlationId)
+      .send({
+        fullName: 'Phạm Thu Trang',
+        dob: `${year - 25}-01-01`,
+        email: `trang.${randomUUID().slice(0, 6)}@example.com`,
+        school: 'THPT Chu Văn An',
+        invite: false,
+        parents: [],
+      })
+      .expect(201);
+    await setStatus(body.id, 'PAUSED').expect(200);
+    await setStatus(body.id, 'GRADUATED').expect(409); // PAUSED → GRADUATED is not allowed
+
+    const records = await changeRecords(body.id);
+    expect(records.map((r) => r.action)).toEqual(['student.create', 'student.change-status']);
+    expect(records[0]).toMatchObject({
+      actor_id: tutor['x-user-id'],
+      actor_role: 'TUTOR',
+      correlation_id: correlationId,
+    });
+    expect(records[0].changes.fullName).toEqual({ to: '[personal]' });
+    expect(records[0].changes.school).toEqual({ to: '[personal]' });
+    expect(JSON.stringify(records)).not.toMatch(/Trang|Chu Văn An|example\.com/);
+    expect(records[1].changes).toEqual({ status: { from: 'ACTIVE', to: 'PAUSED' } });
+  });
 });

@@ -483,4 +483,44 @@ describe('Billing: Payments, Reversals and reports (#20)', () => {
         .invoiceIds,
     ).toEqual([]);
   });
+
+  /** Change records of one entity (ADR-0005), oldest first. */
+  const changeRecords = async (entityId: string) =>
+    (
+      await env.db.query(
+        `SELECT actor_id, actor_role, correlation_id, action, changes
+           FROM audit_log WHERE entity_id = $1 ORDER BY occurred_at, id`,
+        [entityId],
+      )
+    ).rows;
+
+  it('Change records for a payment and its Reversal; a refused overpayment leaves none', async () => {
+    const { invoice } = await issued('2030-03');
+    await pay(invoice.id, 9_999_999).expect(422);
+    const { body } = await pay(invoice.id, 100_000).expect(201);
+    await http()
+      .post(`/billing/payments/${body.payment.id}/reversal`)
+      .set(tutor)
+      .send({ reason: 'Ghi nhầm' })
+      .expect(201);
+
+    const [paid] = await changeRecords(body.payment.id);
+    expect(paid).toMatchObject({
+      action: 'payment.record',
+      actor_id: tutorId,
+      actor_role: 'TUTOR',
+    });
+    expect(paid.changes).toMatchObject({
+      amount: { to: 100000 },
+      kind: { to: 'PAYMENT' },
+      invoiceStatus: { to: 'PARTIALLY_PAID' },
+    });
+    const all = (
+      await env.db.query(
+        `SELECT action FROM audit_log WHERE changes->'invoiceId'->>'to' = $1 ORDER BY occurred_at`,
+        [invoice.id],
+      )
+    ).rows;
+    expect(all.map((r) => r.action)).toEqual(['payment.record', 'payment.reverse']);
+  });
 });

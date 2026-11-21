@@ -3,6 +3,7 @@ import {
   currentPeriod,
   enqueueEvent,
   nextPeriod,
+  recordChange,
   todayInVietnam,
   type AuthUser,
   type SqlExecutor,
@@ -247,6 +248,14 @@ export class LifecycleService {
         },
       });
       const total = await this.ledger.refreshTotal(tx, replacement.id);
+      await recordChange(exec(tx), {
+        action: 'invoice.void',
+        entityType: 'Invoice',
+        entityId: id,
+        before: { status: old.status },
+        after: { status: 'VOID', voidReason: input.reason, replacementInvoiceId: replacement.id },
+        personal: ['voidReason'],
+      });
       await enqueueEvent(exec(tx), 'InvoiceIssued', {
         invoiceId: replacement.id,
         kind: replacement.kind,

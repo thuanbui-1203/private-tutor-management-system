@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { AuthUser } from '@tms/common';
+import { recordChange, type AuthUser } from '@tms/common';
 import type { z } from 'zod';
 import { PrismaService } from '../prisma/prisma.service';
 import type { NewParent, UpdateParent } from './schemas';
@@ -13,7 +13,16 @@ export class ParentsService {
   ) {}
 
   create(actor: AuthUser, body: z.infer<typeof NewParent>) {
-    return this.prisma.parent.create({ data: { ...body, createdBy: actor.id } });
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.parent.create({ data: { ...body, createdBy: actor.id } });
+      await recordChange(tx, {
+        action: 'parent.create',
+        entityType: 'Parent',
+        entityId: created.id,
+        after: created,
+      });
+      return created;
+    });
   }
 
   /** Changing a primary Parent's contact changes the Payer contact Billing keeps (StudentUpdated). */
@@ -30,6 +39,13 @@ export class ParentsService {
     if (!mine) throw new NotFoundException('parent not found');
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.parent.update({ where: { id }, data: body });
+      await recordChange(tx, {
+        action: 'parent.update',
+        entityType: 'Parent',
+        entityId: id,
+        before: { ...parent, students: undefined },
+        after: updated,
+      });
       await this.students.publishForParent(tx, id);
       return updated;
     });

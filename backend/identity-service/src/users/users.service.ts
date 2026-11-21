@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { enqueueEvent, type AuthUser } from '@tms/common';
+import { enqueueEvent, recordChange, type AuthUser } from '@tms/common';
 import type { DecodedIdToken } from 'firebase-admin/auth';
 import { FirebaseAuthService } from '../firebase/firebase-auth.service';
 import type { User } from '../generated/prisma/client';
@@ -21,6 +21,9 @@ const toView = ({ id, email, role, status, createdAt }: User): UserView => ({
   status,
   createdAt,
 });
+
+/** The Firebase uid never leaves Identity (ADR-0004), not even in a Change record. */
+const PERSONAL = ['firebaseUid'];
 
 const isUniqueViolation = (err: unknown) => (err as { code?: string })?.code === 'P2002';
 
@@ -51,6 +54,14 @@ export class UsersService {
           data: { firebaseUid: token.uid, email, role: 'TUTOR', status: 'ACTIVE' },
         });
         await enqueueEvent(tx, 'UserRegistered', { userId: created.id, email, role: 'TUTOR' });
+        await recordChange(tx, {
+          action: 'user.register',
+          entityType: 'User',
+          entityId: created.id,
+          after: created,
+          personal: PERSONAL,
+          actor: { id: created.id, role: 'TUTOR' },
+        });
         await this.firebase.setClaims(token.uid, { userId: created.id, role: 'TUTOR' });
         return created;
       });
@@ -108,6 +119,14 @@ export class UsersService {
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const saved = await tx.user.update({ where: { id }, data: { role, status } });
+      await recordChange(tx, {
+        action: 'user.update',
+        entityType: 'User',
+        entityId: id,
+        before: user,
+        after: saved,
+        personal: PERSONAL,
+      });
       if (role !== user.role) await this.firebase.setClaims(user.firebaseUid, { userId: id, role });
       if (status !== user.status)
         await this.firebase.setDisabled(user.firebaseUid, status === 'DISABLED');

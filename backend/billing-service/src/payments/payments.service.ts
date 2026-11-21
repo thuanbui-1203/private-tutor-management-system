@@ -9,6 +9,7 @@ import {
   currentPeriod,
   enqueueEvent,
   nextPeriod,
+  recordChange,
   todayInVietnam,
   type AuthUser,
   type SqlExecutor,
@@ -100,6 +101,12 @@ export class PaymentsService {
         },
       });
       const status = await this.refreshStatus(tx, invoice, now);
+      await recordChange(exec(tx), {
+        action: 'payment.record',
+        entityType: 'Payment',
+        entityId: payment.id,
+        after: { ...payment, invoiceStatus: status },
+      });
       await enqueueEvent(exec(tx), 'PaymentReceived', {
         invoiceId,
         invoiceKind: invoice.kind,
@@ -143,6 +150,12 @@ export class PaymentsService {
       });
       const invoice = await tx.invoice.findUniqueOrThrow({ where: { id: original.invoiceId } });
       const status = await this.refreshStatus(tx, invoice, now);
+      await recordChange(exec(tx), {
+        action: 'payment.reverse',
+        entityType: 'Payment',
+        entityId: paymentId,
+        after: { ...reversal, invoiceStatus: status },
+      });
       return { reversal: paymentView(reversal), invoiceStatus: status };
     });
   }

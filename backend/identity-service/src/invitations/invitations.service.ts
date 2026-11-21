@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
-import { enqueueEvent } from '@tms/common';
+import { enqueueEvent, recordChange } from '@tms/common';
 import type { InternalCreateInvitationRequest } from '@tms/contracts';
 import { FirebaseAuthService } from '../firebase/firebase-auth.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -71,6 +71,14 @@ export class InvitationsService {
           expiresAt,
         },
       });
+      // Actor: the Tutor / Admin on POST /auth/invitations; SYSTEM when student-service
+      // asks (its own Change record for the Student carries the same correlation id).
+      await recordChange(tx, {
+        action: 'invitation.create',
+        entityType: 'Invitation',
+        entityId: created.id,
+        after: created,
+      });
       await enqueueEvent(tx, 'InvitationCreated', {
         invitationId: created.id,
         userId: user.id,
@@ -115,6 +123,15 @@ export class InvitationsService {
       const user = await tx.user.update({
         where: { id: invitation.userId },
         data: { status: 'ACTIVE' },
+      });
+      await recordChange(tx, {
+        action: 'invitation.accept',
+        entityType: 'User',
+        entityId: user.id,
+        before: invitation.user,
+        after: user,
+        personal: ['firebaseUid'],
+        actor: { id: user.id, role: user.role },
       });
       await enqueueEvent(tx, 'UserRegistered', {
         userId: user.id,
