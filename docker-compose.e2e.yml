@@ -56,5 +56,7 @@ services:
   billing-service:
     environment: { E2E_HOOKS: 'true' }
     ports: !override ['127.0.0.1:23006:3006']
+  audit-service:
+    ports: !override ['127.0.0.1:23008:3008']
   frontend:
     ports: !override ['127.0.0.1:25173:5173']

@@ -190,4 +190,5 @@ docker compose down -v                            # dừng và XÓA toàn bộ d
 | Không nhận được email | Đang dùng Mailpit ở môi trường dev | Mở http://localhost:8025 |
 | Hóa đơn không cập nhật sau khi điểm danh | Billing chưa nhận event | Xem queue trong RabbitMQ UI; kiểm tra DLQ `billing.dlq` |
 | `exec format error` / `\r` trong script | File `.sh` bị đổi line ending thành CRLF trên Windows | `git config core.autocrlf input`, chuyển file về LF |
+| audit-service không khởi động, log báo `role "audit" does not exist` | Volume PostgreSQL tạo trước khi có audit-service (`init.sql` chỉ chạy với volume rỗng) | `docker compose exec -T postgres psql -U tms -d postgres < infra/postgres/add-audit-db.sql` rồi `pnpm migrate:all` |
 | Docker chạy chậm, hết RAM | Quá nhiều container | Tăng RAM trong Docker Desktop, hoặc chỉ bật các service cần thiết |
