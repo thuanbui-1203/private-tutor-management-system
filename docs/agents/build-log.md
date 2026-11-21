@@ -337,3 +337,16 @@ measure and left to the user.
     services down), 2 unit; gateway 19 unit + 10 integration. Mutation checks: dropping
     `skipDuplicates` or opening the API to TUTOR each fails a test.
   - Ran the production image on the dev network: `/health/ready` database up, broker up.
+- **#55 gateway Access records** on `feat/55-gateway-access-records` (stacked on #54):
+  - `AccessLogPublisher`: one Access record per request under `/api` when the response
+    finishes (status 0 if the client left first), including what the gateway rejects itself.
+    User id + role only when the token carried them; `service` only when proxied.
+  - Never recorded: bodies, headers, query values; `/auth/invitations/{token}/accept` and
+    `/calendar/{token}.ics` become `:token`.
+  - Publisher confirms on its own RabbitMQ connection (a broker outage must not make the
+    gateway "not ready"); unconfirmed → append-only spool file (`AUDIT_SPOOL_DIR`, volume
+    `gateway-audit-spool`), replayed every 5 s; metric `tms_audit_access_records_total{outcome}`.
+  - Tests: 4 unit (path/query sanitising), 3 new integration against broker + Redis +
+    emulator (200/401/404/501/429 each one record; no secret in path/query/body; spool then
+    replay). Gateway: 23 unit, 13 integration. Mutation checks: not recording the user, or
+    not masking the invitation token, each fails a test.

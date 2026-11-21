@@ -56,6 +56,7 @@
 | `/schedules/**`, `/sessions/**` | schedule-service | Như trên |
 | `GET /calendar/{token}.ics` | schedule-service | Không (token riêng trong đường dẫn) |
 | `/billing/**` | billing-service | ID token có claim `userId` + `role` |
+| `/audit/**` | audit-service | Như trên (chỉ ADMIN, service tự kiểm tra) |
 | `/academic/**`, `/notifications/**`, `/webhooks/**` | – | Trả 501 (ngoài phạm vi MVP, BR-SYS-03) |
 | Mọi đường dẫn có đoạn `internal` | – | Trả 404: API nội bộ không bao giờ đi qua gateway |
 
@@ -66,6 +67,8 @@
 3. Xác thực ID token (`verifyIdToken(token, checkRevoked = true)`): thiếu, sai, hết hạn, bị thu hồi → 401; hợp lệ nhưng chưa có claim → 403 (trừ `/auth/register`).
 4. Giới hạn theo người dùng (`RATE_LIMIT_USER_PER_MINUTE`, mặc định 300).
 5. Gắn `X-User-Id` (claim `userId`, không bao giờ là `uid` của Firebase), `X-User-Role`, `X-Correlation-Id` rồi chuyển tiếp nguyên luồng (body không bị đọc ở gateway). Service không phản hồi → 502, quá 30 giây → 504.
+
+6. Khi response xong (kể cả các trường hợp 401 / 403 / 404 / 429 / 501 ở trên), ghi một **Access record** lên exchange `tms.audit` cho audit-service: người dùng (nếu biết), IP, method, đường dẫn (token trong đường dẫn thay bằng `:token`), tên tham số query, mã trạng thái, thời gian, service đích ([ADR-0005](adr/0005-audit-log.md)). Không ghi body, header, giá trị query. RabbitMQ không có mặt thì bản ghi nằm trong file spool (`AUDIT_SPOOL_DIR`, volume `gateway-audit-spool`) và được gửi lại mỗi 5 giây khi broker trở lại; metric `tms_audit_access_records_total{outcome}` đếm published / spooled / replayed / dropped.
 
 Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay vì chặn toàn bộ API. CORS cho các origin trong `CORS_ORIGINS` (mặc định `http://localhost:5173`).
 ---

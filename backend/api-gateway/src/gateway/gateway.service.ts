@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, OutgoingHttpHeaders, ServerResponse } from 'node:http';
 import { Injectable, type OnApplicationShutdown } from '@nestjs/common';
 import { Id } from '@tms/contracts';
+import { AccessLogPublisher } from './access-log';
 import { forward, sendJson } from './proxy';
 import { RateLimiter } from './rate-limiter';
 import { resolveRoute, serviceUrls, type ServiceKey } from './routes';
@@ -11,7 +12,8 @@ type Request = IncomingMessage & { ip?: string; originalUrl?: string };
 
 /**
  * The single entry point for clients (docs/02 §2): resolve the route, rate-limit,
- * authenticate with the Firebase ID token, rewrite identity headers, proxy.
+ * authenticate with the Firebase ID token, rewrite identity headers, proxy. Every
+ * request, rejected or not, leaves one Access record (ADR-0005).
  * Mounted on `/api` by configureApp.
  */
 @Injectable()
@@ -25,6 +27,8 @@ export class GatewayService implements OnApplicationShutdown {
     Number(process.env.RATE_LIMIT_USER_PER_MINUTE ?? 300),
   );
 
+  constructor(private readonly access: AccessLogPublisher) {}
+
   readonly handle = (req: Request, res: ServerResponse): void => {
     void this.process(req, res);
   };
@@ -34,6 +38,7 @@ export class GatewayService implements OnApplicationShutdown {
     const correlationId =
       typeof incoming === 'string' && Id.safeParse(incoming).success ? incoming : randomUUID();
     const responseHeaders: OutgoingHttpHeaders = { 'x-correlation-id': correlationId };
+    const access = this.access.begin(req, res, correlationId);
     const fail = (status: number, message: string, extra: OutgoingHttpHeaders = {}) =>
       sendJson(res, status, { statusCode: status, message }, { ...responseHeaders, ...extra });
 
@@ -79,11 +84,13 @@ export class GatewayService implements OnApplicationShutdown {
         if (!byUser.allowed) {
           return fail(429, 'too many requests', { 'retry-after': String(byUser.retryAfter) });
         }
+        access.user = user;
         headers['x-user-id'] = user.id;
         headers['x-user-role'] = user.role;
       }
     }
 
+    access.service = route.service;
     forward(req, res, this.urls[route.service], path, headers, responseHeaders);
   }
 

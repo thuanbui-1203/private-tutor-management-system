@@ -15,6 +15,9 @@ FROM node:24-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build --chown=node:node /out .
+# Spool for Access records while RabbitMQ is unavailable (ADR-0005); a named volume
+# mounted here keeps them across restarts.
+RUN mkdir -p /var/lib/tms-gateway && chown node:node /var/lib/tms-gateway
 USER node
 EXPOSE 8080
 CMD ["node", "dist/main.js"]
