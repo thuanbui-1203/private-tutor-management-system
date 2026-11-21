@@ -385,3 +385,15 @@ measure and left to the user.
     unrelated: `schedule-attendance` "calendar…" puts its Session 48 h ahead, which on a
     Sunday (Vietnam time) lands in next week's Monday-start view. Mutation check: dropping
     the consent condition on the save button fails a test. `next build` passes.
+- **#58 end-to-end + simulator** on `feat/58-e2e-audit` (stacked on #57):
+  - `tests/e2e/src/audit.e2e.spec.ts`: (1) a Tutor's PATCH leaves one Access record and one
+    Change record with the same correlation id, read through `/api/audit/**` by an Admin;
+    Tutors get 403 there; (2) a request without a token still leaves an Access record (401,
+    no user); (3) a Payer cannot store bank details without consent, stores them with it,
+    the Tutor sees the full number, after withdrawal only `••••9012`.
+  - Admin and Payer accounts get their claims straight from the emulator (`withClaims`).
+  - `pnpm test:e2e` from scratch (8 images incl. audit-service): **8/8 passed** (5 old + 3 new).
+  - `tools/flow-simulator` committed: audit-service node, bank-account and audit endpoints,
+    an Access record after every response (spool when RabbitMQ is down), `audit_log` in
+    write transactions, missing-consent 400; stress test sends an Access record per request.
+  - `backend/audit-service/.env.example` for host-side migrations.
