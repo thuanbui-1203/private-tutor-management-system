@@ -244,3 +244,70 @@ export interface QrView {
   description: string;
   payload: string;
 }
+
+/** billing `GET /billing/bank-account` (ADR-0006). The number is always masked. */
+export interface ConsentView {
+  policyVersion: string;
+  grantedAt: string;
+  withdrawnAt: string | null;
+}
+export interface OwnBankAccount {
+  bankBin: string;
+  accountNumberMasked: string;
+  accountName: string | null;
+  status: 'ACTIVE' | 'MASKED';
+  maskedAt: string | null;
+  consent: ConsentView;
+}
+export interface OwnBankAccountResponse {
+  policyVersion: string;
+  account: OwnBankAccount | null;
+}
+/** billing `GET /billing/bank-accounts`: a Payer's account, full number only while consented. */
+export interface PayerBankAccount {
+  ownerId: string;
+  ownerRole: 'PARENT' | 'STUDENT';
+  bankBin: string;
+  accountNumber: string | null;
+  accountNumberMasked: string;
+  accountName: string | null;
+  status: 'ACTIVE' | 'MASKED';
+  consent: ConsentView;
+}
+
+/** audit-service (ADR-0005). */
+export interface AccessRecordView {
+  id: string;
+  occurredAt: string;
+  correlationId: string;
+  userId: string | null;
+  role: Role | null;
+  ip: string;
+  userAgent: string | null;
+  method: string;
+  path: string;
+  queryKeys: string[];
+  status: number;
+  durationMs: number;
+  service: string | null;
+}
+export interface AccessPage {
+  items: AccessRecordView[];
+  nextCursor: string | null;
+}
+export interface ChangeRecordView {
+  id: string;
+  occurredAt: string;
+  service: string;
+  correlationId: string | null;
+  actorId: string | null;
+  actorRole: Role | 'SYSTEM';
+  action: string;
+  entityType: string;
+  entityId: string;
+  changes: Record<string, { from?: unknown; to?: unknown }>;
+}
+export interface ChangesResponse {
+  records: ChangeRecordView[];
+  unavailable: string[];
+}

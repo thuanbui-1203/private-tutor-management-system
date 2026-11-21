@@ -372,3 +372,16 @@ measure and left to the user.
     (cipher round trip, wrong owner/key, no key → 503). Billing: 6 unit, 45 integration.
     Mutation checks: keeping the holder name on withdrawal, or creating a new consent on
     every save, each fails a test.
+- **#57 frontend** on `feat/57-frontend-audit-bank` (stacked on #56):
+  - `BankAccountSettings` (Tutor `/tutor/bank-account` "TK nhận tiền"; Payer
+    `/parent|student/bank-account`, menu item only for the Payer): consent text with its
+    version, unticked checkbox, save disabled until ticked; the body carries
+    `consent: true` + `policyVersion`; only `••••1234` is shown back. "Rút lại đồng ý" asks
+    first, then shows the masked state.
+  - `PayerBankAccounts` (`/tutor/payer-accounts` "TK phụ huynh", also in the Admin menu).
+  - `AuditLog` (`/admin/audit` "Nhật ký"): filters, keyset "Tải thêm", a request opens its
+    Change records from every service, with services that did not answer named.
+  - Playwright: 4 new tests; full suite 52/53. The one failure is pre-existing and
+    unrelated: `schedule-attendance` "calendar…" puts its Session 48 h ahead, which on a
+    Sunday (Vietnam time) lands in next week's Monday-start view. Mutation check: dropping
+    the consent condition on the save button fails a test. `next build` passes.
