@@ -12,3 +12,4 @@ infra/keys/
 
 # Firebase emulator logs
 *-debug.log
+__pycache__/
