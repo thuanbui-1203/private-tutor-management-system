@@ -203,7 +203,7 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 
 ## 8. Billing Service
 
-**Dữ liệu:** `fee_policies` (lịch sử phí theo kỳ), `student_snapshots` (tên, người thanh toán, trạng thái), `session_calendar`, `invoices`, `invoice_items`, `payments`, `processed_events`, `outbox_events`
+**Dữ liệu:** `fee_policies` (lịch sử phí theo kỳ), `student_snapshots` (tên, người thanh toán, trạng thái), `session_calendar`, `invoices`, `invoice_items`, `payments`, `consents`, `bank_accounts`, `audit_log`, `processed_events`, `outbox_events`
 
 `session_calendar` là bản sao cục bộ các buổi học (từ `SessionScheduled` / `SessionCancelled` / `SessionRescheduled`). Billing dùng nó để tính phí `MONTHLY` theo tỉ lệ số buổi khi vào / rời lớp giữa tháng (BR-BI-05, BR-BI-06), không gọi đồng bộ sang Schedule. `SessionRescheduled` đánh dấu buổi cũ `RESCHEDULED` và thêm buổi mới, nên buổi bị dời chỉ được đếm một lần; buổi `CANCELLED` không được đếm, buổi bù được đếm. Mọi bản sao được cập nhật từ event, xử lý lại một event không làm thay đổi dữ liệu; event đến trước bản ghi nó cần (ví dụ `StudentStatusChanged` trước `StudentCreated`) được thử lại sau.
 
@@ -212,7 +212,11 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 | GET | `/billing/invoices?period=&status=&kind=&studentId=` | Danh sách hóa đơn (`kind` = `MONTHLY` / `ENROLLMENT`); giáo viên chỉ thấy hóa đơn của học sinh mình | TUTOR, ADMIN |
 | GET | `/billing/invoices/{id}` | Chi tiết hóa đơn và các dòng phí (FEE, ADJUSTMENT) | TUTOR, ADMIN, Payer |
 | GET | `/billing/enrollments/{enrollmentId}/invoice` | Hóa đơn ghi danh của một ghi danh `MONTHLY` | TUTOR, ADMIN, Payer |
-| GET | `/billing/invoices/{id}/qr` | Chuỗi VietQR (NAPAS 247, chuẩn EMVCo) để chuyển khoản số còn nợ, nội dung `TMS <8 ký tự đầu id>`; tài khoản nhận lấy từ `BILLING_BANK_BIN` / `BILLING_BANK_ACCOUNT` / `BILLING_BANK_ACCOUNT_NAME`, chưa cấu hình → 503; hóa đơn đã trả đủ / nháp / hủy → 409 | TUTOR, ADMIN, Payer |
+| GET | `/billing/invoices/{id}/qr` | Chuỗi VietQR (NAPAS 247, chuẩn EMVCo) để chuyển khoản số còn nợ, nội dung `TMS <8 ký tự đầu id>`; tài khoản nhận là tài khoản giáo viên đã lưu khi Consent còn hiệu lực, nếu không thì `BILLING_BANK_BIN` / `BILLING_BANK_ACCOUNT` / `BILLING_BANK_ACCOUNT_NAME`, không có cả hai → 503; hóa đơn đã trả đủ / nháp / hủy → 409 | TUTOR, ADMIN, Payer |
+| GET | `/billing/bank-account` | Tài khoản ngân hàng của chính mình (số luôn ở dạng `••••1234`), trạng thái `ACTIVE` / `MASKED`, Consent và `policyVersion` hiện hành ([ADR-0006](adr/0006-bank-details-with-consent.md)) | TUTOR, ADMIN, PARENT, STUDENT |
+| PUT | `/billing/bank-account` | Lưu tài khoản; body phải có `consent: true` và `policyVersion` hiện hành, thiếu → 400 và không lưu gì; số tài khoản mã hóa AES-256-GCM bằng `BANK_DATA_KEY` (thiếu khóa → 503) | TUTOR, ADMIN, PARENT, STUDENT |
+| DELETE | `/billing/bank-account/consent` | Rút đồng ý: xóa số đầy đủ và tên chủ tài khoản, giữ BIN + 4 số cuối; Consent giữ lại với `withdrawn_at`; không có Consent đang hiệu lực → 404 | TUTOR, ADMIN, PARENT, STUDENT |
+| GET | `/billing/bank-accounts` | Tài khoản của người thanh toán để hoàn tiền: số đầy đủ khi Consent còn hiệu lực, chỉ bản đã che sau khi rút | TUTOR, ADMIN |
 | POST | `/billing/invoices/{id}/payments` | Ghi nhận thanh toán thủ công `{amount, method, paidAt?, note?}` trên hóa đơn `ISSUED` / `PARTIALLY_PAID` / `OVERDUE`; vượt số còn nợ → 422 kèm `outstanding`; `paidAt` ở tương lai → 422; phát `PaymentReceived` (BR-BI-07) | TUTOR, ADMIN |
 | POST | `/billing/payments/{id}/reversal` | Bút toán đảo cho khoản ghi sai (kèm `reason`), mỗi khoản chỉ đảo một lần, không đảo bút toán đảo; trạng thái hóa đơn tính lại (có thể về `ISSUED` / `OVERDUE`); không phát `PaymentReceived` | TUTOR, ADMIN |
 | POST | `/billing/invoices/{id}/void` | Hủy hóa đơn đã phát hành mà chưa thanh toán (kèm `reason`) và phát hành hóa đơn thay thế cùng các dòng phí, tên / người thanh toán mới nhất, `replaces_invoice_id`, hạn = max(hạn cũ, hôm nay + 7 ngày), phát `InvoiceIssued`. Hóa đơn nháp, đã hủy, hoặc đã có thanh toán → 409 (đảo thanh toán trước) (BR-BI-04) | TUTOR, ADMIN |

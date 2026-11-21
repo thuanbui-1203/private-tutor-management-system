@@ -54,7 +54,9 @@ services:
     environment: { E2E_HOOKS: 'true' }
     ports: !override ['127.0.0.1:23004:3004']
   billing-service:
-    environment: { E2E_HOOKS: 'true' }
+    # A fixed throwaway key: the e2e stack never holds real bank details.
+    environment:
+      { E2E_HOOKS: 'true', BANK_DATA_KEY: 'ZTJlLXRlc3Qta2V5LW9ubHktMzItYnl0ZXMtbG9uZyE=' }
     ports: !override ['127.0.0.1:23006:3006']
   audit-service:
     ports: !override ['127.0.0.1:23008:3008']

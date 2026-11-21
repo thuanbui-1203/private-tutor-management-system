@@ -40,6 +40,7 @@ describe('Billing: Payments, Reversals and reports (#20)', () => {
     });
     await new Promise<void>((r) => fakeStudents.listen(0, '127.0.0.1', r));
     process.env.STUDENT_SERVICE_URL = `http://127.0.0.1:${(fakeStudents.address() as AddressInfo).port}`;
+    process.env.BANK_DATA_KEY = Buffer.alloc(32, 7).toString('base64');
     const { AppModule } = await import('../src/app.module');
     app = (
       await Test.createTestingModule({ imports: [AppModule] }).compile()
@@ -522,5 +523,34 @@ describe('Billing: Payments, Reversals and reports (#20)', () => {
       )
     ).rows;
     expect(all.map((r) => r.action)).toEqual(['payment.record', 'payment.reverse']);
+  });
+
+  it("VietQR pays into the Tutor's own account while their consent is active, else BILLING_BANK_*", async () => {
+    const { invoice } = await issued('2030-06');
+    process.env.BILLING_BANK_BIN = '970436';
+    process.env.BILLING_BANK_ACCOUNT = '0011001234567';
+    process.env.BILLING_BANK_ACCOUNT_NAME = 'TRUNG TAM';
+    await http()
+      .put('/billing/bank-account')
+      .set(tutor)
+      .send({
+        bankBin: '970422',
+        accountNumber: '9988776655',
+        accountName: 'NGUYEN VAN GIAO',
+        consent: true,
+        policyVersion: '2026-11-22',
+      })
+      .expect(200);
+    const own = await http().get(`/billing/invoices/${invoice.id}/qr`).set(tutor).expect(200);
+    expect(own.body).toMatchObject({
+      bankBin: '970422',
+      accountNumber: '9988776655',
+      accountName: 'NGUYEN VAN GIAO',
+    });
+    expect(own.body.payload).toContain('01109988776655');
+
+    await http().delete('/billing/bank-account/consent').set(tutor).expect(200);
+    const fallback = await http().get(`/billing/invoices/${invoice.id}/qr`).set(tutor).expect(200);
+    expect(fallback.body).toMatchObject({ bankBin: '970436', accountNumber: '0011001234567' });
   });
 });

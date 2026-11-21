@@ -350,3 +350,25 @@ measure and left to the user.
     emulator (200/401/404/501/429 each one record; no secret in path/query/body; spool then
     replay). Gateway: 23 unit, 13 integration. Mutation checks: not recording the user, or
     not masking the invitation token, each fails a test.
+- **#56 bank details with consent** on `feat/56-bank-consent` (stacked on #55):
+  - billing: `consents` (purpose `BANK_ACCOUNT`, policy version, granted/withdrawn) and
+    `bank_accounts` (one per user; AES-256-GCM ciphertext with the owner id as authenticated
+    data, key `BANK_DATA_KEY`; last 4 digits; masked_at). CHECK constraints: ciphertext only
+    (`v1.` prefix), full number present exactly while not masked.
+  - `GET|PUT /billing/bank-account`, `DELETE /billing/bank-account/consent` (TUTOR, ADMIN,
+    PARENT, STUDENT): PUT needs `consent: true` + current `policyVersion` (400 otherwise,
+    nothing stored); owners only ever see `••••1234`. Withdrawal erases ciphertext and holder
+    name, keeps BIN + last 4, keeps the consent row.
+  - `GET /billing/bank-accounts` (TUTOR, ADMIN): Payer accounts, full number only while
+    consent is active. Limitation: every Tutor sees every Payer (single tenant, ADR-0001;
+    billing has no Payer user id to scope by).
+  - VietQR uses the Tutor's consented account, else `BILLING_BANK_*`, else 503.
+  - `pnpm setup:env` generates `BANK_DATA_KEY`; e2e stack uses a fixed throwaway key.
+  - Change records: `consent.grant|withdraw`, `bank-account.save|mask`, number as `••••1234`,
+    holder name `[personal]`.
+  - Tests: 4 integration (no consent → nothing stored; ciphertext + masked views + clean
+    Change records; Payer list before/after withdrawal; DB refuses plain or orphaned
+    numbers), 1 QR integration (own account → env fallback after withdrawal), 4 unit
+    (cipher round trip, wrong owner/key, no key → 503). Billing: 6 unit, 45 integration.
+    Mutation checks: keeping the holder name on withdrawal, or creating a new consent on
+    every save, each fails a test.
