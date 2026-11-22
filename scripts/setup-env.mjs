@@ -1,6 +1,7 @@
 // `pnpm setup:env`: create local env files from their examples, never overwriting.
 // - .env (docker compose) from .env.example; NEXT_PUBLIC_* filled from frontend/.env.local
 // - backend/<service>/.env (host-side migrations and `pnpm dev`) from each .env.example
+import { randomBytes } from 'node:crypto';
 import { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -44,6 +45,16 @@ if (existsSync(frontendEnv)) {
   if (filled > 0) {
     writeFileSync(rootEnv, text);
     console.log(`Filled ${filled} NEXT_PUBLIC_* value(s) in .env from frontend/.env.local`);
+  }
+}
+
+// Encryption key for bank details (ADR-0006): generated once, never overwritten.
+{
+  const text = readFileSync(rootEnv, 'utf8');
+  if (/^BANK_DATA_KEY=[ \t]*$/m.test(text)) {
+    const key = randomBytes(32).toString('base64');
+    writeFileSync(rootEnv, text.replace(/^BANK_DATA_KEY=[ \t]*$/m, `BANK_DATA_KEY=${key}`));
+    console.log('Generated BANK_DATA_KEY in .env (keep it secret; do not change it later).');
   }
 }
 

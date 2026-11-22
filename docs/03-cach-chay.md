@@ -108,7 +108,7 @@ Các học sinh Thu Hà, Gia Bảo, Hoàng Phúc, Đức Huy, Bảo Ngọc khôn
 | `backend/<service>/.env` | Chạy service hoặc migration trên máy host (`DATABASE_URL` trỏ `localhost:5432`) | `backend/<service>/.env.example` |
 | `frontend/.env.local` | Frontend: `NEXT_PUBLIC_API_URL` và `NEXT_PUBLIC_FIREBASE_*` lấy từ cấu hình Web app trong Firebase console | Tự tạo |
 
-`pnpm setup:env` tạo hai loại file đầu từ file mẫu, không bao giờ ghi đè. Các giá trị `NEXT_PUBLIC_*` là công khai theo thiết kế của Firebase; service account key thì tuyệt đối không commit và không dán vào chat.
+`pnpm setup:env` tạo hai loại file đầu từ file mẫu, không bao giờ ghi đè, và sinh `BANK_DATA_KEY` (khóa mã hóa số tài khoản ngân hàng, [ADR-0006](adr/0006-bank-details-with-consent.md)) nếu còn trống. Giữ bí mật khóa này và không đổi sau khi đã có tài khoản được lưu, vì đổi khóa thì không giải mã được nữa. Các giá trị `NEXT_PUBLIC_*` là công khai theo thiết kế của Firebase; service account key thì tuyệt đối không commit và không dán vào chat.
 
 > Không commit `.env`, `backend/*/.env`, `frontend/.env.local` và thư mục `infra/keys/`. Các mục này đã có trong `.gitignore`, và `.dockerignore` loại mọi file `.env*` khỏi Docker build.
 

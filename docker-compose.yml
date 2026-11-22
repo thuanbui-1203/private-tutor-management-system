@@ -196,6 +196,8 @@ services:
       BILLING_BANK_BIN: ${BILLING_BANK_BIN:-}
       BILLING_BANK_ACCOUNT: ${BILLING_BANK_ACCOUNT:-}
       BILLING_BANK_ACCOUNT_NAME: ${BILLING_BANK_ACCOUNT_NAME:-}
+      # Encrypts bank account numbers stored with consent (ADR-0006); empty = cannot store.
+      BANK_DATA_KEY: ${BANK_DATA_KEY:-}
     ports: ['3006:3006']
 
   # Audit trail (ADR-0005): stores the gateway's Access records, serves /audit/** to Admins

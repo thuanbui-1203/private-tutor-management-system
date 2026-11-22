@@ -18,6 +18,7 @@ import { PaymentMethod, Period } from '@tms/contracts';
 import { z } from 'zod';
 import type { Invoice, Payment, Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { BankAccountsService } from '../bank/bank-accounts.service';
 import { InvoiceAccess } from '../invoices/invoice-access';
 import { dateOnly, deriveStatus, LedgerService } from '../invoices/ledger.service';
 import { vietQrPayload } from './vietqr';
@@ -63,6 +64,7 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly ledger: LedgerService,
     private readonly access: InvoiceAccess,
+    private readonly bank: BankAccountsService,
   ) {}
 
   /**
@@ -245,8 +247,13 @@ export class PaymentsService {
     if (!PAYABLE.includes(invoice!.status as (typeof PAYABLE)[number])) {
       throw new ConflictException(`a ${invoice!.status} invoice cannot be paid`);
     }
-    const bankBin = process.env.BILLING_BANK_BIN;
-    const accountNumber = process.env.BILLING_BANK_ACCOUNT;
+    // The Tutor's own account while their consent is active (ADR-0006), else BILLING_BANK_*.
+    const target = (await this.bank.transferTarget(invoice!.tutorId)) ?? {
+      bankBin: process.env.BILLING_BANK_BIN,
+      accountNumber: process.env.BILLING_BANK_ACCOUNT,
+      accountName: process.env.BILLING_BANK_ACCOUNT_NAME ?? null,
+    };
+    const { bankBin, accountNumber } = target;
     if (!bankBin || !accountNumber) {
       throw new ServiceUnavailableException('the bank account for transfers is not configured');
     }
@@ -257,7 +264,7 @@ export class PaymentsService {
       amount,
       bankBin,
       accountNumber,
-      accountName: process.env.BILLING_BANK_ACCOUNT_NAME ?? null,
+      accountName: target.accountName ?? null,
       description,
       payload: vietQrPayload({ bankBin, accountNumber, amount, description }),
     };

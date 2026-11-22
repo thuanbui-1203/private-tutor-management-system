@@ -272,3 +272,43 @@ model Payment {
   @@index([paidAt])
   @@map("payments")
 }
+
+enum ConsentPurpose {
+  BANK_ACCOUNT
+}
+
+/// A user's consent to store one kind of sensitive data (ADR-0006). Never deleted: a
+/// withdrawal sets withdrawn_at, and the row stays as evidence.
+model Consent {
+  id            String         @id @default(uuid()) @db.Uuid
+  userId        String         @map("user_id") @db.Uuid
+  purpose       ConsentPurpose
+  policyVersion String         @map("policy_version")
+  grantedAt     DateTime       @default(now()) @map("granted_at") @db.Timestamptz(6)
+  withdrawnAt   DateTime?      @map("withdrawn_at") @db.Timestamptz(6)
+  bankAccounts  BankAccount[]
+
+  @@index([userId, purpose])
+  @@map("consents")
+}
+
+/// One bank account per user, stored only under an active Consent (ADR-0006). The number is
+/// AES-256-GCM ciphertext (BANK_DATA_KEY); on withdrawal it and the holder name are erased
+/// and only the BIN and last 4 digits stay (masked_at set). A CHECK keeps the two in step.
+model BankAccount {
+  id               String    @id @default(uuid()) @db.Uuid
+  ownerId          String    @unique @map("owner_id") @db.Uuid
+  /// TUTOR (receives transfers, VietQR) or PARENT / STUDENT (a Payer, for refunds).
+  ownerRole        String    @map("owner_role")
+  bankBin          String    @map("bank_bin")
+  accountNumberEnc String?   @map("account_number_enc")
+  accountLast4     String    @map("account_last4")
+  accountName      String?   @map("account_name")
+  consentId        String    @map("consent_id") @db.Uuid
+  consent          Consent   @relation(fields: [consentId], references: [id])
+  maskedAt         DateTime? @map("masked_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("bank_accounts")
+}
