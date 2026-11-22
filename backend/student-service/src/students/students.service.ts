@@ -4,7 +4,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { enqueueEvent, type AuthUser, type SqlExecutor } from '@tms/common';
+import { enqueueEvent, recordChange, type AuthUser, type SqlExecutor } from '@tms/common';
 import type {
   Contact,
   InternalStudentAccessResponse,
@@ -18,6 +18,9 @@ import type { CreateStudent, ParentLink, UpdateStudent } from './schemas';
 
 export type StudentRecord = Student & { parents: (StudentParent & { parent: Parent })[] };
 type Tx = Prisma.TransactionClient;
+
+/** Personal fields of a Student / Parent on top of @tms/common's PERSONAL_FIELDS (ADR-0005). */
+export const STUDENT_PERSONAL = ['school'];
 
 /** How the caller relates to a Student; decides what they may see (BR-ST-06, BR-ST-07). */
 export type Relation = 'staff' | 'primary-parent' | 'secondary-parent' | 'self';
@@ -69,6 +72,10 @@ export function viewFor(student: StudentRecord, relation: Relation) {
   };
 }
 
+/** Which Parents are linked and who is primary: ids only, no personal data. */
+const links = (s: StudentRecord) =>
+  s.parents.map(({ parentId, isPrimary }) => ({ parentId, isPrimary }));
+
 @Injectable()
 export class StudentsService {
   constructor(
@@ -104,6 +111,13 @@ export class StudentsService {
         include: WITH_PARENTS,
       });
       await this.publish(tx, 'StudentCreated', full);
+      await recordChange(tx, {
+        action: 'student.create',
+        entityType: 'Student',
+        entityId: full.id,
+        after: full,
+        personal: STUDENT_PERSONAL,
+      });
       return full;
     });
 
@@ -175,13 +189,21 @@ export class StudentsService {
       });
       const full = await tx.student.findUniqueOrThrow({ where: { id }, include: WITH_PARENTS });
       await this.publish(tx, 'StudentUpdated', full);
+      await recordChange(tx, {
+        action: 'student.update',
+        entityType: 'Student',
+        entityId: id,
+        before: current,
+        after: full,
+        personal: STUDENT_PERSONAL,
+      });
       return full;
     });
     return viewFor(updated, 'staff');
   }
 
   async addParent(actor: AuthUser, id: string, link: ParentLink) {
-    await this.staffRecord(actor, id);
+    const current = await this.staffRecord(actor, id);
     const updated = await this.prisma.$transaction(async (tx) => {
       if (link.isPrimary) {
         await tx.studentParent.updateMany({ where: { studentId: id }, data: { isPrimary: false } });
@@ -189,6 +211,13 @@ export class StudentsService {
       await this.link(tx, actor, id, link);
       const full = await tx.student.findUniqueOrThrow({ where: { id }, include: WITH_PARENTS });
       await this.publish(tx, 'StudentUpdated', full);
+      await recordChange(tx, {
+        action: 'student.add-parent',
+        entityType: 'Student',
+        entityId: id,
+        before: { parentLinks: links(current) },
+        after: { parentLinks: links(full) },
+      });
       return full;
     });
     return viewFor(updated, 'staff');
@@ -203,8 +232,17 @@ export class StudentsService {
         'make another Parent primary before removing the primary one',
       );
     }
-    await this.prisma.studentParent.delete({
-      where: { studentId_parentId: { studentId: id, parentId } },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.studentParent.delete({
+        where: { studentId_parentId: { studentId: id, parentId } },
+      });
+      await recordChange(tx, {
+        action: 'student.remove-parent',
+        entityType: 'Student',
+        entityId: id,
+        before: { parentLinks: links(current) },
+        after: { parentLinks: links(current).filter((l) => l.parentId !== parentId) },
+      });
     });
     return viewFor(
       await this.prisma.student.findUniqueOrThrow({ where: { id }, include: WITH_PARENTS }),

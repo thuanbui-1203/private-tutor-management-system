@@ -8,6 +8,7 @@ import {
   currentPeriod,
   enqueueEvent,
   nextPeriod,
+  recordChange,
   type AuthUser,
   type SqlExecutor,
 } from '@tms/common';
@@ -81,6 +82,12 @@ export class ClassesService {
         },
       });
       await this.publishFee(tx, 'ClassCreated', created);
+      await recordChange(exec(tx), {
+        action: 'class.create',
+        entityType: 'Class',
+        entityId: created.id,
+        after: created,
+      });
       return created;
     });
   }
@@ -131,6 +138,13 @@ export class ClassesService {
         data: { ...body, ...(feeChanged && { feeEffectiveFrom: nextPeriod(currentPeriod()) }) },
       });
       if (feeChanged) await this.publishFee(tx, 'ClassUpdated', updated);
+      await recordChange(exec(tx), {
+        action: 'class.update',
+        entityType: 'Class',
+        entityId: id,
+        before: current,
+        after: updated,
+      });
       return updated;
     });
   }
@@ -156,6 +170,13 @@ export class ClassesService {
         });
       }
       const closed = await tx.class.update({ where: { id }, data: { status: 'CLOSED' } });
+      await recordChange(exec(tx), {
+        action: 'class.close',
+        entityType: 'Class',
+        entityId: id,
+        before: current,
+        after: { ...closed, withdrawnEnrollmentIds: live.map((e) => e.id) },
+      });
       await enqueueEvent(exec(tx), 'ClassClosed', { classId: id });
       return closed;
     });

@@ -6,7 +6,13 @@ import {
   ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { enqueueEvent, todayInVietnam, type AuthUser, type SqlExecutor } from '@tms/common';
+import {
+  enqueueEvent,
+  recordChange,
+  todayInVietnam,
+  type AuthUser,
+  type SqlExecutor,
+} from '@tms/common';
 import { z } from 'zod';
 import type { Prisma, Session, SessionStatus } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -129,6 +135,12 @@ export class SessionsService {
         [slot],
         input.makeupOf,
       );
+      await recordChange(exec(tx), {
+        action: 'session.create',
+        entityType: 'Session',
+        entityId: session.id,
+        after: session,
+      });
       return view(session);
     });
   }
@@ -143,7 +155,13 @@ export class SessionsService {
       );
     }
     return view(
-      await this.transition(id, 'SCHEDULED', { status: 'IN_PROGRESS' }, async () => undefined),
+      await this.transition(
+        'session.start',
+        id,
+        'SCHEDULED',
+        { status: 'IN_PROGRESS' },
+        async () => undefined,
+      ),
     );
   }
 
@@ -157,6 +175,7 @@ export class SessionsService {
       );
     }
     const cancelled = await this.transition(
+      'session.cancel',
       id,
       s.status,
       { status: 'CANCELLED', cancelReason: input.reason },
@@ -204,6 +223,13 @@ export class SessionsService {
         classId: s.classId,
         newStartAt: next.startsAt.toISOString(),
         studentIds: await this.schedules.roster(tx, s.classId),
+      });
+      await recordChange(exec(tx), {
+        action: 'session.reschedule',
+        entityType: 'Session',
+        entityId: id,
+        before: { status: s.status, startsAt: s.startsAt, endsAt: s.endsAt },
+        after: { status: 'RESCHEDULED', newSessionId: next.id, newStartsAt: next.startsAt },
       });
       return { old: view({ ...s, status: 'RESCHEDULED' }), session: view(next) };
     });
@@ -284,6 +310,7 @@ export class SessionsService {
 
   /** Compare-and-set on the status, so two concurrent requests cannot both win. */
   private transition(
+    action: string,
     id: string,
     from: SessionStatus,
     data: Prisma.SessionUpdateManyMutationInput,
@@ -293,7 +320,18 @@ export class SessionsService {
       const { count } = await tx.session.updateMany({ where: { id, status: from }, data });
       if (count === 0) throw new ConflictException('the session changed; reload and retry');
       await publish(tx);
-      return tx.session.findUniqueOrThrow({ where: { id } });
+      const after = await tx.session.findUniqueOrThrow({ where: { id } });
+      await recordChange(exec(tx), {
+        action,
+        entityType: 'Session',
+        entityId: id,
+        before: { status: from },
+        after: {
+          status: after.status,
+          ...(data.cancelReason ? { cancelReason: after.cancelReason } : {}),
+        },
+      });
+      return after;
     });
   }
 

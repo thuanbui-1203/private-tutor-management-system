@@ -9,6 +9,7 @@ import {
   currentPeriod,
   enqueueEvent,
   nextPeriod,
+  recordChange,
   type AuthUser,
   type SqlExecutor,
 } from '@tms/common';
@@ -145,6 +146,24 @@ export class AttendanceService {
         s.status === 'COMPLETED'
           ? s
           : await tx.session.update({ where: { id: sessionId }, data: { status: 'COMPLETED' } });
+      // One record per save of the sheet: status per Student before and after.
+      const sheet = (rows: { studentId: string; status: string; note?: string | null }[]) =>
+        Object.fromEntries(
+          rows.map((r) => [r.studentId, { status: r.status, note: r.note ?? null }]),
+        );
+      await recordChange(exec(tx), {
+        action: existing.length ? 'attendance.correct' : 'attendance.record',
+        entityType: 'Session',
+        entityId: sessionId,
+        before: existing.length
+          ? { attendance: sheet(existing), status: s.status }
+          : { status: s.status },
+        after: {
+          attendance: sheet(input.records.map((r) => ({ ...r, note: r.note || null }))),
+          status: done.status,
+        },
+        personal: ['note'],
+      });
       return {
         session: view(done),
         corrected: existing.length > 0,

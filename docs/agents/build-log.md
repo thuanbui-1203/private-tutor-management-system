@@ -307,3 +307,19 @@ measure and left to the user.
   - Tests: 45 unit (common) incl. 12 new, 8 integration incl. 4 new (rollback leaves no
     record; UPDATE/DELETE/TRUNCATE fail), contracts 104. Mutation checks: removing the
     actor hand-off in AuthGuard, the personal mask, or the unchanged-field skip each fails tests.
+- **#53 Change records in the five services** on `feat/53-change-records` (stacked on #52):
+  - Migration `20261122000000_audit` + `AuditLog` model in identity, student, class, schedule
+    and billing (same DDL as `packages/common/sql/audit.sql`, insert-only triggers).
+  - `recordChange` inside the transaction of every user action: `user.register|update`,
+    `invitation.create|accept`, `student.create|update|add-parent|remove-parent|change-status|anonymise`,
+    `parent.create|update|anonymise`, `class.create|update|close`,
+    `enrollment.create|pause|resume|withdraw`, `schedule.create|end`,
+    `session.create|start|cancel|reschedule`, `attendance.record|correct`, `invoice.void`,
+    `payment.record|reverse`. Two writes that ran outside a transaction (remove a Parent
+    link, create a Parent) now run in one. The BR-ST-02 job records `SYSTEM` as actor.
+  - Extra personal fields per service: `firebaseUid` (identity), `school` (student),
+    `studentName` (class), attendance `note`, invoice `voidReason`.
+  - Tests: one new integration test per service (actor, correlation id, changed fields,
+    no personal values, refused change leaves none, `GET /internal/audit`). Integration:
+    identity 15, student 37, class 24, schedule 23, billing 40, all passing. Mutation checks:
+    removing `class.update`'s record or mislabelling `payment.reverse` each fails a test.

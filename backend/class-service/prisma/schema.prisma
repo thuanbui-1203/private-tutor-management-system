@@ -33,6 +33,26 @@ model ProcessedEvent {
   @@map("processed_events")
 }
 
+/// Change records (ADR-0005, recordChange in @tms/common). Insert-only: triggers in the
+/// `audit` migration reject UPDATE, DELETE and TRUNCATE. Same DDL as packages/common/sql/audit.sql.
+model AuditLog {
+  id            String   @id @db.Uuid
+  occurredAt    DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  correlationId String?  @map("correlation_id") @db.Uuid
+  actorId       String?  @map("actor_id") @db.Uuid
+  actorRole     String   @map("actor_role")
+  action        String
+  entityType    String   @map("entity_type")
+  entityId      String   @map("entity_id")
+  changes       Json
+
+  @@index([correlationId])
+  @@index([entityId, occurredAt])
+  @@index([actorId, occurredAt])
+  @@index([occurredAt])
+  @@map("audit_log")
+}
+
 enum ClassType {
   ONE_ON_ONE
   GROUP

@@ -6,10 +6,10 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { enqueueEvent, type AuthUser, type SqlExecutor } from '@tms/common';
+import { enqueueEvent, recordChange, type AuthUser, type SqlExecutor } from '@tms/common';
 import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { StudentsService, viewFor } from '../students/students.service';
+import { STUDENT_PERSONAL, StudentsService, viewFor } from '../students/students.service';
 import {
   checkTransition,
   OPEN_INVOICES_CHECKER,
@@ -93,6 +93,12 @@ export class LifecycleService implements OnApplicationBootstrap, OnApplicationSh
           where: { parentId, studentId: { not: id } },
         });
         if (others === 0) {
+          await recordChange(tx as unknown as SqlExecutor, {
+            action: 'parent.anonymise',
+            entityType: 'Parent',
+            entityId: parentId,
+            after: { anonymised: true },
+          });
           await tx.parent.update({
             where: { id: parentId },
             data: {
@@ -105,6 +111,14 @@ export class LifecycleService implements OnApplicationBootstrap, OnApplicationSh
         }
       }
       await tx.studentParent.deleteMany({ where: { studentId: id } });
+      await recordChange(tx as unknown as SqlExecutor, {
+        action: 'student.anonymise',
+        entityType: 'Student',
+        entityId: id,
+        before: { anonymisedAt: null },
+        after: { anonymisedAt },
+        personal: STUDENT_PERSONAL,
+      });
       await tx.student.update({
         where: { id },
         data: {
@@ -131,6 +145,14 @@ export class LifecycleService implements OnApplicationBootstrap, OnApplicationSh
 
   private async transition(tx: Tx, id: string, from: StudentStatus, to: StudentStatus, at: Date) {
     await tx.student.update({ where: { id }, data: { status: to, statusChangedAt: at } });
+    // Actor: the Tutor / Admin on POST /students/{id}/status, SYSTEM for the BR-ST-02 job.
+    await recordChange(tx as unknown as SqlExecutor, {
+      action: 'student.change-status',
+      entityType: 'Student',
+      entityId: id,
+      before: { status: from },
+      after: { status: to },
+    });
     await enqueueEvent(tx as unknown as SqlExecutor, 'StudentStatusChanged', {
       studentId: id,
       from,

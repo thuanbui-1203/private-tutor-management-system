@@ -6,7 +6,13 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { enqueueEvent, todayInVietnam, type AuthUser, type SqlExecutor } from '@tms/common';
+import {
+  enqueueEvent,
+  recordChange,
+  todayInVietnam,
+  type AuthUser,
+  type SqlExecutor,
+} from '@tms/common';
 import type { EventEnvelope, InternalStudentResponse, WithdrawReason } from '@tms/contracts';
 import type { Class, Enrollment, Prisma } from '../generated/prisma/client';
 import { ClassesService, SEAT_HOLDING } from '../classes/classes.service';
@@ -22,6 +28,8 @@ export const PAYMENT_WINDOW_DAYS = 7;
 export const PENDING_TIMEOUT_MS = DAY_MS;
 const LIVE = ['PENDING', 'AWAITING_PAYMENT', 'ACTIVE', 'PAUSED'] as const;
 const PLACEHOLDER_NAME = '(đang xác minh)';
+/** The Student's name copied on the Enrollment is personal data (ADR-0005). */
+const PERSONAL = ['studentName'];
 
 export interface EnrollResult {
   httpStatus: HttpStatus.CREATED | HttpStatus.ACCEPTED;
@@ -76,6 +84,14 @@ export class EnrollmentsService {
           })
         : await tx.enrollment.create({ data: { classId, studentId, ...data } });
       if (saved.status !== 'PENDING') await this.publishEnrolled(tx, cls, saved);
+      await recordChange(exec(tx), {
+        action: 'enrollment.create',
+        entityType: 'Enrollment',
+        entityId: saved.id,
+        before: existing,
+        after: saved,
+        personal: PERSONAL,
+      });
       return saved;
     });
     return {
@@ -99,11 +115,22 @@ export class EnrollmentsService {
       (to === 'ACTIVE' && e.status === 'PAUSED') ||
       (to === 'WITHDRAWN' && (LIVE as readonly string[]).includes(e.status));
     if (!allowed) throw new ConflictException(`a ${e.status} enrollment cannot become ${to}`);
-    return this.prisma.$transaction(async (tx) =>
-      to === 'WITHDRAWN'
-        ? this.withdraw(tx, e, 'REQUESTED')
-        : tx.enrollment.update({ where: { id }, data: { status: to } }),
-    );
+    return this.prisma.$transaction(async (tx) => {
+      const saved =
+        to === 'WITHDRAWN'
+          ? await this.withdraw(tx, e, 'REQUESTED')
+          : await tx.enrollment.update({ where: { id }, data: { status: to } });
+      const verb = { ACTIVE: 'resume', PAUSED: 'pause', WITHDRAWN: 'withdraw' }[to];
+      await recordChange(exec(tx), {
+        action: `enrollment.${verb}`,
+        entityType: 'Enrollment',
+        entityId: id,
+        before: e,
+        after: saved,
+        personal: PERSONAL,
+      });
+      return saved;
+    });
   }
 
   /** GET /students/{studentId}/classes: Tutors see their own classes, Parents / the Student all. */

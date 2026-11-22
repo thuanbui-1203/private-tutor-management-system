@@ -228,4 +228,44 @@ describe('Identity: Invitations and user administration (#7)', () => {
       .send({ status: 'DISABLED' })
       .expect(400);
   });
+
+  /** Change records of one entity (ADR-0005), oldest first. */
+  const changeRecords = async (entityId: string) =>
+    (
+      await env.db.query(
+        `SELECT actor_id, actor_role, action, changes FROM audit_log
+          WHERE entity_id = $1 ORDER BY occurred_at, id`,
+        [entityId],
+      )
+    ).rows;
+
+  it('Change records: registration, invitation, acceptance and admin changes; never the uid or email', async () => {
+    const tutor = await registeredTutor();
+    await http().patch(`/users/${tutor.id}`).set(ADMIN).send({ role: 'ADMIN' }).expect(200);
+    await http().patch(`/users/${tutor.id}`).set(TUTOR).send({ role: 'TUTOR' }).expect(403);
+
+    const userRecords = await changeRecords(tutor.id);
+    expect(userRecords.map((r) => [r.action, r.actor_id, r.actor_role])).toEqual([
+      ['user.register', tutor.id, 'TUTOR'],
+      ['user.update', ADMIN['x-user-id'], 'ADMIN'],
+    ]);
+    expect(userRecords[0].changes).toMatchObject({
+      email: { to: '[personal]' },
+      firebaseUid: { to: '[personal]' },
+      role: { to: 'TUTOR' },
+    });
+    expect(userRecords[1].changes).toEqual({ role: { from: 'TUTOR', to: 'ADMIN' } });
+
+    const { body } = await invite(uniqueEmail('parent')).expect(201);
+    const [created] = await changeRecords(body.invitationId);
+    expect(created).toMatchObject({ action: 'invitation.create', actor_id: TUTOR['x-user-id'] });
+    expect(created.changes.tokenHash).toEqual({ to: '[secret]' });
+    await accept(tokenOf(body.acceptUrl)).expect(200);
+    const parentRecords = await changeRecords(body.userId);
+    expect(parentRecords.map((r) => [r.action, r.actor_id, r.actor_role])).toEqual([
+      ['invitation.accept', body.userId, 'PARENT'],
+    ]);
+    expect(parentRecords[0].changes).toEqual({ status: { from: 'PENDING', to: 'ACTIVE' } });
+    expect(JSON.stringify([...userRecords, created, ...parentRecords])).not.toContain(tutor.email);
+  });
 });
