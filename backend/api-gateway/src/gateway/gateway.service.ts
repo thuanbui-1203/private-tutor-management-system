@@ -4,6 +4,7 @@ import { Injectable, type OnApplicationShutdown } from '@nestjs/common';
 import { HTTP_BUCKETS, HTTP_METRICS_RECORDED, MetricsService, onResponseDone } from '@tms/common';
 import { Id } from '@tms/contracts';
 import { Histogram } from 'prom-client';
+import { AccessLogPublisher } from './access-log';
 import { forward, sendJson } from './proxy';
 import { RateLimiter } from './rate-limiter';
 import { resolveRoute, routeLabel, serviceUrls, type ServiceKey } from './routes';
@@ -13,7 +14,8 @@ type Request = IncomingMessage & { ip?: string; originalUrl?: string };
 
 /**
  * The single entry point for clients (docs/02 §2): resolve the route, rate-limit,
- * authenticate with the Firebase ID token, rewrite identity headers, proxy.
+ * authenticate with the Firebase ID token, rewrite identity headers, proxy. Every
+ * request, rejected or not, leaves one Access record (ADR-0005).
  * Mounted on `/api` by configureApp.
  */
 @Injectable()
@@ -33,7 +35,10 @@ export class GatewayService implements OnApplicationShutdown {
    */
   private readonly requests: Histogram<'method' | 'route' | 'status' | 'target'>;
 
-  constructor(metrics: MetricsService) {
+  constructor(
+    metrics: MetricsService,
+    private readonly access: AccessLogPublisher,
+  ) {
     this.requests = new Histogram({
       name: 'tms_gateway_requests_seconds',
       help: 'Requests through the API gateway, by method, route template, status and target service',
@@ -55,6 +60,7 @@ export class GatewayService implements OnApplicationShutdown {
     const correlationId =
       typeof incoming === 'string' && Id.safeParse(incoming).success ? incoming : randomUUID();
     const responseHeaders: OutgoingHttpHeaders = { 'x-correlation-id': correlationId };
+    const access = this.access.begin(req, res, correlationId);
     const fail = (status: number, message: string, extra: OutgoingHttpHeaders = {}) =>
       sendJson(res, status, { statusCode: status, message }, { ...responseHeaders, ...extra });
 
@@ -106,12 +112,14 @@ export class GatewayService implements OnApplicationShutdown {
         if (!byUser.allowed) {
           return fail(429, 'too many requests', { 'retry-after': String(byUser.retryAfter) });
         }
+        access.user = user;
         headers['x-user-id'] = user.id;
         headers['x-user-role'] = user.role;
       }
     }
 
     target = route.service;
+    access.service = route.service;
     forward(req, res, this.urls[route.service], path, headers, responseHeaders);
   }
 

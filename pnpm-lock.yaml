@@ -146,6 +146,9 @@ importers:
       '@tms/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      amqplib:
+        specifier: 'catalog:'
+        version: 2.2.1
       firebase-admin:
         specifier: 'catalog:'
         version: 14.5.0(@firebase/app-compat@0.5.23)(@firebase/app@0.16.7)

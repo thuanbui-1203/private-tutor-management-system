@@ -19,6 +19,7 @@
     "@nestjs/swagger": "catalog:",
     "@tms/common": "workspace:*",
     "@tms/contracts": "workspace:*",
+    "amqplib": "catalog:",
     "firebase-admin": "catalog:",
     "ioredis": "catalog:",
     "prom-client": "catalog:",

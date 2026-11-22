@@ -135,6 +135,11 @@ services:
       <<: [*common-env, *firebase-env]
       PORT: '8080'
       REDIS_URL: ${REDIS_URL}
+      # Access records wait here while RabbitMQ is unavailable (ADR-0005).
+      AUDIT_SPOOL_DIR: /var/lib/tms-gateway
+    volumes:
+      - ./infra/keys:/run/keys:ro
+      - gateway-audit-spool:/var/lib/tms-gateway
     ports: ['8080:8080']
     depends_on:
       identity-service: { condition: service_healthy }
@@ -243,3 +248,4 @@ volumes:
   rabbitmq-data:
   prometheus-data:
   grafana-data:
+  gateway-audit-spool:
