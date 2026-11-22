@@ -1,0 +1,17 @@
+# Loads every dashboard JSON in infra/grafana/dashboards and rescans it every 30s,
+# so edits committed there show up without a restart.
+apiVersion: 1
+
+providers:
+  - name: tms-dashboards
+    orgId: 1
+    folder: TMS
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    # UI edits are allowed for experimenting but are overwritten on the next rescan:
+    # export the JSON (Share > Export) into infra/grafana/dashboards to keep them.
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

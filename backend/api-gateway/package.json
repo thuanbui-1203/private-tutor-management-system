@@ -21,6 +21,7 @@
     "@tms/contracts": "workspace:*",
     "firebase-admin": "catalog:",
     "ioredis": "catalog:",
+    "prom-client": "catalog:",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:"
   },

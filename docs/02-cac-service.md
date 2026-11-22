@@ -25,7 +25,7 @@
 | RabbitMQ 4.2 | 5672 / 15672 (UI) | Message broker, exchange `tms.events` và `tms.dlx` loại topic; user `tms` |
 | Redis 7.4 | 6379 | Rate limit, cache, delayed job (BullMQ) |
 | Mailpit | 1025 (SMTP) / 8025 (UI) | Hộp thư giả để test email ở môi trường dev |
-| Prometheus + Grafana (tùy chọn, chưa có trong compose) | 9090 / 3000 | Metrics |
+| Prometheus 3.5 + Grafana 12.3 | 9090 / 3000 (chỉ 127.0.0.1) | Metrics; dashboard **TMS – Luồng API** theo dõi mọi endpoint ([docs/03 §8](03-cach-chay.md)) |
 | Loki (tùy chọn, chưa có trong compose) | 3100 | Log tập trung |
 
 **Nguyên tắc chung:**
@@ -292,7 +292,8 @@ microservices_final/
 │   └── common/                  # logger, auth guard, health check, outbox helper
 ├── infra/
 │   ├── rabbitmq/definitions.json
-│   └── grafana/
+│   ├── prometheus/prometheus.yml
+│   └── grafana/                 # provisioning + dashboards/tms-api.json
 ├── docs/
 ├── pnpm-workspace.yaml          # workspace + catalog phiên bản dùng chung
 ├── docker-compose.yml
