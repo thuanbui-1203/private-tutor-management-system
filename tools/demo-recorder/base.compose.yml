@@ -1,0 +1,188 @@
+# Local stack (docs/03-cach-chay.md). `docker compose up -d --build`
+# docker-compose.override.yml (applied automatically) switches apps to hot reload;
+# use `docker compose -f docker-compose.yml up` for production-like images.
+name: tms
+
+# Variables shared by every backend app. Each app gets only these plus its own
+# (port, its own DATABASE_URL, Firebase for gateway/identity): no `env_file`, so a
+# container never holds another service's database credentials (ADR-0003).
+# Compose still reads .env to fill in the ${...} values below.
+x-common-env: &common-env
+  NODE_ENV: ${NODE_ENV}
+  LOG_LEVEL: ${LOG_LEVEL}
+  TZ: ${TZ}
+  RABBITMQ_URL: ${RABBITMQ_URL}
+
+x-firebase-env: &firebase-env
+  FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+  GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS}
+  FIREBASE_AUTH_EMULATOR_HOST: ${FIREBASE_AUTH_EMULATOR_HOST:-} # empty = real project
+
+# Every Dockerfile builds from the repo root (pnpm workspace + lockfile).
+x-backend: &backend
+  restart: on-failure
+  networks: [tms-net]
+  depends_on:
+    postgres: { condition: service_healthy }
+    rabbitmq: { condition: service_healthy }
+  healthcheck:
+    # /health/ready (from @tms/common) checks this service's database and the broker.
+    test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:$${PORT}/health/ready > /dev/null || exit 1']
+    interval: 10s
+    timeout: 5s
+    retries: 10
+    start_period: 60s
+
+# Only the gateway and identity-service hold the Firebase service account key (ADR-0004).
+x-firebase-key: &firebase-key
+  volumes:
+    - ./infra/keys:/run/keys:ro
+
+services:
+  # ---------- Infrastructure ----------
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      # PostgreSQL 18 keeps data in /var/lib/postgresql/18/docker: mount the parent.
+      - pg-data:/var/lib/postgresql
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports: ['5432:5432']
+    healthcheck:
+      # -h forces TCP: while init.sql runs, the entrypoint's temporary server listens
+      # on the Unix socket only, so apps cannot start before their roles exist.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U ${POSTGRES_USER} -d postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [tms-net]
+
+  rabbitmq:
+    image: rabbitmq:4.2-management-alpine
+    hostname: rabbitmq # node name is stored in the data volume; keep it stable
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/20-tms.conf:ro
+      - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+    ports: ['5672:5672', '15672:15672']
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 10s
+      retries: 12
+    networks: [tms-net]
+
+  redis:
+    image: redis:7.4-alpine
+    ports: ['6379:6379']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [tms-net]
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports: ['1025:1025', '8025:8025']
+    networks: [tms-net]
+
+  # ---------- Applications ----------
+  api-gateway:
+    <<: [*backend, *firebase-key]
+    build: { context: ., dockerfile: backend/api-gateway/Dockerfile }
+    environment:
+      <<: [*common-env, *firebase-env]
+      PORT: '8080'
+      REDIS_URL: ${REDIS_URL}
+    ports: ['8080:8080']
+    depends_on:
+      identity-service: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  identity-service:
+    <<: [*backend, *firebase-key]
+    build: { context: ., dockerfile: backend/identity-service/Dockerfile }
+    environment:
+      <<: [*common-env, *firebase-env]
+      PORT: '3001'
+      DATABASE_URL: ${IDENTITY_DB_URL}
+      # BR-CL-08: ask class-service before disabling a Tutor (#11).
+      CLASS_SERVICE_URL: http://class-service:3003
+    ports: ['3001:3001']
+
+  student-service:
+    <<: *backend
+    build: { context: ., dockerfile: backend/student-service/Dockerfile }
+    environment:
+      <<: *common-env
+      PORT: '3002'
+      DATABASE_URL: ${STUDENT_DB_URL}
+      # BR-ST-08: Anonymisation asks billing for open Invoices.
+      BILLING_SERVICE_URL: http://billing-service:3006
+    ports: ['3002:3002']
+
+  class-service:
+    <<: *backend
+    build: { context: ., dockerfile: backend/class-service/Dockerfile }
+    environment: { <<: *common-env, PORT: '3003', DATABASE_URL: '${CLASS_DB_URL}' }
+    ports: ['3003:3003']
+
+  schedule-service:
+    <<: *backend
+    build: { context: ., dockerfile: backend/schedule-service/Dockerfile }
+    environment:
+      <<: *common-env
+      PORT: '3004'
+      DATABASE_URL: ${SCHEDULE_DB_URL}
+      ATTENDANCE_EDIT_WINDOW_HOURS: ${ATTENDANCE_EDIT_WINDOW_HOURS}
+    ports: ['3004:3004']
+
+  billing-service:
+    <<: *backend
+    build: { context: ., dockerfile: backend/billing-service/Dockerfile }
+    environment:
+      <<: *common-env
+      PORT: '3006'
+      DATABASE_URL: ${BILLING_DB_URL}
+      BILLING_INVOICE_DUE_DAY: ${BILLING_INVOICE_DUE_DAY}
+      BILLING_CHARGE_ABSENT: ${BILLING_CHARGE_ABSENT}
+      # VietQR: the account Parents transfer to (GET /billing/invoices/{id}/qr; 503 when empty).
+      BILLING_BANK_BIN: ${BILLING_BANK_BIN:-}
+      BILLING_BANK_ACCOUNT: ${BILLING_BANK_ACCOUNT:-}
+      BILLING_BANK_ACCOUNT_NAME: ${BILLING_BANK_ACCOUNT_NAME:-}
+    ports: ['3006:3006']
+
+  # academic-service (:3005, MongoDB) and notification-service (:3007) are added
+  # only if time allows (BR-SYS-03).
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: '${NEXT_PUBLIC_API_URL}'
+        NEXT_PUBLIC_FIREBASE_API_KEY: '${NEXT_PUBLIC_FIREBASE_API_KEY}'
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: '${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}'
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: '${NEXT_PUBLIC_FIREBASE_PROJECT_ID}'
+        NEXT_PUBLIC_FIREBASE_APP_ID: '${NEXT_PUBLIC_FIREBASE_APP_ID}'
+    ports: ['5173:5173']
+    restart: on-failure
+    depends_on:
+      api-gateway: { condition: service_healthy }
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:5173/ > /dev/null || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    networks: [tms-net]
+
+networks:
+  tms-net:
+
+volumes:
+  pg-data:
+  rabbitmq-data:

@@ -1,0 +1,15 @@
+# Declares the Prometheus data source at Grafana startup (no clicking in the UI).
+# `uid` is fixed because every panel in dashboards/*.json references "prometheus".
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy # Grafana's backend queries Prometheus; the browser never reaches it
+    url: http://prometheus:9090 # compose service name, not localhost
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s # mirrors scrape_interval in infra/prometheus/prometheus.yml
