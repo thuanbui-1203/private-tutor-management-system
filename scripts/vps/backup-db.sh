@@ -11,7 +11,7 @@ envval() { grep -E "^$1=" .env | tail -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/
 
 DEST="$HOME/backups/$(date +%F)"
 mkdir -p "$DEST"
-for db in identity_db student_db class_db schedule_db billing_db; do
+for db in identity_db student_db class_db schedule_db billing_db audit_db; do
   docker compose exec -T postgres pg_dump -U "$(envval POSTGRES_USER)" -Fc "$db" >"$DEST/$db.dump"
 done
 find "$HOME/backups" -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf {} +
