@@ -75,6 +75,8 @@ Sau khi chạy xong:
 | http://localhost:15672 | RabbitMQ Management (`tms` / `tms_dev`; không có user `guest`) |
 | http://localhost:8025 | Mailpit – xem các email hệ thống đã gửi |
 | `localhost:5432` | PostgreSQL: mỗi service một database và một login role (xem mục 4) |
+| http://localhost:3000 | Grafana (`admin` / `admin`), mở sẵn dashboard **TMS – Luồng API** (xem mục 8) |
+| http://localhost:9090 | Prometheus (Status > Targets để xem service nào scrape được) |
 
 **Tài khoản mẫu sau khi seed** (có khi Identity làm xong):
 
@@ -177,7 +179,54 @@ docker compose down                               # dừng (giữ dữ liệu)
 docker compose down -v                            # dừng và XÓA toàn bộ dữ liệu
 ```
 
-## 8. Xử lý sự cố thường gặp
+## 8. Giám sát: Prometheus + Grafana
+
+Prometheus và Grafana chạy cùng `docker compose up` (cả hai chế độ ở mục 2), không cần cấu hình thêm.
+
+```text
+client ──► api-gateway ──► service ──► (gọi /internal/** sang service khác)
+              │ /metrics      │ /metrics
+              └──────┬────────┘
+              Prometheus (15 s scrape một lần, giữ 15 ngày) ──► Grafana
+```
+
+**Metrics các app trả ở `GET /metrics`** (từ `@tms/common`, mọi app giống nhau):
+
+| Metric | Label | Ý nghĩa |
+|---|---|---|
+| `tms_gateway_requests_seconds` (histogram, chỉ gateway) | `method`, `route`, `status`, `target` | Mọi request `/api/**` như client thấy. `target` là service nhận request; `gateway` khi gateway tự trả lời (401, 403, 404, 429, 501) |
+| `http_server_requests_seconds` (histogram, mọi app) | `method`, `route`, `status` | Mọi request service trả lời, gồm cả lời gọi nội bộ `/internal/**`. Không tính `/health`, `/metrics`, `/docs` |
+| `http_server_requests_in_flight` | `method` | Request đang xử lý |
+| `tms_events_consumed_total`, `tms_outbox_published_total` | `event_type`, `outcome` | Luồng event qua RabbitMQ |
+| `process_*`, `nodejs_*` | | CPU, RAM, event loop (prom-client) |
+
+`route` luôn là **route template** (`/billing/invoices/:id/qr`), không bao giờ là đường dẫn thật: id, token không lọt vào metrics và số series không tăng theo dữ liệu. Ở gateway mọi tham số đường dẫn thành `:id`, đường dẫn không khớp route nào gộp thành `UNMATCHED`, và có trần 300 route (vượt thì gộp vào `OTHER`), để quét bừa từ Internet không làm phình Prometheus. Label `service` do Prometheus gắn theo target trong [`infra/prometheus/prometheus.yml`](../infra/prometheus/prometheus.yml).
+
+**Dashboard TMS – Luồng API** ([`infra/grafana/dashboards/tms-api.json`](../infra/grafana/dashboards/tms-api.json)), lọc bằng các biến Service / Service đích / Method / Endpoint ở đầu trang:
+
+| Nhóm | Nội dung |
+|---|---|
+| Tổng quan | Số service UP, request/s, tổng request trong khoảng thời gian, tỉ lệ 5xx, p95, request đang xử lý, trạng thái từng service |
+| Luồng qua API Gateway | Request/s theo service đích và theo status; **bảng tất cả endpoint** (số request, req/s, % 4xx, % 5xx, avg, p50, p95, p99); top 10 endpoint; p95 và lỗi theo endpoint |
+| Endpoint trong từng service | Như trên nhưng đo tại service, kèm biểu đồ gọi đồng bộ giữa các service (`/internal/**`) |
+| Luồng sự kiện | Event publish từ outbox, event consume theo loại, retry / trùng / DLQ, message đang chờ trong queue RabbitMQ |
+| Tài nguyên | CPU, RSS, event loop lag của từng app |
+
+Dashboard được sinh từ [`infra/grafana/build-dashboard.py`](../infra/grafana/build-dashboard.py): sửa file này rồi chạy `python infra/grafana/build-dashboard.py`; Grafana tự nạp lại sau tối đa 30 giây. Sửa trên giao diện Grafana chỉ để thử, lần nạp lại sẽ ghi đè.
+
+Sửa `prometheus.yml` xong thì nạp lại không cần restart: `curl -X POST http://localhost:9090/-/reload`.
+
+**Khi deploy lên VPS** (cùng `docker-compose.yml`, Prometheus tìm app qua tên service trên mạng `tms-net` nên không phải sửa gì):
+
+1. Trong `.env`: đổi `GRAFANA_ADMIN_PASSWORD` (mặc định `admin`).
+2. Prometheus và Grafana mặc định chỉ nghe `127.0.0.1`. Chọn một cách để vào Grafana:
+   - Reverse proxy (Nginx / Caddy) có HTTPS trỏ vào `127.0.0.1:3000`. Nếu đặt dưới đường dẫn con, ví dụ `https://tms.example.com/grafana/`, đặt `GRAFANA_ROOT_URL=https://tms.example.com/grafana/` và `GRAFANA_SERVE_FROM_SUB_PATH=true`.
+   - Hoặc SSH tunnel, không mở thêm cổng nào: `ssh -L 3000:127.0.0.1:3000 user@vps` rồi mở http://localhost:3000.
+   - Hoặc `GRAFANA_BIND=0.0.0.0` và tự mở cổng trên firewall (chỉ khi đã đổi mật khẩu).
+3. Không mở Prometheus (9090) ra Internet: nó không có đăng nhập.
+4. `/metrics` của từng app không đi qua `/api` nên client không gọi được qua gateway, nhưng cổng của từng app (8080, 3001–3006) đang publish ra host. Trên VPS chỉ cho reverse proxy chuyển `/api/**` vào gateway và chặn `/metrics` (ví dụ Nginx: `location /metrics { deny all; }`), hoặc dùng firewall chỉ mở 80/443.
+
+## 9. Xử lý sự cố thường gặp
 
 | Hiện tượng | Nguyên nhân | Cách xử lý |
 |---|---|---|
@@ -188,6 +237,8 @@ docker compose down -v                            # dừng và XÓA toàn bộ d
 | Đăng nhập được nhưng API trả `403` | Tài khoản Firebase chưa có vai trò (custom claim) | Hoàn tất đăng ký giáo viên hoặc nhận lời mời; Admin kiểm tra người dùng trong Identity |
 | Dữ liệu PostgreSQL mất sau `docker compose down` | Volume gắn sai đường dẫn (image PostgreSQL 18 lưu ở `/var/lib/postgresql/18/docker`) | Gắn volume vào `/var/lib/postgresql`, không phải `/var/lib/postgresql/data` |
 | Không nhận được email | Đang dùng Mailpit ở môi trường dev | Mở http://localhost:8025 |
+| Grafana không có data source / dashboard; log có `readdirent ... cannot allocate memory` | Docker Desktop trên Windows thỉnh thoảng đọc lỗi thư mục bind mount lúc Grafana khởi động (hay gặp khi máy đang tải nặng) | `docker compose restart grafana` |
+| Dashboard Grafana trống | Chưa có request nào, hoặc Prometheus không scrape được app | Gọi thử vài API; mở http://localhost:9090/targets xem target nào `DOWN` |
 | Hóa đơn không cập nhật sau khi điểm danh | Billing chưa nhận event | Xem queue trong RabbitMQ UI; kiểm tra DLQ `billing.dlq` |
 | `exec format error` / `\r` trong script | File `.sh` bị đổi line ending thành CRLF trên Windows | `git config core.autocrlf input`, chuyển file về LF |
 | Docker chạy chậm, hết RAM | Quá nhiều container | Tăng RAM trong Docker Desktop, hoặc chỉ bật các service cần thiết |

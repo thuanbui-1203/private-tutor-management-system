@@ -20,6 +20,7 @@ import { RabbitConnection } from './messaging/connection';
 import { EventConsumer, type ConsumerOptions, type EventHandler } from './messaging/consumer';
 import {
   HealthController,
+  HttpMetricsMiddleware,
   MetricsController,
   MetricsService,
   TMS_RUNTIME,
@@ -103,7 +104,8 @@ export class Messaging implements OnApplicationBootstrap, OnApplicationShutdown 
 
 /**
  * Shared plumbing for every service: correlation ids, X-User-* auth guard,
- * /health/live, /health/ready, /metrics, outbox relay and event consumers.
+ * /health/live, /health/ready, /metrics (with per-route HTTP metrics), outbox relay and
+ * event consumers.
  *
  * ```ts
  * TmsCommonModule.forRoot({
@@ -151,6 +153,6 @@ export class TmsCommonModule implements NestModule {
   }
 
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(correlationMiddleware).forRoutes('*');
+    consumer.apply(correlationMiddleware, HttpMetricsMiddleware).forRoutes('*');
   }
 }

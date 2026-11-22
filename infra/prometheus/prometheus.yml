@@ -1,0 +1,49 @@
+# Prometheus pulls GET /metrics from every app (@tms/common); apps never push.
+#
+# Targets are compose service names: Prometheus and the apps share the tms-net network,
+# so this file is the same on a laptop and on a VPS. Apps started on the host instead of
+# in Docker are not scraped.
+#
+# Reload after editing (no restart):  curl -X POST http://localhost:9090/-/reload
+
+global:
+  scrape_interval: 15s # data resolution; rate() windows in the dashboards are >= 4x this
+  evaluation_interval: 15s
+  external_labels:
+    monitor: tms
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Every NestJS app exposes the same metric names:
+  #   http_server_requests_seconds_{bucket,count,sum}{method, route, status}   (every app)
+  #   http_server_requests_in_flight{method}
+  #   tms_gateway_requests_seconds_{bucket,count,sum}{method, route, status, target}  (gateway)
+  #   tms_events_consumed_total{event_type, outcome}, tms_outbox_published_total
+  #   process_* / nodejs_* (prom-client default metrics)
+  # `service` is attached here, so the apps do not need to know their own label.
+  - job_name: tms
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['api-gateway:8080']
+        labels: { service: api-gateway }
+      - targets: ['identity-service:3001']
+        labels: { service: identity-service }
+      - targets: ['student-service:3002']
+        labels: { service: student-service }
+      - targets: ['class-service:3003']
+        labels: { service: class-service }
+      - targets: ['schedule-service:3004']
+        labels: { service: schedule-service }
+      - targets: ['billing-service:3006']
+        labels: { service: billing-service }
+
+  # RabbitMQ's built-in Prometheus plugin. /metrics/per-object labels each queue, which is
+  # cheap with the handful of queues TMS has (one per consumer + DLQs).
+  - job_name: rabbitmq
+    metrics_path: /metrics/per-object
+    static_configs:
+      - targets: ['rabbitmq:15692']
+        labels: { service: rabbitmq }

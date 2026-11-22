@@ -152,6 +152,9 @@ importers:
       ioredis:
         specifier: 'catalog:'
         version: 5.11.1
+      prom-client:
+        specifier: 'catalog:'
+        version: 15.1.3
       reflect-metadata:
         specifier: 'catalog:'
         version: 0.2.2
