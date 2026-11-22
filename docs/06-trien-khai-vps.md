@@ -19,7 +19,7 @@ Trình duyệt ──HTTPS──▶ Cloudflare ──(tunnel, VPS tự kết n�
 | Mục | Giá trị |
 |---|---|
 | Nhà cung cấp | Bizfly Cloud |
-| Cấu hình tối thiểu | 2 vCPU, 4 GB RAM, 40 GB SSD, cộng 4 GB swap (script tự tạo) |
+| Cấu hình đang dùng | 2 vCPU, **2 GB RAM**, 40 GB SSD, cộng 4 GB swap (script tự tạo). Đủ cho demo khi tắt Prometheus/Grafana (profile `monitoring`); khi chạy, RAM còn trống khoảng 500 MB |
 | Hệ điều hành | Ubuntu 24.04 LTS (hoặc 22.04), x86_64 |
 | Người dùng | `deploy` (sudo, docker), chỉ đăng nhập bằng SSH key; tắt đăng nhập root và đăng nhập bằng mật khẩu |
 | Tường lửa | UFW: chỉ mở OpenSSH; fail2ban chặn dò mật khẩu SSH |
@@ -42,19 +42,50 @@ Trình duyệt ──HTTPS──▶ Cloudflare ──(tunnel, VPS tự kết n�
 2. Ở phần xác thực, chọn SSH key và dán public key của máy bạn (`~/.ssh/id_ed25519.pub`). Nếu chỉ có mật khẩu root thì vẫn được: script ở mục 5 sẽ thêm key rồi tắt đăng nhập bằng mật khẩu.
 3. Ghi lại IP public. Nếu Bizfly có security group (tường lửa phía nhà cung cấp), chỉ cho phép inbound TCP 22.
 
-### 4.2 Cloudflare
-1. Tên miền đã ở trên Cloudflare (nameserver trỏ về Cloudflare, trạng thái **Active**).
-2. Vào **Zero Trust → Networks → Tunnels → Create a tunnel**, chọn loại **Cloudflared**, đặt tên `tms-vps`.
-3. Ở bước *Install connector*, chọn Docker rồi copy **token** (chuỗi dài sau `--token`) vào biến `CLOUDFLARE_TUNNEL_TOKEN` trong `.env` trên VPS. Không cần chạy lệnh Cloudflare đưa ra, vì `docker-compose.prod.yml` đã có service `cloudflared`.
-4. Vào tab **Public Hostnames** và thêm hai dòng:
-   - `app.<domain>` → Service `HTTP` → `frontend:5173`
-   - `api.<domain>` → Service `HTTP` → `api-gateway:8080`
+### 4.2 Cloudflare: hai cách đưa app ra Internet
 
-   Cloudflare tự tạo bản ghi DNS (CNAME) và cấp chứng chỉ HTTPS.
-5. Tuỳ chọn: **SSL/TLS → Edge Certificates → Always Use HTTPS = On**.
+**Cách A, đang dùng: Quick Tunnel (không cần tên miền, không cần tài khoản).** [`docker-compose.quicktunnel.yml`](../docker-compose.quicktunnel.yml) chạy hai container `tunnel-app` và `tunnel-api`; mỗi container nhận một URL ngẫu nhiên `https://<tên>.trycloudflare.com`.
 
-### 4.3 Firebase
-**Authentication → Settings → Authorized domains → Add domain**: thêm `app.<domain>`.
+- URL **đổi mỗi khi container tunnel khởi động lại** (kể cả khi VPS reboot). Khi đó làm lại các bước ở mục 6, dòng "URL Quick Tunnel bị đổi".
+- Không có SLA và giới hạn khoảng 200 request đồng thời: chỉ dùng cho demo.
+
+**Cách B, khi gắn tên miền riêng: named tunnel tạo từ dòng lệnh.** Không cần vào dashboard Zero Trust; chỉ cần một lần bấm **Authorize** trong trình duyệt.
+
+```bash
+# Trên VPS. In ra một link: mở link trong trình duyệt đã đăng nhập Cloudflare, chọn tên miền,
+# bấm Authorize (link hết hạn sau khoảng 8 phút). cert.pem được ghi vào ~/.cloudflared/.
+CF="docker run --rm -v $HOME/.cloudflared:/home/nonroot/.cloudflared cloudflare/cloudflared:2025.11.1"
+$CF tunnel login
+$CF tunnel create tms-vps                     # ghi credentials ~/.cloudflared/<TUNNEL_ID>.json
+$CF tunnel route dns tms-vps app.<domain>     # tạo CNAME trên Cloudflare
+$CF tunnel route dns tms-vps api.<domain>
+cp ~/.cloudflared/<TUNNEL_ID>.json ~/tms/infra/cloudflared/
+cat > ~/tms/infra/cloudflared/config.yml <<EOF
+tunnel: <TUNNEL_ID>
+credentials-file: /etc/cloudflared/<TUNNEL_ID>.json
+ingress:
+  - hostname: app.<domain>
+    service: http://frontend:5173
+  - hostname: api.<domain>
+    service: http://api-gateway:8080
+  - service: http_status:404
+EOF
+```
+
+Sau đó sửa `.env` (`FRONTEND_URL`, `CORS_ORIGINS`, `NEXT_PUBLIC_API_URL` sang `app.`/`api.<domain>`), thêm `app.<domain>` vào Firebase (mục 4.3), rồi chạy **không có** file quicktunnel:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.quicktunnel.yml rm -sf tunnel-app tunnel-api
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build frontend api-gateway identity-service cloudflared
+```
+
+### 4.3 Firebase: thêm domain của frontend vào Authorized domains
+Vào Console: **Authentication → Settings → Authorized domains → Add domain**. Hoặc làm bằng API với key service account, không cần mở Console:
+
+```bash
+# Chạy trong backend/identity-service (có sẵn firebase-admin)
+node ../../scripts/vps/fb-domains.cjs ../../infra/keys/firebase-service-account.json <host-của-frontend>
+```
 
 ## 5. Các bước trên server
 
@@ -84,8 +115,11 @@ Trên VPS (`ssh tms-vps`, `cd ~/tms`):
 
 ```bash
 # 5.3 Build và chạy (lần đầu mất khoảng 10–15 phút)
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.yml -f docker-compose.prod.yml ps   # chờ mọi container healthy
+# VPS 2 GB: build từng service một (mỗi service khoảng 3 phút), rồi mới chạy
+DC="docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.quicktunnel.yml"
+for s in api-gateway identity-service student-service class-service schedule-service billing-service frontend; do $DC build $s; done
+$DC up -d --no-build
+$DC ps   # chờ mọi container healthy
 
 # 5.4 Tạo bảng
 bash scripts/vps/migrate.sh
@@ -100,13 +134,14 @@ mkdir -p dumps
 for db in identity_db student_db class_db schedule_db billing_db; do
   docker compose exec -T postgres pg_dump -U tms -Fc "$db" > "dumps/$db.dump"
 done
-scp dumps/*.dump tms-vps:~/
+ssh tms-vps mkdir -p dumps && scp dumps/*.dump tms-vps:dumps/
 
 # Trên VPS, trong ~/tms (sau bước 5.4)
 for db in identity_db student_db class_db schedule_db billing_db; do
-  docker compose exec -T postgres pg_restore -U tms -d "$db" --clean --if-exists < ~/"$db".dump
+  docker compose exec -T postgres pg_restore -U tms -d "$db" --clean --if-exists \
+    --no-owner --role="${db%_db}" < ~/dumps/"$db".dump
 done
-docker compose -f docker-compose.yml -f docker-compose.prod.yml restart
+$DC restart identity-service student-service class-service schedule-service billing-service api-gateway
 ```
 
 Tài khoản đăng nhập xem ở [DEMO-ACCOUNTS.md](../DEMO-ACCOUNTS.md).
@@ -121,13 +156,14 @@ mkdir -p ~/backups
 
 | Việc | Lệnh (trên VPS, trong `~/tms`) |
 |---|---|
-| Đặt alias cho gọn | `alias dc='docker compose -f docker-compose.yml -f docker-compose.prod.yml'` (thêm vào `~/.bashrc`) |
+| Alias (đã có trong `~/.bashrc` của `deploy`) | `dc` = `docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.quicktunnel.yml` |
+| URL Quick Tunnel bị đổi | `dc logs tunnel-app tunnel-api \| grep trycloudflare.com`; sửa 3 biến URL trong `.env`; thêm host mới vào Firebase (mục 4.3); `dc up -d --build frontend api-gateway identity-service` |
 | Cập nhật code mới | `git pull && dc up -d --build && bash scripts/vps/migrate.sh` |
 | Xem log | `dc logs -f api-gateway` (hoặc tên service khác) |
 | Trạng thái, RAM | `dc ps`, `docker stats --no-stream` |
 | Khởi động lại | `dc restart <service>` |
 | Dừng tất cả (giữ dữ liệu) | `dc down` (**không** thêm `-v`, vì `-v` xoá database) |
-| Xem Grafana | Trên máy Windows: `ssh -L 3000:127.0.0.1:3000 tms-vps`, rồi mở http://localhost:3000 |
+| Xem Grafana | `dc --profile monitoring up -d prometheus grafana` (tốn khoảng 300 MB RAM), rồi trên máy Windows: `ssh -L 3000:127.0.0.1:3000 tms-vps`, rồi mở http://localhost:3000 |
 | Dọn image cũ khi đầy ổ | `docker image prune -f && docker builder prune -f` |
 
 **Đổi `NEXT_PUBLIC_*` hoặc tên miền:** phải build lại frontend (`dc up -d --build frontend`), vì các biến này được gắn vào lúc build.
@@ -158,4 +194,13 @@ Ghi lại những gì đã làm trên VPS và dashboard (không ghi mật khẩu
 
 | Ngày | Việc | Ghi chú |
 |---|---|---|
-| 2026-11-22 | Chuẩn bị code: `docker-compose.prod.yml`, `TRUST_PROXY`, script `scripts/vps/*`, tài liệu này | nhánh `deploy/vps-cloudflare` |
+| 2026-11-22 | Chuẩn bị code: `docker-compose.prod.yml`, `TRUST_PROXY`, script `scripts/vps/*`, tài liệu này | PR #66, nhánh `deploy/vps-cloudflare` |
+| 2026-11-22 | Bizfly: server `ubuntu-2vcpu-2gb-1-timgiasu`, IP `14.225.215.93`, Ubuntu 24.04.2, 2 vCPU / 1,9 GB RAM / 38 GB | Người dùng tự tạo |
+| 2026-11-22 | Chạy `setup-server.sh`: user `deploy` + key `~/.ssh/tms_vps` (alias `tms-vps` trong `~/.ssh/config` của máy Windows), 4 GB swap, Docker 29.10 / Compose 5.8, UFW chỉ mở OpenSSH, fail2ban, múi giờ Asia/Ho_Chi_Minh | |
+| 2026-11-22 | `sshd_config` của Bizfly **không có** `Include sshd_config.d/*`, nên file drop-in bị bỏ qua: sửa thẳng `PermitRootLogin no`, `PasswordAuthentication no` trong file chính (bản cũ: `/etc/ssh/sshd_config.bak`). Đã kiểm tra: root/mật khẩu bị từ chối | Script đã sửa để làm việc này |
+| 2026-11-22 | Clone nhánh `deploy/vps-cloudflare` vào `~/tms`; đưa lên `.env` (mật khẩu Postgres/Grafana sinh ngẫu nhiên) và `infra/keys/firebase-service-account.json` (chmod 600; `deploy` uid 1000 = `node` trong container) | |
+| 2026-11-22 | `cloudflared tunnel login` hai lần, cả hai hết hạn vì chưa ai bấm Authorize, nên chuyển sang Quick Tunnel (mục 4.2, cách A) | Chuyển sang cách B khi có người bấm Authorize |
+| 2026-11-22 | Quick Tunnel: app `https://common-oecd-spanking-downtown.trycloudflare.com`, api `https://schools-installed-brisbane-provinces.trycloudflare.com` | Đổi khi container tunnel khởi động lại |
+| 2026-11-22 | Firebase Authorized domains: thêm `common-oecd-spanking-downtown.trycloudflare.com` qua Admin API (`scripts/vps/fb-domains.cjs`) | |
+| 2026-11-22 | Build 6 backend + frontend trên VPS (khoảng 22 phút), `up`, migration 5 database, import dump từ máy local (11 user), cron backup 02:00 | |
+| 2026-11-22 | Kiểm tra từ Internet: app 200; `/health/ready` ok; CORS cho origin app; bundle frontend trỏ đúng API; đăng nhập `gv.minh@tms.demo`, rồi `/api/classes`, `/api/students`, `/api/billing/invoices` đều 200; Admin `/api/users` 200; cổng 80/443/3000/5432/5672/6379/8080/15672 đóng | |
