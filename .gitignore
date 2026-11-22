@@ -14,3 +14,4 @@ infra/keys/
 # Firebase emulator logs
 *-debug.log
 dumps/
+infra/cloudflared/

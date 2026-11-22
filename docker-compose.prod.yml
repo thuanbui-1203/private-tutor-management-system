@@ -11,6 +11,8 @@
 # - Every container restarts after a crash or a VPS reboot (unless-stopped).
 # - Mailpit (dev mail catcher) does not start.
 # - Docker logs are capped so they cannot fill the disk.
+# - Prometheus and Grafana start only with `--profile monitoring` (about 300 MB of RAM
+#   that a 2 GB VPS cannot spare).
 
 x-prod: &prod
   restart: unless-stopped
@@ -23,8 +25,8 @@ services:
   rabbitmq: { <<: *prod, ports: !reset [] }
   redis: { <<: *prod, ports: !reset [] }
   # Grafana stays on 127.0.0.1 of the VPS: open it with `ssh -L 3000:127.0.0.1:3000 ...`.
-  prometheus: { <<: *prod, ports: !reset [] }
-  grafana: { <<: *prod }
+  prometheus: { <<: *prod, ports: !reset [], profiles: [monitoring] }
+  grafana: { <<: *prod, profiles: [monitoring] }
 
   mailpit:
     profiles: [dev] # never started by `up` unless --profile dev
@@ -37,16 +39,15 @@ services:
   billing-service: { <<: *prod, ports: !reset [] }
   frontend: { <<: *prod, ports: !reset [] }
 
-  # Cloudflare Tunnel. Public hostnames are set in the Cloudflare dashboard
-  # (Zero Trust > Networks > Tunnels > <tunnel> > Public hostnames):
-  #   app.<domain> -> http://frontend:5173
-  #   api.<domain> -> http://api-gateway:8080
+  # Cloudflare Tunnel, created from the CLI (docs/06-trien-khai-vps.md §4.2). infra/cloudflared/
+  # (not committed) holds config.yml (tunnel id + ingress: app.<domain> -> frontend:5173,
+  # api.<domain> -> api-gateway:8080) and the tunnel's credentials <id>.json.
   cloudflared:
     <<: *prod
     image: cloudflare/cloudflared:2025.11.1
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./infra/cloudflared:/etc/cloudflared:ro
     depends_on:
       frontend: { condition: service_healthy }
     networks: [tms-net]

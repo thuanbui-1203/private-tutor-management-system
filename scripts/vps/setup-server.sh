@@ -52,6 +52,9 @@ PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitRootLogin no
 EOF
+# Some images (Bizfly's) ship an sshd_config without `Include sshd_config.d/*`, so the
+# drop-in above is ignored there: set the same options in the main file as well.
+sed -i -E 's/^#?PermitRootLogin.*/PermitRootLogin no/; s/^#?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 sshd -t
 systemctl reload ssh || systemctl reload sshd
 
