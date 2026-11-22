@@ -180,10 +180,36 @@ mkdir -p ~/backups
 | Trạng thái, RAM | `dc ps`, `docker stats --no-stream` |
 | Khởi động lại | `dc restart <service>` |
 | Dừng tất cả (giữ dữ liệu) | `dc down` (**không** thêm `-v`, vì `-v` xoá database) |
-| Xem Grafana | `dc --profile monitoring up -d prometheus grafana` (tốn khoảng 300 MB RAM), rồi trên máy Windows: `ssh -L 3000:127.0.0.1:3000 tms-vps`, rồi mở http://localhost:3000 |
+| Quan sát (Prometheus + Grafana) | Xem mục 6.1 bên dưới |
 | Dọn image cũ khi đầy ổ | `docker image prune -f && docker builder prune -f` |
 
 **Đổi `NEXT_PUBLIC_*` hoặc tên miền:** phải build lại frontend (`dc up -d --build frontend`), vì các biến này được gắn vào lúc build.
+
+### 6.1 Quan sát VPS từ laptop
+
+VPS chỉ chạy **Prometheus** (khoảng 100 MB, nghe trên `127.0.0.1:9090`, không có đăng nhập nên không bao giờ mở ra ngoài). **Grafana chạy trên laptop** và đọc Prometheus qua SSH, nên VPS không phải gánh thêm Grafana.
+
+```
+Laptop: Grafana :3030 ──▶ vps-tunnel (container, ssh -L) ──SSH──▶ VPS 127.0.0.1:9090 ──▶ Prometheus ──▶ các service (tms-net)
+```
+
+```bash
+# 1. Bật Prometheus trên VPS (chạy từ máy Windows)
+ssh tms-vps "cd ~/tms && docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile monitoring up -d prometheus"
+
+# 2. Grafana trên laptop, chạy trong thư mục repo. Cần TMS_VPS_HOST=<IP VPS> trong .env
+#    và key ~/.ssh/tms_vps.
+docker compose -f docker-compose.grafana-vps.yml up -d
+#    Mở http://localhost:3030 (admin / admin); dashboard "TMS – Luồng API" mở sẵn.
+
+# 3. Xem xong thì tắt cả hai
+docker compose -f docker-compose.grafana-vps.yml down
+ssh tms-vps "cd ~/tms && docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile monitoring stop prometheus"
+```
+
+- Muốn xem giao diện Prometheus (Status → Targets, chạy PromQL): `ssh -N -L 19090:127.0.0.1:9090 tms-vps`, rồi mở http://localhost:19090. Dùng 19090 vì Prometheus của stack local có thể đang chiếm 9090.
+- Cổng 3030 được chọn để không trùng Grafana local (3000) và identity-service (3001), nên chạy song song được với stack local.
+- Container `vps-tunnel` tự kết nối lại khi mạng rớt (`restart: unless-stopped`). Nếu Grafana báo lỗi datasource, xem `docker logs tms-grafana-vps-vps-tunnel-1`.
 
 ## 7. Kiểm tra sau khi triển khai
 
@@ -212,7 +238,7 @@ Ghi lại những gì đã làm trên VPS và dashboard (không ghi mật khẩu
 | Ngày | Việc | Ghi chú |
 |---|---|---|
 | 2026-11-22 | Chuẩn bị code: `docker-compose.prod.yml`, `TRUST_PROXY`, script `scripts/vps/*`, tài liệu này | PR #66, nhánh `deploy/vps-cloudflare` |
-| 2026-11-22 | Bizfly: server `ubuntu-2vcpu-2gb-1-timgiasu`, IP `14.225.215.93`, Ubuntu 24.04.2, 2 vCPU / 1,9 GB RAM / 38 GB | Người dùng tự tạo |
+| 2026-11-22 | Bizfly: server `ubuntu-2vcpu-2gb-1-timgiasu`, IP trong `~/.ssh/config` (alias `tms-vps`; không ghi vào repo public), Ubuntu 24.04.2, 2 vCPU / 1,9 GB RAM / 38 GB | Người dùng tự tạo |
 | 2026-11-22 | Chạy `setup-server.sh`: user `deploy` + key `~/.ssh/tms_vps` (alias `tms-vps` trong `~/.ssh/config` của máy Windows), 4 GB swap, Docker 29.10 / Compose 5.8, UFW chỉ mở OpenSSH, fail2ban, múi giờ Asia/Ho_Chi_Minh | |
 | 2026-11-22 | `sshd_config` của Bizfly **không có** `Include sshd_config.d/*`, nên file drop-in bị bỏ qua: sửa thẳng `PermitRootLogin no`, `PasswordAuthentication no` trong file chính (bản cũ: `/etc/ssh/sshd_config.bak`). Đã kiểm tra: root/mật khẩu bị từ chối | Script đã sửa để làm việc này |
 | 2026-11-22 | Clone nhánh `deploy/vps-cloudflare` vào `~/tms`; đưa lên `.env` (mật khẩu Postgres/Grafana sinh ngẫu nhiên) và `infra/keys/firebase-service-account.json` (chmod 600; `deploy` uid 1000 = `node` trong container) | |
@@ -227,3 +253,4 @@ Ghi lại những gì đã làm trên VPS và dashboard (không ghi mật khẩu
 | 2026-11-22 | Merge toàn bộ PR còn mở: chuỗi audit #59–#65 (xung đột với main ở comment `tms-common.module.ts`, constructor gateway [giữ cả metrics lẫn Access record], volume compose, flow-simulator [lấy bản #58]) và #66. Đóng issue #51 | Trước khi merge, đã kiểm tra trên nhánh tích hợp: build, lint, format, 213 unit test, e2e 8/8 trên stack mới. `main` sau merge giống hệt cây đã kiểm tra |
 | 2026-11-22 | Bản cuối lên VPS: backup, `git checkout main` (`de2c6a3`), tạo `audit_db`, thêm `AUDIT_DB_URL`, `AUDIT_RETENTION_DAYS`, `BANK_DATA_KEY` (sinh ngẫu nhiên, chỉ có trên VPS), build 8 image, migrate 6 database, `up` | Khoảng 70 phút; 12 container healthy; RAM trống khoảng 240 MB |
 | 2026-11-22 | Kiểm tra sau triển khai: app 200, `/health/ready` ok, CORS đúng; Tutor: classes, students, invoices, bank-account đều 200; Tutor gọi `/audit/access` nhận 403 (đúng); Admin: users, `/audit/access`, `/audit/changes` 200; Access record ghi IP thật của client (`TRUST_PROXY` hoạt động) | Danh sách hoá đơn trả 403 cho Parent là đúng thiết kế (chỉ TUTOR/ADMIN) |
+| 2026-11-22 | Quan sát VPS từ laptop (mục 6.1): Prometheus VPS chỉ nghe `127.0.0.1:9090` (profile `monitoring`, chỉ bật Prometheus), thêm `audit-service:3008` vào scrape; Grafana chạy local (`docker-compose.grafana-vps.yml`, cổng 3030) qua container SSH tunnel. Kiểm tra: 9/9 target `up` khi query qua Grafana local. Xoá IP VPS khỏi tài liệu (repo public) | IP chỉ còn trong `~/.ssh/config` và `.env` local (`TMS_VPS_HOST`) |
