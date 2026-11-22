@@ -113,7 +113,20 @@
     ]
   },
   "annotations": {
-    "list": []
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": false,
+        "iconColor": "rgba(255, 152, 48, 0.6)",
+        "name": "Stress test và chú thích",
+        "type": "dashboard"
+      }
+    ]
   },
   "panels": [
     {
