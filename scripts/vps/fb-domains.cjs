@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- plain CommonJS script run with node */
 // Usage: node fb-domains.cjs <keyfile> [domain-to-add]
 const { cert } = require(require.resolve('firebase-admin/app', { paths: [process.cwd()] }));
 const [key, add] = process.argv.slice(2);

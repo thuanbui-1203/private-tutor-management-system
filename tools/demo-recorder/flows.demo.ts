@@ -101,7 +101,8 @@ class Api {
   }
   async ok(method: string, path: string, body?: unknown) {
     const r = await this.req(method, path, body);
-    if (r.status >= 300) throw new Error(`${method} ${path}: ${r.status} ${JSON.stringify(r.body)}`);
+    if (r.status >= 300)
+      throw new Error(`${method} ${path}: ${r.status} ${JSON.stringify(r.body)}`);
     return r.body;
   }
 }
@@ -164,7 +165,13 @@ async function weeklySchedule(tutor: Api, classId: string, startTime: string, en
     }),
   );
 }
-async function oneOff(tutor: Api, classId: string, date: string, startTime: string, endTime: string) {
+async function oneOff(
+  tutor: Api,
+  classId: string,
+  date: string,
+  startTime: string,
+  endTime: string,
+) {
   return eventually(() => tutor.ok('POST', '/sessions', { classId, date, startTime, endTime }));
 }
 async function enroll(tutor: Api, classId: string, studentId: string) {
@@ -275,7 +282,9 @@ const nav = (page: Page, name: string) =>
 async function showRoster(page: Page) {
   await page
     .getByRole('heading', { name: 'Danh sách lớp' })
-    .evaluate((e) => window.scrollTo({ top: e.getBoundingClientRect().top + scrollY - 70, behavior: 'smooth' }));
+    .evaluate((e) =>
+      window.scrollTo({ top: e.getBoundingClientRect().top + scrollY - 70, behavior: 'smooth' }),
+    );
   await page.waitForTimeout(900);
 }
 async function signIn(page: Page, email: string, password = PASSWORD) {
@@ -388,7 +397,10 @@ test('02-hoc-sinh-lop-lich-ghi-danh', async ({ page }) => {
   await page.getByLabel('Học phí mỗi tháng (VND)').fill('1200000');
   await page.getByRole('button', { name: 'Tạo lớp' }).click();
   await expect(page).toHaveURL(/\/tutor\/classes\/[0-9a-f-]{36}$/);
-  await system(page, 'Class Service phát sự kiện ClassCreated qua RabbitMQ → Schedule & Billing nhận lớp mới');
+  await system(
+    page,
+    'Class Service phát sự kiện ClassCreated qua RabbitMQ → Schedule & Billing nhận lớp mới',
+  );
 
   await say(page, 'Bước 3: tạo lịch lặp hằng tuần, xem trước trước khi lưu');
   const form = page.getByRole('form', { name: 'Tạo lịch lặp' });
@@ -459,13 +471,23 @@ test('03-hoa-don-thanh-toan', async ({ page }) => {
   await say(page, 'Phụ huynh chuyển trước 500.000 ₫ → giáo viên ghi nhận một phần');
   await pay.getByLabel('Số tiền (VND)').fill('');
   await pay.getByLabel('Số tiền (VND)').pressSequentially('500000', { delay: 60 });
-  await pay.getByLabel('Hình thức').selectOption('BANK_TRANSFER').catch(() => undefined);
+  await pay
+    .getByLabel('Hình thức')
+    .selectOption('BANK_TRANSFER')
+    .catch(() => undefined);
   await pay.getByRole('button', { name: 'Ghi nhận' }).click();
   await expect(main(page).getByText('Đã ghi nhận thanh toán một phần.')).toBeVisible();
   await say(page, 'Hóa đơn chuyển sang "Trả một phần"; ô số tiền tự điền phần còn lại', 3000);
-  await page.getByRole('form', { name: 'Ghi nhận thanh toán' }).getByRole('button', { name: 'Ghi nhận' }).click();
+  await page
+    .getByRole('form', { name: 'Ghi nhận thanh toán' })
+    .getByRole('button', { name: 'Ghi nhận' })
+    .click();
   await expect(main(page).getByText(/Hóa đơn đã được thanh toán đủ/)).toBeVisible();
-  await system(page, 'Billing phát PaymentReceived qua RabbitMQ → Class Service kích hoạt ghi danh', 3500);
+  await system(
+    page,
+    'Billing phát PaymentReceived qua RabbitMQ → Class Service kích hoạt ghi danh',
+    3500,
+  );
   await page.getByRole('heading', { name: 'Lịch sử thanh toán' }).scrollIntoViewIfNeeded();
   await page.waitForTimeout(2000);
   await nav(page, 'Lớp học').click();
@@ -494,7 +516,9 @@ test('04-lich-day-huy-bu-doi-buoi', async ({ page }) => {
   await nav(page, 'Lịch dạy').click();
   await page.getByRole('button', { name: 'Tháng' }).click();
   await say(page, 'Lịch dạy theo tháng: buổi học của mọi lớp, nhóm theo ngày', 3000);
-  const card = main(page).getByRole('article', { name: `${cls.name} 18:00` }).first();
+  const card = main(page)
+    .getByRole('article', { name: `${cls.name} 18:00` })
+    .first();
   await card.scrollIntoViewIfNeeded();
   await say(page, 'Giáo viên bận: hủy một buổi, nhập lý do');
   await card.getByRole('button', { name: 'Hủy buổi' }).click();
@@ -504,7 +528,9 @@ test('04-lich-day-huy-bu-doi-buoi', async ({ page }) => {
   await expect(main(page).getByText(/Bạn có thể tạo buổi bù ngay bên dưới/)).toBeVisible();
   await say(page, 'Buổi đã hủy; hệ thống gợi ý tạo buổi bù ngay', 2500);
   const makeupDate = addDays(vnDate(), 5);
-  const cancelled = main(page).getByRole('article', { name: `${cls.name} 18:00` }).filter({ hasText: 'Lý do hủy' });
+  const cancelled = main(page)
+    .getByRole('article', { name: `${cls.name} 18:00` })
+    .filter({ hasText: 'Lý do hủy' });
   await cancelled.getByLabel('Ngày mới').fill(makeupDate);
   await cancelled.getByLabel('Giờ bắt đầu').fill('09:00');
   await cancelled.getByLabel('Giờ kết thúc').fill('10:30');
@@ -513,7 +539,10 @@ test('04-lich-day-huy-bu-doi-buoi', async ({ page }) => {
   await say(page, 'Đã tạo buổi bù vào sáng ' + makeupDate.split('-').reverse().join('/'), 3000);
 
   await say(page, 'Dời một buổi khác sang giờ đã có lớp Toán 7 → hệ thống báo trùng');
-  const next = main(page).getByRole('article', { name: `${cls.name} 18:00` }).filter({ hasNotText: 'Lý do hủy' }).first();
+  const next = main(page)
+    .getByRole('article', { name: `${cls.name} 18:00` })
+    .filter({ hasNotText: 'Lý do hủy' })
+    .first();
   await next.scrollIntoViewIfNeeded();
   await next.getByRole('button', { name: 'Dời buổi' }).click();
   await next.getByLabel('Ngày mới').fill(addDays(vnDate(), 3));
@@ -556,24 +585,41 @@ test('05-diem-danh-hoc-phi-theo-buoi', async ({ page }) => {
   await expect(page).toHaveURL(/\/tutor$/);
   await nav(page, 'Lịch dạy').click();
   await say(page, 'Buổi học "Lý 10" đã bắt đầu được 10 phút');
-  const card = main(page).getByRole('article', { name: new RegExp(cls.name) }).first();
+  const card = main(page)
+    .getByRole('article', { name: new RegExp(cls.name) })
+    .first();
   await card.getByRole('link', { name: 'Điểm danh' }).click();
   await expect(page).toHaveURL(/\/attendance$/);
   await say(page, 'Phiếu điểm danh của buổi: chọn trạng thái cho từng học sinh');
-  await page.getByRole('radiogroup', { name: `Trạng thái của ${st.fullName}` }).getByLabel('Có mặt').check();
+  await page
+    .getByRole('radiogroup', { name: `Trạng thái của ${st.fullName}` })
+    .getByLabel('Có mặt')
+    .check();
   await page.waitForTimeout(800);
   await page.getByRole('button', { name: 'Lưu điểm danh' }).click();
   await expect(main(page).getByText(/Đã lưu điểm danh/)).toBeVisible();
-  await system(page, 'AttendanceRecorded → Billing thêm 250.000 ₫ vào hóa đơn NHÁP tháng này', 3500);
+  await system(
+    page,
+    'AttendanceRecorded → Billing thêm 250.000 ₫ vào hóa đơn NHÁP tháng này',
+    3500,
+  );
   await nav(page, 'Hóa đơn').click();
   await page.getByLabel('Kỳ').fill(period);
   await expect(main(page).getByRole('link', { name: st.fullName })).toBeVisible();
   await main(page).getByRole('link', { name: st.fullName }).click();
   await expect(main(page).getByText('250.000 ₫').first()).toBeVisible();
-  await say(page, `Hóa đơn tháng ${period.slice(5)}/${period.slice(0, 4)} đang ở trạng thái Nháp, 1 buổi × 250.000 ₫`, 3500);
+  await say(
+    page,
+    `Hóa đơn tháng ${period.slice(5)}/${period.slice(0, 4)} đang ở trạng thái Nháp, 1 buổi × 250.000 ₫`,
+    3500,
+  );
   const invoiceUrl = page.url();
 
-  await system(page, `⏩ Giả lập thời gian: 00:01 ngày 01/${next.slice(5)} → Billing chốt tháng, phát hành hóa đơn`, 3000);
+  await system(
+    page,
+    `⏩ Giả lập thời gian: 00:01 ngày 01/${next.slice(5)} → Billing chốt tháng, phát hành hóa đơn`,
+    3000,
+  );
   await hook('billing', 'close-month', {
     now: new Date(`${next}-01T00:01:00+07:00`).toISOString(),
   });
@@ -583,13 +629,23 @@ test('05-diem-danh-hoc-phi-theo-buoi', async ({ page }) => {
 
   await say(page, 'Phụ huynh báo con nghỉ có phép → giáo viên sửa điểm danh (trong 48 giờ)');
   await page.goto(`/tutor/sessions/${session.id}/attendance`);
-  await page.getByRole('radiogroup', { name: `Trạng thái của ${st.fullName}` }).getByLabel('Vắng có phép').check();
+  await page
+    .getByRole('radiogroup', { name: `Trạng thái của ${st.fullName}` })
+    .getByLabel('Vắng có phép')
+    .check();
   await page.waitForTimeout(800);
   await page.getByRole('button', { name: 'Lưu bản sửa' }).click();
   await expect(main(page).getByText('Đã lưu bản sửa điểm danh.')).toBeVisible();
-  await system(page, 'Billing không sửa hóa đơn đã phát hành: tạo dòng ĐIỀU CHỈNH -250.000 ₫ ở hóa đơn tháng sau', 4000);
+  await system(
+    page,
+    'Billing không sửa hóa đơn đã phát hành: tạo dòng ĐIỀU CHỈNH -250.000 ₫ ở hóa đơn tháng sau',
+    4000,
+  );
   await eventually(async () => {
-    const list = await tutor.ok('GET', `/billing/invoices?period=${next}&kind=MONTHLY&studentId=${st.id}`);
+    const list = await tutor.ok(
+      'GET',
+      `/billing/invoices?period=${next}&kind=MONTHLY&studentId=${st.id}`,
+    );
     if (!list[0]) throw new Error('no next invoice');
     const d = await tutor.ok('GET', `/billing/invoices/${list[0].id}`);
     if (!d.items.some((i: { type: string }) => i.type === 'ADJUSTMENT')) throw new Error('no adj');
@@ -598,7 +654,11 @@ test('05-diem-danh-hoc-phi-theo-buoi', async ({ page }) => {
   await page.getByLabel('Kỳ').fill(next);
   await main(page).getByRole('link', { name: st.fullName }).click();
   await expect(main(page).getByText('-250.000 ₫').first()).toBeVisible();
-  await say(page, `Hóa đơn tháng ${next.slice(5)}: dòng điều chỉnh -250.000 ₫ cho buổi tháng trước`, 4000);
+  await say(
+    page,
+    `Hóa đơn tháng ${next.slice(5)}: dòng điều chỉnh -250.000 ₫ cho buổi tháng trước`,
+    4000,
+  );
   await page.goto(invoiceUrl);
   await expect(main(page).getByText('Đã phát hành').first()).toBeVisible();
   await say(page, 'Hóa đơn tháng trước vẫn giữ nguyên (250.000 ₫, đã phát hành)', 3500);
@@ -625,7 +685,11 @@ test('06-phu-huynh-kich-hoat-xem-lich-hoc-phi', async ({ page }) => {
   await type(page, 'Mật khẩu mới', PASSWORD);
   await type(page, 'Nhập lại mật khẩu', PASSWORD);
   await page.getByRole('button', { name: 'Kích hoạt và đăng nhập' }).click();
-  await system(page, 'Identity đặt mật khẩu + vai trò PARENT → sự kiện UserRegistered → Student Service liên kết với học sinh', 3500);
+  await system(
+    page,
+    'Identity đặt mật khẩu + vai trò PARENT → sự kiện UserRegistered → Student Service liên kết với học sinh',
+    3500,
+  );
   await expect(page).toHaveURL(/\/parent$/);
   const linked = main(page).getByRole('heading', { name: /Lịch học của/ });
   const notYet = main(page).getByText(/chưa được liên kết với học sinh/);
@@ -641,7 +705,11 @@ test('06-phu-huynh-kich-hoat-xem-lich-hoc-phi', async ({ page }) => {
       const kids = await parent.ok('GET', '/parents/me/children');
       if (!kids.length) throw new Error('not linked yet');
     });
-    await system(page, 'Student Service đã xử lý sự kiện và liên kết phụ huynh → tải lại trang', 2500);
+    await system(
+      page,
+      'Student Service đã xử lý sự kiện và liên kết phụ huynh → tải lại trang',
+      2500,
+    );
     await page.reload();
   }
   await expect(linked).toBeVisible();
@@ -651,10 +719,17 @@ test('06-phu-huynh-kich-hoat-xem-lich-hoc-phi', async ({ page }) => {
   await nav(page, 'Học phí').click();
   await expect(main(page).getByText(/Còn phải trả/)).toBeVisible();
   await say(page, 'Học phí: công nợ và danh sách hóa đơn, gồm hóa đơn ghi danh', 3000);
-  await main(page).getByRole('link', { name: /Hóa đơn ghi danh/ }).first().click();
+  await main(page)
+    .getByRole('link', { name: /Hóa đơn ghi danh/ })
+    .first()
+    .click();
   await expect(main(page).getByRole('region', { name: 'VietQR' })).toBeVisible();
   await main(page).getByRole('region', { name: 'VietQR' }).scrollIntoViewIfNeeded();
-  await say(page, 'Chi tiết hóa đơn + VietQR để chuyển khoản. Phụ huynh chỉ xem, không ghi nhận thanh toán được', 4000);
+  await say(
+    page,
+    'Chi tiết hóa đơn + VietQR để chuyển khoản. Phụ huynh chỉ xem, không ghi nhận thanh toán được',
+    4000,
+  );
   await say(page, 'Thử mở trang giáo viên /tutor…');
   await page.goto('/tutor');
   await expect(main(page).getByRole('heading', { name: /không có quyền/ })).toBeVisible();
@@ -681,7 +756,11 @@ test('07-qua-han-thanh-toan-rut-ten', async ({ page }) => {
   await showRoster(page);
   await expect(main(page).getByText('Chờ thanh toán').first()).toBeVisible();
   await say(page, `${st.fullName} đã ghi danh nhưng chưa thanh toán hóa đơn ghi danh`, 3500);
-  await system(page, '⏩ Giả lập thời gian: 8 ngày sau. Job hằng giờ của Class Service quét các ghi danh quá hạn', 3500);
+  await system(
+    page,
+    '⏩ Giả lập thời gian: 8 ngày sau. Job hằng giờ của Class Service quét các ghi danh quá hạn',
+    3500,
+  );
   await hook('class', 'jobs', { now: new Date(Date.now() + 8 * DAY).toISOString() });
   await page.waitForTimeout(2500);
   await page.reload();
@@ -711,7 +790,11 @@ test('08-su-co-student-service', async ({ page }) => {
   await expect(page).toHaveURL(/\/tutor$/);
   await nav(page, 'Lớp học').click();
   await main(page).getByRole('link', { name: cls.name }).click();
-  await system(page, '💥 Tắt container student-service (docker compose stop student-service)', 2000);
+  await system(
+    page,
+    '💥 Tắt container student-service (docker compose stop student-service)',
+    2000,
+  );
   compose('stop student-service');
   await say(page, 'Student Service đang tắt. Giáo viên vẫn ghi danh học sinh như bình thường');
   const enrollForm = page.getByRole('form', { name: 'Ghi danh' });
@@ -719,13 +802,21 @@ test('08-su-co-student-service', async ({ page }) => {
   await enrollForm.getByLabel('Ghi danh học sinh').selectOption({ label: st.fullName });
   await enrollForm.getByRole('button', { name: 'Ghi danh', exact: true }).click();
   await expect(main(page).getByText(/Đang xử lý ghi danh/)).toBeVisible();
-  await say(page, 'Class Service không kiểm tra được học sinh → trả 202, ghi danh ở trạng thái "Đang xử lý"', 4000);
+  await say(
+    page,
+    'Class Service không kiểm tra được học sinh → trả 202, ghi danh ở trạng thái "Đang xử lý"',
+    4000,
+  );
   await showRoster(page);
   await page.waitForTimeout(1500);
   await system(page, '🔧 Bật lại student-service', 1500);
   compose('start student-service');
   compose('up -d --wait student-service');
-  await system(page, 'Job đối soát (mỗi phút) của Class Service kiểm tra lại các ghi danh PENDING…', 2500);
+  await system(
+    page,
+    'Job đối soát (mỗi phút) của Class Service kiểm tra lại các ghi danh PENDING…',
+    2500,
+  );
   await eventually(
     async () => {
       await hook('class', 'jobs', { now: new Date().toISOString() });
@@ -757,13 +848,19 @@ test('09-quan-tri-vien', async ({ page }) => {
   await expect(page).toHaveURL(/\/admin$/);
   await say(page, 'Trang quản trị: danh sách giáo viên', 3000);
   await say(page, `Thử vô hiệu hóa ${busy.email} (đang có 1 lớp mở)`);
-  await main(page).getByRole('row', { name: new RegExp(busy.email.replace('.', '\\.')) }).getByRole('button', { name: 'Vô hiệu hóa' }).click();
+  await main(page)
+    .getByRole('row', { name: new RegExp(busy.email.replace('.', '\\.')) })
+    .getByRole('button', { name: 'Vô hiệu hóa' })
+    .click();
   await page.waitForTimeout(1200);
   await page.getByRole('dialog').getByRole('button', { name: 'Vô hiệu hóa' }).click();
   await expect(main(page).getByRole('alert')).toBeVisible();
   await say(page, 'Bị từ chối: giáo viên còn lớp đang mở, phải đóng lớp trước', 3500);
   await say(page, `Vô hiệu hóa ${idle.email} (không có lớp nào)`);
-  await main(page).getByRole('row', { name: new RegExp(idle.email.replace('.', '\\.')) }).getByRole('button', { name: 'Vô hiệu hóa' }).click();
+  await main(page)
+    .getByRole('row', { name: new RegExp(idle.email.replace('.', '\\.')) })
+    .getByRole('button', { name: 'Vô hiệu hóa' })
+    .click();
   await page.waitForTimeout(1200);
   await page.getByRole('dialog').getByRole('button', { name: 'Vô hiệu hóa' }).click();
   await expect(main(page).getByText(`Đã vô hiệu hóa ${idle.email}.`)).toBeVisible();
