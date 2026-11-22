@@ -44,25 +44,28 @@ Trình duyệt ──HTTPS──▶ Cloudflare ──(tunnel, VPS tự kết n�
 
 ### 4.2 Cloudflare: hai cách đưa app ra Internet
 
-**Cách A, đang dùng: Quick Tunnel (không cần tên miền, không cần tài khoản).** [`docker-compose.quicktunnel.yml`](../docker-compose.quicktunnel.yml) chạy hai container `tunnel-app` và `tunnel-api`; mỗi container nhận một URL ngẫu nhiên `https://<tên>.trycloudflare.com`.
+**Cách A, dùng tạm lúc chưa có tên miền: Quick Tunnel (không cần tên miền, không cần tài khoản).** [`docker-compose.quicktunnel.yml`](../docker-compose.quicktunnel.yml) chạy hai container `tunnel-app` và `tunnel-api`; mỗi container nhận một URL ngẫu nhiên `https://<tên>.trycloudflare.com`.
 
 - URL **đổi mỗi khi container tunnel khởi động lại** (kể cả khi VPS reboot). Khi đó làm lại các bước ở mục 6, dòng "URL Quick Tunnel bị đổi".
 - Không có SLA và giới hạn khoảng 200 request đồng thời: chỉ dùng cho demo.
 
-**Cách B, khi gắn tên miền riêng: named tunnel tạo từ dòng lệnh.** Không cần vào dashboard Zero Trust; chỉ cần một lần bấm **Authorize** trong trình duyệt.
+**Cách B, đang dùng (timgiasu.date): named tunnel tạo từ dòng lệnh.** Không cần vào dashboard Zero Trust; chỉ cần một lần bấm **Authorize** trong trình duyệt.
 
 ```bash
 # Trên VPS. In ra một link: mở link trong trình duyệt đã đăng nhập Cloudflare, chọn tên miền,
 # bấm Authorize (link hết hạn sau khoảng 8 phút). cert.pem được ghi vào ~/.cloudflared/.
-CF="docker run --rm -v $HOME/.cloudflared:/home/nonroot/.cloudflared cloudflare/cloudflared:2025.11.1"
-$CF tunnel login
-$CF tunnel create tms-vps                     # ghi credentials ~/.cloudflared/<TUNNEL_ID>.json
+mkdir -p ~/.cloudflared && chmod 777 ~/.cloudflared
+docker run --rm -v $HOME/.cloudflared:/home/nonroot/.cloudflared cloudflare/cloudflared:2025.11.1 tunnel login
+sudo chown -R deploy:deploy ~/.cloudflared && chmod 700 ~/.cloudflared   # file do uid nonroot của container tạo
+# uid 1000 không có home trong image, nên chỉ thẳng đường dẫn cert:
+CF="docker run --rm -u 1000:1000 -e TUNNEL_ORIGIN_CERT=/cf/cert.pem -v $HOME/.cloudflared:/cf cloudflare/cloudflared:2025.11.1"
+$CF tunnel create --credentials-file /cf/tms-vps.json tms-vps
 $CF tunnel route dns tms-vps app.<domain>     # tạo CNAME trên Cloudflare
 $CF tunnel route dns tms-vps api.<domain>
-cp ~/.cloudflared/<TUNNEL_ID>.json ~/tms/infra/cloudflared/
+cp ~/.cloudflared/tms-vps.json ~/tms/infra/cloudflared/ && chmod 600 ~/tms/infra/cloudflared/tms-vps.json
 cat > ~/tms/infra/cloudflared/config.yml <<EOF
 tunnel: <TUNNEL_ID>
-credentials-file: /etc/cloudflared/<TUNNEL_ID>.json
+credentials-file: /etc/cloudflared/tms-vps.json
 ingress:
   - hostname: app.<domain>
     service: http://frontend:5173
@@ -156,7 +159,7 @@ mkdir -p ~/backups
 
 | Việc | Lệnh (trên VPS, trong `~/tms`) |
 |---|---|
-| Alias (đã có trong `~/.bashrc` của `deploy`) | `dc` = `docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.quicktunnel.yml` |
+| Alias (đã có trong `~/.bashrc` của `deploy`) | `dc` = `docker compose -f docker-compose.yml -f docker-compose.prod.yml` (named tunnel; không còn file quicktunnel) |
 | URL Quick Tunnel bị đổi | `dc logs tunnel-app tunnel-api \| grep trycloudflare.com`; sửa 3 biến URL trong `.env`; thêm host mới vào Firebase (mục 4.3); `dc up -d --build frontend api-gateway identity-service` |
 | Cập nhật code mới | `git pull && dc up -d --build && bash scripts/vps/migrate.sh` |
 | Xem log | `dc logs -f api-gateway` (hoặc tên service khác) |
@@ -204,3 +207,6 @@ Ghi lại những gì đã làm trên VPS và dashboard (không ghi mật khẩu
 | 2026-11-22 | Firebase Authorized domains: thêm `common-oecd-spanking-downtown.trycloudflare.com` qua Admin API (`scripts/vps/fb-domains.cjs`) | |
 | 2026-11-22 | Build 6 backend + frontend trên VPS (khoảng 22 phút), `up`, migration 5 database, import dump từ máy local (11 user), cron backup 02:00 | |
 | 2026-11-22 | Kiểm tra từ Internet: app 200; `/health/ready` ok; CORS cho origin app; bundle frontend trỏ đúng API; đăng nhập `gv.minh@tms.demo`, rồi `/api/classes`, `/api/students`, `/api/billing/invoices` đều 200; Admin `/api/users` 200; cổng 80/443/3000/5432/5672/6379/8080/15672 đóng | |
+| 2026-11-22 | Bấm Authorize trong Brave (lần thứ 4), `cert.pem` về VPS, zone **timgiasu.date**. Tạo named tunnel `tms-vps` (id `85b76a86-11ec-4d71-a7f5-12b83fe721fe`), CNAME `app.timgiasu.date` và `api.timgiasu.date`; `infra/cloudflared/config.yml` + `tms-vps.json` (chmod 600, cloudflared chạy uid 1000) | Cert và credentials chỉ nằm trên VPS (`~/.cloudflared`, `~/tms/infra/cloudflared`) |
+| 2026-11-22 | `.env`: 3 URL sang `https://app.timgiasu.date` / `https://api.timgiasu.date/api`; Firebase Authorized domains thêm `app.timgiasu.date`; build lại frontend; gỡ 2 Quick Tunnel; `dc up -d --remove-orphans`. Tunnel nối qua Cloudflare HKG | |
+| 2026-11-22 | Kiểm tra trên tên miền thật: app 200 (0,66 s); `/health/ready` ok; CORS cho `https://app.timgiasu.date`; bundle frontend trỏ `api.timgiasu.date/api`; đăng nhập `gv.minh@tms.demo`, rồi classes/students/invoices đều 200; Quick Tunnel cũ trả 530 (đã tắt) | Domain trycloudflare cũ vẫn còn trong Firebase Authorized domains, xoá được trên Console |
