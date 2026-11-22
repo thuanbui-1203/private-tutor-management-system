@@ -75,12 +75,18 @@ export class Client {
     ).idToken;
   }
 
-  request<T = Json>(method: string, path: string, body?: unknown): Promise<Reply<T>> {
+  request<T = Json>(
+    method: string,
+    path: string,
+    body?: unknown,
+    headers: Record<string, string> = {},
+  ): Promise<Reply<T>> {
     return call<T>(`${GATEWAY}${path}`, {
       method,
       headers: {
         authorization: `Bearer ${this.token}`,
         ...(body !== undefined && { 'content-type': 'application/json' }),
+        ...headers,
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
@@ -89,6 +95,38 @@ export class Client {
   post = <T = Json>(path: string, body: unknown = {}) => this.request<T>('POST', path, body);
   put = <T = Json>(path: string, body: unknown) => this.request<T>('PUT', path, body);
   patch = <T = Json>(path: string, body: unknown) => this.request<T>('PATCH', path, body);
+  delete = <T = Json>(path: string) => this.request<T>('DELETE', path);
+}
+
+/** Calls the gateway without a token (what an anonymous client does). */
+export const anonymous = <T = Json>(path: string, headers: Record<string, string> = {}) =>
+  call<T>(`${GATEWAY}${path}`, { headers });
+
+/**
+ * A signed-in user with the role + userId claims set directly in the emulator, as Identity
+ * would after an invitation (#58: an Admin to read the audit trail, a Payer with a bank
+ * account). Only claims-checking services see them; Identity has no row for them.
+ */
+export async function withClaims(role: 'ADMIN' | 'PARENT', userId = randomUUID()) {
+  const email = `${role.toLowerCase()}.${randomUUID().slice(0, 8)}@e2e.test`;
+  const password = 'e2e-password-1';
+  const { localId, idToken } = await emulator('accounts:signUp', {
+    email,
+    password,
+    returnSecureToken: true,
+  });
+  const r = await call(
+    `${EMULATOR}/identitytoolkit.googleapis.com/v1/projects/demo-tms/accounts:update`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer owner' },
+      body: JSON.stringify({ localId, customAttributes: JSON.stringify({ role, userId }) }),
+    },
+  );
+  if (r.status !== 200) throw new Error(`claims: ${r.status} ${JSON.stringify(r.body)}`);
+  const client = new Client(idToken, email, password);
+  await client.refresh();
+  return { client, userId };
 }
 
 /** A brand-new Tutor: Firebase account → POST /api/auth/register → token with the claims. */

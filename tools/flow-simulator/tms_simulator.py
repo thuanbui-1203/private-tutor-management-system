@@ -52,6 +52,7 @@ SERVICES = {
     "class": "class-service :3003",
     "schedule": "schedule-service :3004",
     "billing": "billing-service :3006",
+    "audit": "audit-service :3008",
 }
 SERVICE_ORDER = list(SERVICES)
 
@@ -74,6 +75,8 @@ EVENT_CONSUMERS = {
     "AttendanceRecorded": ["billing"],
     "AttendanceCorrected": ["billing"],
     "PaymentReceived": ["class"],
+    # Not a business event: the gateway's Access record on exchange tms.audit (ADR-0005).
+    "AccessRecorded": ["audit"],
 }
 # Consumer xử lý xong rồi publish tiếp event khác (saga ghi danh).
 FOLLOW_UP = {("schedule", "StudentEnrolled"): "EnrollmentConfirmed"}
@@ -148,7 +151,14 @@ ENDPOINTS = [
     E("POST", "/billing/invoices/{id}/void", "billing", desc="Huỷ hoá đơn"),
     E("GET", "/billing/students/{id}/balance", "billing", desc="Công nợ học sinh"),
     E("GET", "/billing/reports/revenue", "billing", desc="Báo cáo doanh thu"),
-    E("GET", "/billing/invoices/{id}/qr", "billing", desc="Mã QR thanh toán"),
+    E("GET", "/billing/invoices/{id}/qr", "billing", desc="Mã QR thanh toán (TK giáo viên đã đồng ý, hoặc BILLING_BANK_*)"),
+    E("GET", "/billing/bank-account", "billing", desc="Tài khoản ngân hàng của mình, số đã che (ADR-0006)"),
+    E("PUT", "/billing/bank-account", "billing", desc="Lưu tài khoản ngân hàng: cần consent: true + policyVersion, số được mã hoá"),
+    E("DELETE", "/billing/bank-account/consent", "billing", desc="Rút đồng ý: xoá số đầy đủ, chỉ giữ BIN + 4 số cuối"),
+    E("GET", "/billing/bank-accounts", "billing", desc="Tài khoản của người thanh toán để hoàn tiền (Tutor, Admin)"),
+    # audit
+    E("GET", "/audit/access", "audit", desc="Access record: mọi request qua gateway (Admin, ADR-0005)"),
+    E("GET", "/audit/changes", "audit", desc="Change record gộp từ 5 service qua /internal/audit (Admin)"),
     # gateway tự trả lỗi
     E("GET", "/internal/students/{id}", "-", "internal", desc="/internal/** không bao giờ đi qua gateway -> 404"),
     E("GET", "/academic/grades", "-", "not-implemented", desc="Ngoài phạm vi MVP -> 501"),
@@ -164,6 +174,7 @@ _EXCEPTIONS = [
 _BY_PREFIX = {
     "auth": "identity", "users": "identity", "students": "student", "parents": "student",
     "classes": "class", "schedules": "schedule", "sessions": "schedule", "billing": "billing",
+    "audit": "audit",
     "academic": "not-implemented", "notifications": "not-implemented", "webhooks": "not-implemented",
 }
 
@@ -204,6 +215,8 @@ SCENARIOS = [
     "Vượt rate limit IP -> 429",
     "Vượt rate limit user -> 429",
     "Body không hợp lệ (zod) -> 400",
+    "Thiếu đồng ý lưu TK ngân hàng -> 400",
+    "RabbitMQ sập (Access record vào spool)",
     "Service sập -> 502",
     "Service quá tải, timeout 30s -> 504",
     "Consumer sập (event nằm chờ trong RabbitMQ)",
@@ -216,9 +229,9 @@ C = {
     "ok": "#22c55e", "err": "#ef4444", "warn": "#f59e0b", "req": "#e2e8f0", "event": "#fb923c",
 }
 
-SERVICE_Y = {s: 62 + i * 88 for i, s in enumerate(SERVICE_ORDER)}
+SERVICE_Y = {s: 50 + i * 72 for i, s in enumerate(SERVICE_ORDER)}
 BUS_X = 590
-EVENT_LANE_Y = 280
+EVENT_LANE_Y = 302
 
 
 class FlowCanvas(tk.Canvas):
@@ -248,7 +261,7 @@ class FlowCanvas(tk.Canvas):
         for s, y in SERVICE_Y.items():
             self.create_line(gx + 75, gy, 450, y, **L)
             self.create_line(500, y, 660, y, **L)
-        self.create_line(BUS_X, SERVICE_Y["identity"], BUS_X, SERVICE_Y["billing"], fill=C["event"], dash=(4, 4))
+        self.create_line(BUS_X, SERVICE_Y[SERVICE_ORDER[0]], BUS_X, SERVICE_Y[SERVICE_ORDER[-1]], fill=C["event"], dash=(4, 4))
         self.create_line(BUS_X, EVENT_LANE_Y, 830, EVENT_LANE_Y, fill=C["event"], dash=(4, 4))
         # node
         self._box("client", 70, gy, 110, 60, "Client", C["client"], "Frontend / curl")
@@ -267,9 +280,9 @@ class FlowCanvas(tk.Canvas):
         for s, y in SERVICE_Y.items():
             self._box(s, 500, y, 140, 50, s.capitalize(), C["service"], SERVICES[s].split()[1])
             self._box("db_" + s, 700, y, 90, 40, "PostgreSQL", C["db"], s + "_db")
-        self._box("rabbit", 880, EVENT_LANE_Y, 110, 330, "RabbitMQ", C["rabbit"], "topic exchange")
+        self._box("rabbit", 880, 240, 110, 380, "RabbitMQ", C["rabbit"], "events · audit")
         self.status_text = self.create_text(70, gy + 52, text="", fill=C["text"], font=("Segoe UI", -16, "bold"))
-        self.backlog_text = self.create_text(880, EVENT_LANE_Y + 40, text="", fill=C["warn"], font=("Segoe UI", -12), justify="center")
+        self.backlog_text = self.create_text(880, 290, text="", fill=C["warn"], font=("Segoe UI", -12), justify="center")
 
     # tiện ích hình học / hiệu ứng
     def center(self, key):
@@ -539,6 +552,7 @@ class FlowTab(ttk.Frame):
             self.say(f"=> {status} {msg}{extra}", "err", 0.2)
             yield from self.travel([cv.edge("gateway", "l"), cv.edge("client", "r")], C["err"], str(status))
             cv.itemconfig(cv.status_text, text=str(status), fill=C["err"])
+            yield from self.access_record(status, path, sc)
 
         # 1. route
         cv.highlight("route")
@@ -618,20 +632,25 @@ class FlowTab(ttk.Frame):
             return
         self.say(f"{service}: Guard kiểm tra x-user-role · ZodValidationPipe kiểm tra body", None, 0.4)
         yield from self.pause(250)
-        if sc == "Body không hợp lệ (zod) -> 400":
+        if sc in ("Body không hợp lệ (zod) -> 400", "Thiếu đồng ý lưu TK ngân hàng -> 400"):
             cv.highlight(service, C["err"])
-            self.say("ZodValidationPipe: body không khớp schema của @tms/contracts", "err")
+            if sc.startswith("Thiếu đồng ý"):
+                self.say("BankAccountInput: thiếu consent: true -> không lưu gì, không có Consent, không có Change record (ADR-0006)", "err")
+            else:
+                self.say("ZodValidationPipe: body không khớp schema của @tms/contracts", "err")
             yield from self.travel(self.svc_points(service)[::-1], C["err"], "400")
             yield from self.travel([cv.edge("gateway", "l"), cv.edge("client", "r")], C["err"], "400")
             cv.itemconfig(cv.status_text, text="400", fill=C["err"])
             self.say("=> 400 Bad Request (gateway trả nguyên response của service)", "err")
+            yield from self.access_record(400, path, sc)
             return
         db = "db_" + service
         yield from self.travel([cv.edge(service, "r"), cv.edge(db, "l")], C["db"], "SQL")
         cv.highlight(db, C["db"])
         if ep.write:
-            sql = "BEGIN · UPDATE/INSERT ... · INSERT INTO outbox (event) · COMMIT" if ep.events else "BEGIN · UPDATE/INSERT ... · COMMIT"
-            self.say(f"Prisma: {sql}", None, 6.0)
+            outbox = " · INSERT INTO outbox (event)" if ep.events else ""
+            self.say(f"Prisma: BEGIN · UPDATE/INSERT ...{outbox} · INSERT INTO audit_log (Change record) · COMMIT", None, 6.0)
+            self.say("Change record: ai, hành động, các trường đã đổi; dữ liệu cá nhân ghi [personal], số TK ••••1234 (ADR-0005)", "muted")
         else:
             self.say("Prisma: SELECT ... (lọc theo quyền của actor)", None, 2.5)
         yield from self.pause(300)
@@ -643,6 +662,7 @@ class FlowTab(ttk.Frame):
         yield from self.travel([cv.edge("gateway", "l"), cv.edge("client", "r")], C["ok"], str(code))
         cv.itemconfig(cv.status_text, text=str(code), fill=C["ok"])
         self.say(f"=> {code} OK  (client đã có response; phần dưới chạy bất đồng bộ)", "ok")
+        yield from self.access_record(code, path, sc)
         # 5. event bất đồng bộ
         pending = [(service, ev) for ev in ep.events]
         consumer_down = sc.startswith("Consumer sập")
@@ -674,6 +694,28 @@ class FlowTab(ttk.Frame):
                     pending.append((cons, nxt))
             cv.highlight("rabbit", on=False)
         self.say("Hoàn tất luồng.", "ok")
+
+
+    def access_record(self, status, path, sc):
+        """ADR-0005: the gateway publishes one Access record per request, after the response."""
+        cv = self.canvas
+        shown = re.sub(r"^/auth/invitations/[^/]+/accept$", "/auth/invitations/:token/accept", path)
+        self.say(f"Gateway: Access record {{status {status}, path {shown}, userId, ip}} -> tms.audit "
+                 "(không body, không token, không giá trị query)", "gw", 0.1)
+        if sc.startswith("RabbitMQ sập"):
+            cv.highlight("rabbit", C["err"])
+            self.say("Broker không xác nhận -> ghi vào file spool (volume gateway-audit-spool), "
+                     "gửi lại mỗi 5s khi RabbitMQ lên lại", "warn")
+            yield from self.pause(400)
+            cv.highlight("rabbit", on=False)
+            return
+        lane = [cv.edge("gateway", "r"), (BUS_X - 10, 240), (BUS_X - 10, EVENT_LANE_Y), cv.edge("rabbit", "l")]
+        yield from self.travel(lane, C["event"], "access")
+        yield from self.travel(self.to_rabbit("audit")[::-1], C["event"], "access")
+        cv.highlight("audit", C["event"])
+        self.say("audit-service: INSERT access_log ON CONFLICT (id) DO NOTHING · ack", "event", 2.0)
+        yield from self.travel([cv.edge("audit", "r"), cv.edge("db_audit", "l")], C["db"])
+        cv.highlight("audit", on=False)
 
 
 # ----------------------------------------------------------------------------------
@@ -793,6 +835,7 @@ class Simulator:
         self.inflight -= 1
         end = self.now + extra
         self.m.record(end, req.ep.label, status, (end - req.t0) * 1000)
+        self.at(end + 0.0005, self.publish, "AccessRecorded")  # ADR-0005, every request
         think = self.cfg["think"]
         delay = self.rng.expovariate(1 / think) if think > 0 else 0
         self.at(end + delay, self.vu_send, req.vu)
@@ -879,7 +922,8 @@ class Simulator:
 
     def c_next(self, cons):
         s = self.svcs[cons]
-        while not s.down and s.c_busy < 10 and s.c_queue:
+        prefetch = 50 if cons == "audit" else 10
+        while not s.down and s.c_busy < prefetch and s.c_queue:
             ev = s.c_queue.popleft()
             s.c_busy += 1
             self.at(self.now + self.rng.lognormvariate(math.log(0.004), 0.4), self.c_done, cons, ev)
@@ -1015,7 +1059,7 @@ class LineChart(tk.Canvas):
 
 
 MIX_PRESETS = ["Hỗn hợp thực tế (80% đọc)", "Chỉ đọc (GET)", "Ghi nhiều (60% ghi)", "Chỉ endpoint đang chọn ở tab 1", "Dồn vào billing-service"]
-DEFAULT_SVC = {"identity": (10, 6, 15), "student": (10, 8, 20), "class": (10, 8, 25), "schedule": (10, 10, 40), "billing": (10, 12, 30)}
+DEFAULT_SVC = {"identity": (10, 6, 15), "student": (10, 8, 20), "class": (10, 8, 25), "schedule": (10, 10, 40), "billing": (10, 12, 30), "audit": (10, 6, 6)}
 
 
 class StressTab(ttk.Frame):
@@ -1280,7 +1324,7 @@ class StressTab(ttk.Frame):
         okc = sum(v for k, v in codes.items() if 200 <= k < 400)
         state = "Hoàn tất" if final else "Đang chạy"
         if r is not None and isinstance(r, Simulator):
-            state += f" · t={r.now:5.1f}s mô phỏng · đã publish {r.published} event"
+            state += f" · t={r.now:5.1f}s mô phỏng · đã publish {r.published} message (event + Access record)"
         self.summary.configure(text=(f"{state} · {total} req · {total / elapsed:.0f} req/s TB · lỗi {100 * (total - okc) / max(1, total):.1f}% · "
                                      f"p50 {percentile(all_lat, 50):.0f} ms · p95 {percentile(all_lat, 95):.0f} ms · "
                                      + " ".join(f"{k or 'ERR'}:{v}" for k, v in sorted(codes.items()))))
