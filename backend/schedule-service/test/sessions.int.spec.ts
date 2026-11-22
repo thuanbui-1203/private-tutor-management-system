@@ -415,4 +415,32 @@ describe('Schedule: Session lifecycle, cancellations and Makeup sessions (#14)',
       .set(tutor)
       .expect(400); // range cap
   });
+
+  /** Change records of one entity (ADR-0005), oldest first. */
+  const changeRecords = async (entityId: string) =>
+    (
+      await env.db.query(
+        `SELECT actor_id, actor_role, correlation_id, action, changes
+           FROM audit_log WHERE entity_id = $1 ORDER BY occurred_at, id`,
+        [entityId],
+      )
+    ).rows;
+
+  it('Change records for start and cancel; a refused cancel leaves none', async () => {
+    const classId = await knownClass();
+    const id = await sessionAt(classId, new Date(Date.now() - 5 * 60_000)); // under way
+    await http().post(`/sessions/${id}/start`).set(tutor).expect(200);
+    await http().post(`/sessions/${id}/cancel`).set(tutor).send({ reason: 'Mất điện' }).expect(200);
+    await http().post(`/sessions/${id}/cancel`).set(tutor).send({ reason: 'again' }).expect(409);
+
+    const records = await changeRecords(id);
+    expect(records.map((r) => [r.action, r.actor_id, r.actor_role])).toEqual([
+      ['session.start', tutor['x-user-id'], 'TUTOR'],
+      ['session.cancel', tutor['x-user-id'], 'TUTOR'],
+    ]);
+    expect(records[1].changes).toEqual({
+      status: { from: 'IN_PROGRESS', to: 'CANCELLED' },
+      cancelReason: { to: 'Mất điện' },
+    });
+  });
 });

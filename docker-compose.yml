@@ -135,6 +135,8 @@ services:
       <<: [*common-env, *firebase-env]
       PORT: '8080'
       REDIS_URL: ${REDIS_URL}
+      # Access records wait here while RabbitMQ is unavailable (ADR-0005).
+      AUDIT_SPOOL_DIR: /var/lib/tms-gateway
       # Browser origins allowed to call the API (comma-separated): the frontend's public URL.
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
       # Express `trust proxy`: set when a proxy (cloudflared) sits in front, so rate limiting
@@ -142,6 +144,9 @@ services:
       TRUST_PROXY: ${TRUST_PROXY:-}
       RATE_LIMIT_IP_PER_MINUTE: ${RATE_LIMIT_IP_PER_MINUTE:-600}
       RATE_LIMIT_USER_PER_MINUTE: ${RATE_LIMIT_USER_PER_MINUTE:-300}
+    volumes:
+      - ./infra/keys:/run/keys:ro
+      - gateway-audit-spool:/var/lib/tms-gateway
     ports: ['8080:8080']
     depends_on:
       identity-service: { condition: service_healthy }
@@ -200,7 +205,26 @@ services:
       BILLING_BANK_BIN: ${BILLING_BANK_BIN:-}
       BILLING_BANK_ACCOUNT: ${BILLING_BANK_ACCOUNT:-}
       BILLING_BANK_ACCOUNT_NAME: ${BILLING_BANK_ACCOUNT_NAME:-}
+      # Encrypts bank account numbers stored with consent (ADR-0006); empty = cannot store.
+      BANK_DATA_KEY: ${BANK_DATA_KEY:-}
     ports: ['3006:3006']
+
+  # Audit trail (ADR-0005): stores the gateway's Access records, serves /audit/** to Admins
+  # and reads every service's Change records through their /internal/audit.
+  audit-service:
+    <<: *backend
+    build: { context: ., dockerfile: backend/audit-service/Dockerfile }
+    environment:
+      <<: *common-env
+      PORT: '3008'
+      DATABASE_URL: ${AUDIT_DB_URL}
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-365}
+      IDENTITY_SERVICE_URL: http://identity-service:3001
+      STUDENT_SERVICE_URL: http://student-service:3002
+      CLASS_SERVICE_URL: http://class-service:3003
+      SCHEDULE_SERVICE_URL: http://schedule-service:3004
+      BILLING_SERVICE_URL: http://billing-service:3006
+    ports: ['3008:3008']
 
   # academic-service (:3005, MongoDB) and notification-service (:3007) are added
   # only if time allows (BR-SYS-03).
@@ -235,3 +259,4 @@ volumes:
   rabbitmq-data:
   prometheus-data:
   grafana-data:
+  gateway-audit-spool:

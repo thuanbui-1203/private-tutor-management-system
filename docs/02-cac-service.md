@@ -14,6 +14,7 @@
 | 5 | `academic-service` | 3005 | MongoDB `academic_db` | Bài tập, điểm, nhận xét | Tùy chọn (BR-SYS-03) |
 | 6 | `billing-service` | 3006 | PostgreSQL `billing_db` | Hóa đơn, thanh toán, công nợ | ✔ |
 | 7 | `notification-service` | 3007 | PostgreSQL `notification_db` + Redis | Gửi email, SMS, Zalo, push | Tùy chọn (BR-SYS-03) |
+| 8 | `audit-service` | 3008 | PostgreSQL `audit_db` | Nhật ký kiểm toán: Access record, tra Change record ([ADR-0005](adr/0005-audit-log.md)) | ✔ |
 
 **Hạ tầng dùng chung:**
 
@@ -22,7 +23,7 @@
 | PostgreSQL 18 (container) | 5432 | Một container, mỗi service một database và một login role riêng ([ADR-0003](adr/0003-postgresql-database-per-service.md)) |
 | Firebase Authentication (dịch vụ ngoài) | – | Lưu mật khẩu, đăng nhập, cấp ID token ([ADR-0004](adr/0004-firebase-authentication.md)); gói Spark miễn phí |
 | MongoDB 7 (chưa có trong compose) | 27017 | Cho academic-service, chỉ thêm nếu còn thời gian (BR-SYS-03) |
-| RabbitMQ 4.2 | 5672 / 15672 (UI) | Message broker, exchange `tms.events` và `tms.dlx` loại topic; user `tms` |
+| RabbitMQ 4.2 | 5672 / 15672 (UI) | Message broker, exchange `tms.events`, `tms.audit` và `tms.dlx` loại topic; user `tms` |
 | Redis 7.4 | 6379 | Rate limit, cache, delayed job (BullMQ) |
 | Mailpit | 1025 (SMTP) / 8025 (UI) | Hộp thư giả để test email ở môi trường dev |
 | Prometheus 3.5 + Grafana 12.3 | 9090 / 3000 (chỉ 127.0.0.1) | Metrics; dashboard **TMS – Luồng API** theo dõi mọi endpoint ([docs/03 §8](03-cach-chay.md)) |
@@ -55,6 +56,7 @@
 | `/schedules/**`, `/sessions/**` | schedule-service | Như trên |
 | `GET /calendar/{token}.ics` | schedule-service | Không (token riêng trong đường dẫn) |
 | `/billing/**` | billing-service | ID token có claim `userId` + `role` |
+| `/audit/**` | audit-service | Như trên (chỉ ADMIN, service tự kiểm tra) |
 | `/academic/**`, `/notifications/**`, `/webhooks/**` | – | Trả 501 (ngoài phạm vi MVP, BR-SYS-03) |
 | Mọi đường dẫn có đoạn `internal` | – | Trả 404: API nội bộ không bao giờ đi qua gateway |
 
@@ -65,6 +67,8 @@
 3. Xác thực ID token (`verifyIdToken(token, checkRevoked = true)`): thiếu, sai, hết hạn, bị thu hồi → 401; hợp lệ nhưng chưa có claim → 403 (trừ `/auth/register`).
 4. Giới hạn theo người dùng (`RATE_LIMIT_USER_PER_MINUTE`, mặc định 300).
 5. Gắn `X-User-Id` (claim `userId`, không bao giờ là `uid` của Firebase), `X-User-Role`, `X-Correlation-Id` rồi chuyển tiếp nguyên luồng (body không bị đọc ở gateway). Service không phản hồi → 502, quá 30 giây → 504.
+
+6. Khi response xong (kể cả các trường hợp 401 / 403 / 404 / 429 / 501 ở trên), ghi một **Access record** lên exchange `tms.audit` cho audit-service: người dùng (nếu biết), IP, method, đường dẫn (token trong đường dẫn thay bằng `:token`), tên tham số query, mã trạng thái, thời gian, service đích ([ADR-0005](adr/0005-audit-log.md)). Không ghi body, header, giá trị query. RabbitMQ không có mặt thì bản ghi nằm trong file spool (`AUDIT_SPOOL_DIR`, volume `gateway-audit-spool`) và được gửi lại mỗi 5 giây khi broker trở lại; metric `tms_audit_access_records_total{outcome}` đếm published / spooled / replayed / dropped.
 
 Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay vì chặn toàn bộ API. CORS cho các origin trong `CORS_ORIGINS` (mặc định `http://localhost:5173`).
 ---
@@ -199,7 +203,7 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 
 ## 8. Billing Service
 
-**Dữ liệu:** `fee_policies` (lịch sử phí theo kỳ), `student_snapshots` (tên, người thanh toán, trạng thái), `session_calendar`, `invoices`, `invoice_items`, `payments`, `processed_events`, `outbox_events`
+**Dữ liệu:** `fee_policies` (lịch sử phí theo kỳ), `student_snapshots` (tên, người thanh toán, trạng thái), `session_calendar`, `invoices`, `invoice_items`, `payments`, `consents`, `bank_accounts`, `audit_log`, `processed_events`, `outbox_events`
 
 `session_calendar` là bản sao cục bộ các buổi học (từ `SessionScheduled` / `SessionCancelled` / `SessionRescheduled`). Billing dùng nó để tính phí `MONTHLY` theo tỉ lệ số buổi khi vào / rời lớp giữa tháng (BR-BI-05, BR-BI-06), không gọi đồng bộ sang Schedule. `SessionRescheduled` đánh dấu buổi cũ `RESCHEDULED` và thêm buổi mới, nên buổi bị dời chỉ được đếm một lần; buổi `CANCELLED` không được đếm, buổi bù được đếm. Mọi bản sao được cập nhật từ event, xử lý lại một event không làm thay đổi dữ liệu; event đến trước bản ghi nó cần (ví dụ `StudentStatusChanged` trước `StudentCreated`) được thử lại sau.
 
@@ -208,7 +212,11 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 | GET | `/billing/invoices?period=&status=&kind=&studentId=` | Danh sách hóa đơn (`kind` = `MONTHLY` / `ENROLLMENT`); giáo viên chỉ thấy hóa đơn của học sinh mình | TUTOR, ADMIN |
 | GET | `/billing/invoices/{id}` | Chi tiết hóa đơn và các dòng phí (FEE, ADJUSTMENT) | TUTOR, ADMIN, Payer |
 | GET | `/billing/enrollments/{enrollmentId}/invoice` | Hóa đơn ghi danh của một ghi danh `MONTHLY` | TUTOR, ADMIN, Payer |
-| GET | `/billing/invoices/{id}/qr` | Chuỗi VietQR (NAPAS 247, chuẩn EMVCo) để chuyển khoản số còn nợ, nội dung `TMS <8 ký tự đầu id>`; tài khoản nhận lấy từ `BILLING_BANK_BIN` / `BILLING_BANK_ACCOUNT` / `BILLING_BANK_ACCOUNT_NAME`, chưa cấu hình → 503; hóa đơn đã trả đủ / nháp / hủy → 409 | TUTOR, ADMIN, Payer |
+| GET | `/billing/invoices/{id}/qr` | Chuỗi VietQR (NAPAS 247, chuẩn EMVCo) để chuyển khoản số còn nợ, nội dung `TMS <8 ký tự đầu id>`; tài khoản nhận là tài khoản giáo viên đã lưu khi Consent còn hiệu lực, nếu không thì `BILLING_BANK_BIN` / `BILLING_BANK_ACCOUNT` / `BILLING_BANK_ACCOUNT_NAME`, không có cả hai → 503; hóa đơn đã trả đủ / nháp / hủy → 409 | TUTOR, ADMIN, Payer |
+| GET | `/billing/bank-account` | Tài khoản ngân hàng của chính mình (số luôn ở dạng `••••1234`), trạng thái `ACTIVE` / `MASKED`, Consent và `policyVersion` hiện hành ([ADR-0006](adr/0006-bank-details-with-consent.md)) | TUTOR, ADMIN, PARENT, STUDENT |
+| PUT | `/billing/bank-account` | Lưu tài khoản; body phải có `consent: true` và `policyVersion` hiện hành, thiếu → 400 và không lưu gì; số tài khoản mã hóa AES-256-GCM bằng `BANK_DATA_KEY` (thiếu khóa → 503) | TUTOR, ADMIN, PARENT, STUDENT |
+| DELETE | `/billing/bank-account/consent` | Rút đồng ý: xóa số đầy đủ và tên chủ tài khoản, giữ BIN + 4 số cuối; Consent giữ lại với `withdrawn_at`; không có Consent đang hiệu lực → 404 | TUTOR, ADMIN, PARENT, STUDENT |
+| GET | `/billing/bank-accounts` | Tài khoản của người thanh toán để hoàn tiền: số đầy đủ khi Consent còn hiệu lực, chỉ bản đã che sau khi rút | TUTOR, ADMIN |
 | POST | `/billing/invoices/{id}/payments` | Ghi nhận thanh toán thủ công `{amount, method, paidAt?, note?}` trên hóa đơn `ISSUED` / `PARTIALLY_PAID` / `OVERDUE`; vượt số còn nợ → 422 kèm `outstanding`; `paidAt` ở tương lai → 422; phát `PaymentReceived` (BR-BI-07) | TUTOR, ADMIN |
 | POST | `/billing/payments/{id}/reversal` | Bút toán đảo cho khoản ghi sai (kèm `reason`), mỗi khoản chỉ đảo một lần, không đảo bút toán đảo; trạng thái hóa đơn tính lại (có thể về `ISSUED` / `OVERDUE`); không phát `PaymentReceived` | TUTOR, ADMIN |
 | POST | `/billing/invoices/{id}/void` | Hủy hóa đơn đã phát hành mà chưa thanh toán (kèm `reason`) và phát hành hóa đơn thay thế cùng các dòng phí, tên / người thanh toán mới nhất, `replaces_invoice_id`, hạn = max(hạn cũ, hôm nay + 7 ngày), phát `InvoiceIssued`. Hóa đơn nháp, đã hủy, hoặc đã có thanh toán → 409 (đảo thanh toán trước) (BR-BI-04) | TUTOR, ADMIN |
@@ -253,6 +261,19 @@ Hóa đơn đã `ISSUED` không bao giờ bị sửa. Sửa sai được ghi th�
 **Nhận event:** `UserRegistered`, `InvitationCreated`, `EnrollmentConfirmed`, `SessionScheduled`, `SessionCancelled`, `SessionRescheduled`, `AttendanceRecorded` (khi vắng), `GradeRecorded`, `InvoiceIssued`, `InvoiceOverdue`, `PaymentReceived`, `MonthlyReportGenerated`
 **Cách thiết kế:** mỗi kênh gửi là một *adapter* (`EmailChannel`, `SmsChannel`, `ZaloChannel`, `PushChannel`) cài đặt chung một interface `NotificationChannel`. Nhờ vậy có thể đổi nhà cung cấp mà không sửa logic nghiệp vụ.
 
+## 9b. Audit Service
+
+Nhật ký kiểm toán ([ADR-0005](adr/0005-audit-log.md)). Chỉ Admin truy cập.
+
+**Dữ liệu:** `access_log` (một dòng mỗi request qua gateway; chỉ được thêm, job dọn theo `AUDIT_RETENTION_DAYS`, mặc định 365 ngày). Change record nằm ở bảng `audit_log` trong database của từng service, đọc qua `GET /internal/audit` của service đó.
+
+| Method | Endpoint | Mô tả | Quyền |
+|---|---|---|---|
+| GET | `/audit/access?userId=&correlationId=&method=&status=&from=&to=&limit=&cursor=` | Access record, mới nhất trước, phân trang bằng `nextCursor` | ADMIN |
+| GET | `/audit/changes?correlationId=&entityId=&actorId=&from=&to=&limit=` | Change record của mọi service, gộp theo thời gian; `unavailable` liệt kê service không trả lời | ADMIN |
+
+**Nhận:** Access record trên exchange `tms.audit`, routing key `access.recorded`, queue `audit.access-recorded` (bản ghi sai hợp đồng vào `audit.dlq`). Lưu theo `id` nên nhận trùng không tạo dòng mới.
+
 ---
 
 ## 10. Quy ước RabbitMQ
@@ -265,6 +286,7 @@ Hóa đơn đã `ISSUED` không bao giờ bị sửa. Sửa sai được ghi th�
 | Dead letter | Exchange `tms.dlx` → queue `<service>.dlq` |
 | Retry | Tối đa 3 lần, delay 5s → 30s → 2 phút |
 | Ack | Ack thủ công, chỉ sau khi đã commit DB |
+| Nhật ký | Exchange riêng `tms.audit` (topic) cho Access record, không lẫn với event nghiệp vụ |
 
 ## 11. Cấu trúc thư mục đề xuất
 

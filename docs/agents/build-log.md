@@ -286,3 +286,114 @@ measure and left to the user.
     The status code alone was not conclusive on the stale image, so the check compares
     against known-bad routes.
   - The e2e test hooks are absent from this stack (404).
+- **Audit trail + bank details with consent (tracking #51, 2026-11-22):** the user asked that
+  every user action be logged and that bank details be stored only with consent. Decisions
+  (asked, not assumed): bank details for both Tutor and Payer; log every request including
+  `GET`; store at the gateway (Access records → new audit-service) *and* per service
+  (Change records); on consent withdrawal mask and keep. Issues #52–#58, blockers wired.
+  - Other sessions were editing the shared checkout at the same time (monitoring work), so
+    this work runs in its own worktree `../microservices_final-audit`.
+- **#52 foundation** on `feat/52-audit-foundation`:
+  - `@tms/contracts`: `AccessRecord`, `ChangeRecord`, `InternalAuditQuery/Response`,
+    exchange `tms.audit`, queue `audit.access-recorded`.
+  - `@tms/common`: actor in the request context (AuthGuard), `recordChange(tx, …)` (only
+    changed fields; personal data → `[personal]`, secrets → `[secret]`, account numbers →
+    `••••1234`), `GET /internal/audit` in business services, `sql/audit.sql` with a trigger
+    that rejects UPDATE/DELETE/TRUNCATE.
+  - Personal values are never stored in Change records: `audit_log` is immutable, so storing
+    them would make Anonymisation (BR-ST-08) impossible. Recorded in ADR-0005.
+  - ADR-0005 (audit log), ADR-0006 (bank details with consent), GLOSSARY section
+    "Nhật ký và dữ liệu nhạy cảm", docs/01 §6 rows.
+  - Tests: 45 unit (common) incl. 12 new, 8 integration incl. 4 new (rollback leaves no
+    record; UPDATE/DELETE/TRUNCATE fail), contracts 104. Mutation checks: removing the
+    actor hand-off in AuthGuard, the personal mask, or the unchanged-field skip each fails tests.
+- **#53 Change records in the five services** on `feat/53-change-records` (stacked on #52):
+  - Migration `20261122000000_audit` + `AuditLog` model in identity, student, class, schedule
+    and billing (same DDL as `packages/common/sql/audit.sql`, insert-only triggers).
+  - `recordChange` inside the transaction of every user action: `user.register|update`,
+    `invitation.create|accept`, `student.create|update|add-parent|remove-parent|change-status|anonymise`,
+    `parent.create|update|anonymise`, `class.create|update|close`,
+    `enrollment.create|pause|resume|withdraw`, `schedule.create|end`,
+    `session.create|start|cancel|reschedule`, `attendance.record|correct`, `invoice.void`,
+    `payment.record|reverse`. Two writes that ran outside a transaction (remove a Parent
+    link, create a Parent) now run in one. The BR-ST-02 job records `SYSTEM` as actor.
+  - Extra personal fields per service: `firebaseUid` (identity), `school` (student),
+    `studentName` (class), attendance `note`, invoice `voidReason`.
+  - Tests: one new integration test per service (actor, correlation id, changed fields,
+    no personal values, refused change leaves none, `GET /internal/audit`). Integration:
+    identity 15, student 37, class 24, schedule 23, billing 40, all passing. Mutation checks:
+    removing `class.update`'s record or mislabelling `payment.reverse` each fails a test.
+- **#54 audit-service** on `feat/54-audit-service` (stacked on #53):
+  - New NestJS service on port **3008** (3007 stays reserved for notification-service), own
+    `audit_db` + role (init.sql; `infra/postgres/add-audit-db.sql` for existing volumes).
+  - Consumes `tms.audit` / `access.recorded` into `access_log` (idempotent on id; contract
+    violations → `audit.dlq`; DB failure → requeue after 1 s). Triggers reject UPDATE and
+    TRUNCATE, and DELETE except inside the retention purge (`SET LOCAL audit.purge = 'on'`).
+  - `GET /audit/access` (filters, keyset paging) and `GET /audit/changes` (fan-out to the
+    five `/internal/audit`, merged, `unavailable` for services that did not answer); ADMIN only.
+  - Gateway routes `/audit/**`; compose, dev override, e2e stack and `scripts/e2e.mjs` include it.
+  - Tests: 5 integration (real broker publish → stored; duplicate → one row; invalid →
+    dead-lettered; filters/paging/403/401/400; insert-only + purge; fan-out with three
+    services down), 2 unit; gateway 19 unit + 10 integration. Mutation checks: dropping
+    `skipDuplicates` or opening the API to TUTOR each fails a test.
+  - Ran the production image on the dev network: `/health/ready` database up, broker up.
+- **#55 gateway Access records** on `feat/55-gateway-access-records` (stacked on #54):
+  - `AccessLogPublisher`: one Access record per request under `/api` when the response
+    finishes (status 0 if the client left first), including what the gateway rejects itself.
+    User id + role only when the token carried them; `service` only when proxied.
+  - Never recorded: bodies, headers, query values; `/auth/invitations/{token}/accept` and
+    `/calendar/{token}.ics` become `:token`.
+  - Publisher confirms on its own RabbitMQ connection (a broker outage must not make the
+    gateway "not ready"); unconfirmed → append-only spool file (`AUDIT_SPOOL_DIR`, volume
+    `gateway-audit-spool`), replayed every 5 s; metric `tms_audit_access_records_total{outcome}`.
+  - Tests: 4 unit (path/query sanitising), 3 new integration against broker + Redis +
+    emulator (200/401/404/501/429 each one record; no secret in path/query/body; spool then
+    replay). Gateway: 23 unit, 13 integration. Mutation checks: not recording the user, or
+    not masking the invitation token, each fails a test.
+- **#56 bank details with consent** on `feat/56-bank-consent` (stacked on #55):
+  - billing: `consents` (purpose `BANK_ACCOUNT`, policy version, granted/withdrawn) and
+    `bank_accounts` (one per user; AES-256-GCM ciphertext with the owner id as authenticated
+    data, key `BANK_DATA_KEY`; last 4 digits; masked_at). CHECK constraints: ciphertext only
+    (`v1.` prefix), full number present exactly while not masked.
+  - `GET|PUT /billing/bank-account`, `DELETE /billing/bank-account/consent` (TUTOR, ADMIN,
+    PARENT, STUDENT): PUT needs `consent: true` + current `policyVersion` (400 otherwise,
+    nothing stored); owners only ever see `••••1234`. Withdrawal erases ciphertext and holder
+    name, keeps BIN + last 4, keeps the consent row.
+  - `GET /billing/bank-accounts` (TUTOR, ADMIN): Payer accounts, full number only while
+    consent is active. Limitation: every Tutor sees every Payer (single tenant, ADR-0001;
+    billing has no Payer user id to scope by).
+  - VietQR uses the Tutor's consented account, else `BILLING_BANK_*`, else 503.
+  - `pnpm setup:env` generates `BANK_DATA_KEY`; e2e stack uses a fixed throwaway key.
+  - Change records: `consent.grant|withdraw`, `bank-account.save|mask`, number as `••••1234`,
+    holder name `[personal]`.
+  - Tests: 4 integration (no consent → nothing stored; ciphertext + masked views + clean
+    Change records; Payer list before/after withdrawal; DB refuses plain or orphaned
+    numbers), 1 QR integration (own account → env fallback after withdrawal), 4 unit
+    (cipher round trip, wrong owner/key, no key → 503). Billing: 6 unit, 45 integration.
+    Mutation checks: keeping the holder name on withdrawal, or creating a new consent on
+    every save, each fails a test.
+- **#57 frontend** on `feat/57-frontend-audit-bank` (stacked on #56):
+  - `BankAccountSettings` (Tutor `/tutor/bank-account` "TK nhận tiền"; Payer
+    `/parent|student/bank-account`, menu item only for the Payer): consent text with its
+    version, unticked checkbox, save disabled until ticked; the body carries
+    `consent: true` + `policyVersion`; only `••••1234` is shown back. "Rút lại đồng ý" asks
+    first, then shows the masked state.
+  - `PayerBankAccounts` (`/tutor/payer-accounts` "TK phụ huynh", also in the Admin menu).
+  - `AuditLog` (`/admin/audit` "Nhật ký"): filters, keyset "Tải thêm", a request opens its
+    Change records from every service, with services that did not answer named.
+  - Playwright: 4 new tests; full suite 52/53. The one failure is pre-existing and
+    unrelated: `schedule-attendance` "calendar…" puts its Session 48 h ahead, which on a
+    Sunday (Vietnam time) lands in next week's Monday-start view. Mutation check: dropping
+    the consent condition on the save button fails a test. `next build` passes.
+- **#58 end-to-end + simulator** on `feat/58-e2e-audit` (stacked on #57):
+  - `tests/e2e/src/audit.e2e.spec.ts`: (1) a Tutor's PATCH leaves one Access record and one
+    Change record with the same correlation id, read through `/api/audit/**` by an Admin;
+    Tutors get 403 there; (2) a request without a token still leaves an Access record (401,
+    no user); (3) a Payer cannot store bank details without consent, stores them with it,
+    the Tutor sees the full number, after withdrawal only `••••9012`.
+  - Admin and Payer accounts get their claims straight from the emulator (`withClaims`).
+  - `pnpm test:e2e` from scratch (8 images incl. audit-service): **8/8 passed** (5 old + 3 new).
+  - `tools/flow-simulator` committed: audit-service node, bank-account and audit endpoints,
+    an Access record after every response (spool when RabbitMQ is down), `audit_log` in
+    write transactions, missing-consent 400; stress test sends an Access record per request.
+  - `backend/audit-service/.env.example` for host-side migrations.

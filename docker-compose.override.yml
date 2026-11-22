@@ -66,6 +66,14 @@ services:
       - ./backend/billing-service/prisma:/repo/backend/billing-service/prisma
       - /repo/backend/billing-service/src/generated
 
+  audit-service:
+    <<: *dev-backend
+    command: sh -c "pnpm --filter @tms/audit-service prisma:generate && pnpm --filter @tms/audit-service dev"
+    volumes:
+      - ./backend/audit-service/src:/repo/backend/audit-service/src
+      - ./backend/audit-service/prisma:/repo/backend/audit-service/prisma
+      - /repo/backend/audit-service/src/generated
+
   # In development the frontend runs on the host (`pnpm --filter @tms/frontend dev`,
   # port 5173), as Next.js recommends: Turbopack misses file changes made through
   # Docker Desktop's file sharing, and polling is slow. The container is still in

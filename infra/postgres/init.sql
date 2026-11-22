@@ -27,5 +27,11 @@ CREATE ROLE billing LOGIN CREATEDB PASSWORD 'billing';
 CREATE DATABASE billing_db OWNER billing;
 REVOKE CONNECT ON DATABASE billing_db FROM PUBLIC;
 
+-- audit-service (ADR-0005). On a data volume created before it existed, run
+-- infra/postgres/add-audit-db.sql once (docs/03-cach-chay.md).
+CREATE ROLE audit LOGIN CREATEDB PASSWORD 'audit';
+CREATE DATABASE audit_db OWNER audit;
+REVOKE CONNECT ON DATABASE audit_db FROM PUBLIC;
+
 -- The default `postgres` database must not be a back door either.
 REVOKE CONNECT ON DATABASE postgres FROM PUBLIC;

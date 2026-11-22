@@ -169,4 +169,42 @@ describe('Class: Classes and fee policy (#11)', () => {
       classIds: [open.id],
     });
   });
+
+  /** Change records of one entity (ADR-0005), oldest first. */
+  const changeRecords = async (entityId: string) =>
+    (
+      await env.db.query(
+        `SELECT actor_id, actor_role, correlation_id, action, changes
+           FROM audit_log WHERE entity_id = $1 ORDER BY occurred_at, id`,
+        [entityId],
+      )
+    ).rows;
+
+  it('each change leaves one Change record with actor, correlation id and changed fields; a refused one none', async () => {
+    const correlationId = randomUUID();
+    const { body } = await create().set('x-correlation-id', correlationId).expect(201);
+    await http().patch(`/classes/${body.id}`).set(tutor).send({ feeAmount: 250000 }).expect(200);
+    for (let i = 0; i < 3; i++) await enroll(body.id, 'ACTIVE');
+    await http().patch(`/classes/${body.id}`).set(tutor).send({ maxStudents: 2 }).expect(409);
+
+    const records = await changeRecords(body.id);
+    expect(records.map((r) => r.action)).toEqual(['class.create', 'class.update']);
+    expect(records[0]).toMatchObject({
+      actor_id: tutor['x-user-id'],
+      actor_role: 'TUTOR',
+      correlation_id: correlationId,
+    });
+    expect(records[0].changes.name).toEqual({ to: 'Toán 9A' });
+    expect(records[1].changes).toEqual({
+      feeAmount: { from: 200000, to: 250000 },
+      feeEffectiveFrom: { from: currentPeriod(), to: nextPeriod(currentPeriod()) },
+    });
+
+    const { body: read } = await http().get(`/internal/audit?entityId=${body.id}`).expect(200);
+    expect(read.service).toBe('class');
+    expect(read.records.map((r: { action: string }) => r.action)).toEqual([
+      'class.update',
+      'class.create',
+    ]);
+  });
 });

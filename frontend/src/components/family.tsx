@@ -93,7 +93,12 @@ export function FamilyShell({ children }: { children: React.ReactNode }) {
   const nav: NavItem[] = [
     { href: base, label: 'Lịch học' },
     { href: `${base}/attendance`, label: 'Chuyên cần' },
-    ...(family?.isPayer ? [{ href: `${base}/billing`, label: 'Học phí' }] : []),
+    ...(family?.isPayer
+      ? [
+          { href: `${base}/billing`, label: 'Học phí' },
+          { href: `${base}/bank-account`, label: 'Tài khoản ngân hàng' },
+        ]
+      : []),
   ];
 
   return (

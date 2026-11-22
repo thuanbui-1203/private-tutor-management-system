@@ -209,6 +209,8 @@ Mọi event đều có phần chung (envelope):
 | Nhất quán | Nhất quán cuối cùng (eventual consistency) giữa các service, trễ < 5s; không mất event (Outbox); không xử lý trùng (idempotent consumer) |
 | Bảo mật | HTTPS, đăng nhập qua Firebase Authentication, gateway xác thực Firebase ID token, phân quyền ở từng service, không log thông tin cá nhân |
 | Quyền riêng tư | Dữ liệu trẻ vị thành niên: chỉ phụ huynh và giáo viên phụ trách được xem; hỗ trợ xóa / ẩn danh khi nghỉ học |
+| Nhật ký kiểm toán | Mọi request (kể cả `GET` và request bị gateway từ chối) có Access record; mọi thay đổi nghiệp vụ có Change record ghi cùng transaction, không sửa/xóa được; không ghi nội dung request, token hay giá trị dữ liệu cá nhân ([ADR-0005](adr/0005-audit-log.md)) |
+| Dữ liệu nhạy cảm | Thông tin ngân hàng chỉ lưu khi người dùng đồng ý, số tài khoản mã hóa; rút đồng ý thì xóa số đầy đủ, chỉ giữ bản đã che ([ADR-0006](adr/0006-bank-details-with-consent.md)) |
 | Khả năng quan sát | Log có `correlationId`, endpoint `/health/live` và `/health/ready`, metrics Prometheus |
 | Triển khai | Toàn bộ chạy bằng `docker compose up` |
 

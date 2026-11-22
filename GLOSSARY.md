@@ -111,3 +111,29 @@ Học phí tính cho mỗi buổi học có mặt hoặc phải tính phí, kể
 **Monthly fee** – Học phí theo tháng (`MONTHLY`):
 Học phí trọn gói của tháng, không phụ thuộc số buổi. Buổi bù và buổi bị hủy không làm thay đổi nó.
 _Tránh dùng_: Package fee, subscription, gói đăng ký
+
+### Nhật ký và dữ liệu nhạy cảm
+
+**Access record** – Bản ghi truy cập:
+Một dòng cho mỗi request đi qua API Gateway, kể cả request bị gateway từ chối: ai (nếu biết), vai trò, IP, method, đường dẫn, tên các tham số query, mã trạng thái, thời gian xử lý, correlation id. Không bao giờ chứa nội dung request, giá trị header, giá trị query hay token. Lưu ở audit-service ([ADR-0005](docs/adr/0005-audit-log.md)).
+_Tránh dùng_: Request log, access log của nginx
+
+**Change record** – Bản ghi thay đổi:
+Một dòng cho mỗi thay đổi nghiệp vụ, do service sở hữu dữ liệu ghi trong cùng transaction với thay đổi: hành động (`student.update`), đối tượng, người thực hiện (hoặc SYSTEM), các trường đã đổi. Dữ liệu cá nhân chỉ ghi là "đã đổi" (`[personal]`), không ghi giá trị. Chỉ được thêm, không sửa, không xóa.
+_Tránh dùng_: History, version, lịch sử chỉnh sửa
+
+**Audit trail** – Nhật ký kiểm toán:
+Toàn bộ Access record và Change record. Admin xem được; tra theo correlation id để thấy một request và mọi thay đổi nó gây ra.
+_Tránh dùng_: Log (log kỹ thuật của service là thứ khác)
+
+**Consent** – Sự đồng ý:
+Việc người dùng chủ động cho phép hệ thống lưu một loại dữ liệu nhạy cảm cho một mục đích nêu rõ, gắn với phiên bản điều khoản. Rút lại được bất cứ lúc nào; bản ghi đồng ý (thời điểm đồng ý, thời điểm rút) được giữ làm bằng chứng ([ADR-0006](docs/adr/0006-bank-details-with-consent.md)).
+_Tránh dùng_: Agreement, terms accepted
+
+**Bank account** – Tài khoản ngân hàng:
+Tài khoản nhận tiền của giáo viên (dùng cho VietQR) hoặc tài khoản của người thanh toán (dùng để hoàn tiền). Chỉ lưu khi có Consent; số tài khoản được mã hóa.
+_Tránh dùng_: Payment method, ví
+
+**Masking** – Che dữ liệu:
+Thay dữ liệu đầy đủ bằng phần đủ để nhận ra mà không dùng lại được, ví dụ số tài khoản thành `••••1234`. Khi người dùng rút Consent, số tài khoản đầy đủ bị xóa, chỉ còn bản đã che.
+_Tránh dùng_: Hashing, ẩn danh (Anonymisation là việc khác)
