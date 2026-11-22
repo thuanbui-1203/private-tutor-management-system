@@ -1,0 +1,19 @@
+# Overlay for recording demo videos, on top of the e2e stack:
+#   docker compose -p tms-e2e -f docker-compose.yml -f docker-compose.e2e.yml \
+#     -f tools/demo-recorder/docker-compose.demo.yml up -d --wait
+# - the gateway accepts the demo frontend (http://localhost:5175);
+# - identity-service logs/returns the invitation link (NODE_ENV != production);
+# - billing has a demo bank account so VietQR is shown (no real account).
+services:
+  api-gateway:
+    environment:
+      CORS_ORIGINS: http://localhost:5175
+  identity-service:
+    environment:
+      NODE_ENV: development
+      FRONTEND_URL: http://localhost:5175
+  billing-service:
+    environment:
+      BILLING_BANK_BIN: '970436'
+      BILLING_BANK_ACCOUNT: '0123456789'
+      BILLING_BANK_ACCOUNT_NAME: 'TMS DEMO'

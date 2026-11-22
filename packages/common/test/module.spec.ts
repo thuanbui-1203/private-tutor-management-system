@@ -5,6 +5,7 @@ import {
   currentCorrelationId,
   enqueueEvent,
   JsonLogger,
+  Public,
   runWithCorrelationId,
   TmsCommonModule,
   type Database,
@@ -16,6 +17,12 @@ class EchoController {
   @Get('whoami')
   whoami() {
     return { correlationId: currentCorrelationId() };
+  }
+
+  @Public()
+  @Get('items/:id')
+  item() {
+    return {};
   }
 }
 
@@ -40,6 +47,28 @@ describe('TmsCommonModule', () => {
     const metrics = await request(app.getHttpServer()).get('/metrics').expect(200);
     expect(metrics.text).toContain('tms_events_consumed_total');
     expect(metrics.text).toContain('process_cpu_user_seconds_total');
+  });
+
+  it('records HTTP requests by route template, not raw path, and skips probes', async () => {
+    await boot();
+    const server = app.getHttpServer();
+    await request(server).get('/items/00000000-0000-4000-8000-000000000001').expect(200);
+    await request(server).get('/items/00000000-0000-4000-8000-000000000002').expect(200);
+    await request(server).get('/whoami').expect(401);
+    await request(server).get('/no/such/path').expect(404);
+    await request(server).get('/health/live').expect(200);
+    const { text } = await request(server).get('/metrics').expect(200);
+    expect(text).toContain(
+      'http_server_requests_seconds_count{method="GET",route="/items/:id",status="200"} 2',
+    );
+    expect(text).toContain(
+      'http_server_requests_seconds_count{method="GET",route="/whoami",status="401"} 1',
+    );
+    expect(text).toContain(
+      'http_server_requests_seconds_count{method="GET",route="UNMATCHED",status="404"} 1',
+    );
+    expect(text).not.toMatch(/route="\/(health|metrics)/);
+    expect(text).not.toContain('00000000-0000-4000-8000-000000000001');
   });
 
   it('reports readiness from the database check', async () => {

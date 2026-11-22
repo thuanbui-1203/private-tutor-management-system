@@ -89,6 +89,44 @@ services:
     ports: ['1025:1025', '8025:8025']
     networks: [tms-net]
 
+  # ---------- Monitoring (docs/03-cach-chay.md §8) ----------
+  # Prometheus scrapes /metrics of every app over tms-net; Grafana reads Prometheus.
+  # Both listen on 127.0.0.1 only: Prometheus has no login, and on a VPS Grafana is
+  # reached through a reverse proxy (or an SSH tunnel) unless GRAFANA_BIND says otherwise.
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+      - --web.enable-lifecycle # POST /-/reload after editing prometheus.yml
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports: ['127.0.0.1:9090:9090']
+    restart: unless-stopped
+    networks: [tms-net]
+
+  grafana:
+    image: grafana/grafana:12.3.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      # Public URL when served behind a reverse proxy, e.g. https://tms.example.com/grafana/
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000/}
+      GF_SERVER_SERVE_FROM_SUB_PATH: ${GRAFANA_SERVE_FROM_SUB_PATH:-false}
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/tms-api.json
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports: ['${GRAFANA_BIND:-127.0.0.1}:${GRAFANA_PORT:-3000}:3000']
+    restart: unless-stopped
+    depends_on: [prometheus]
+    networks: [tms-net]
+
   # ---------- Applications ----------
   api-gateway:
     <<: [*backend, *firebase-key]
@@ -208,4 +246,6 @@ networks:
 volumes:
   pg-data:
   rabbitmq-data:
+  prometheus-data:
+  grafana-data:
   gateway-audit-spool:

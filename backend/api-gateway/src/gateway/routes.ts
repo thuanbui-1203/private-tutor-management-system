@@ -72,3 +72,31 @@ export function serviceUrls(env: NodeJS.ProcessEnv = process.env): Record<Servic
     audit: env.AUDIT_SERVICE_URL ?? 'http://audit-service:3008',
   };
 }
+
+/** Most distinct route labels the gateway reports; further ones become `OTHER`. */
+const MAX_ROUTE_LABELS = 300;
+const seenRouteLabels = new Set<string>();
+
+/** A path segment that names a resource (`invoices`, `open-invoices`, `me`), not an id. */
+const STATIC_SEGMENT = /^[a-z][a-z-]{0,39}$/;
+
+/**
+ * The route template a request is reported under in metrics, e.g.
+ * `/billing/invoices/3f…/qr` → `/billing/invoices/:id/qr`. Ids, tokens and anything that
+ * is not a plain word become `:id`, so a label never carries user data and the number of
+ * series stays bounded even when clients send arbitrary paths.
+ */
+export function routeLabel(path: string, resolution: Resolution): string {
+  if (resolution.kind === 'not-found') return 'UNMATCHED';
+  const segments = path.split('/').filter(Boolean);
+  if (resolution.kind === 'not-implemented') return `/${segments[0]}/**`;
+  const label =
+    '/' +
+    segments
+      .map((s) => (s.endsWith('.ics') ? ':token.ics' : STATIC_SEGMENT.test(s) ? s : ':id'))
+      .join('/');
+  if (seenRouteLabels.has(label)) return label;
+  if (seenRouteLabels.size >= MAX_ROUTE_LABELS) return 'OTHER';
+  seenRouteLabels.add(label);
+  return label;
+}
