@@ -11,8 +11,21 @@ export const DEFAULT_PORT = 8080;
  */
 export function configureApp(app: INestApplication): void {
   app.enableShutdownHooks();
+  const trustProxy = process.env.TRUST_PROXY;
+  if (trustProxy) {
+    // Behind cloudflared or a reverse proxy, req.ip must come from X-Forwarded-For, or every
+    // client shares the proxy's IP and its rate-limit bucket. Takes what Express takes:
+    // a hop count ("1"), "true", or a subnet list such as "loopback, uniquelocal".
+    const value = /^\d+$/.test(trustProxy)
+      ? Number(trustProxy)
+      : trustProxy === 'true' || trustProxy;
+    (app.getHttpAdapter().getInstance() as { set(key: string, value: unknown): void }).set(
+      'trust proxy',
+      value,
+    );
+  }
   app.enableCors({
-    origin: (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(','),
+    origin: (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(',').map((o) => o.trim()),
     credentials: true,
     exposedHeaders: ['x-correlation-id', 'retry-after'],
   });

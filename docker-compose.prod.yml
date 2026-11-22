@@ -1,0 +1,52 @@
+# Production overrides for the VPS (docs/06-trien-khai-vps.md).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Never combine with docker-compose.override.yml (hot reload): name both files explicitly.
+#
+# What changes compared with the local stack:
+# - No port is published on the host. Docker writes its own iptables rules and bypasses
+#   UFW, so a published port is open to the internet even with the firewall on. Traffic
+#   reaches the stack only through cloudflared (Cloudflare Tunnel), which dials out.
+# - Every container restarts after a crash or a VPS reboot (unless-stopped).
+# - Mailpit (dev mail catcher) does not start.
+# - Docker logs are capped so they cannot fill the disk.
+
+x-prod: &prod
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: '10m', max-file: '3' }
+
+services:
+  postgres: { <<: *prod, ports: !reset [] }
+  rabbitmq: { <<: *prod, ports: !reset [] }
+  redis: { <<: *prod, ports: !reset [] }
+  # Grafana stays on 127.0.0.1 of the VPS: open it with `ssh -L 3000:127.0.0.1:3000 ...`.
+  prometheus: { <<: *prod, ports: !reset [] }
+  grafana: { <<: *prod }
+
+  mailpit:
+    profiles: [dev] # never started by `up` unless --profile dev
+
+  api-gateway: { <<: *prod, ports: !reset [] }
+  identity-service: { <<: *prod, ports: !reset [] }
+  student-service: { <<: *prod, ports: !reset [] }
+  class-service: { <<: *prod, ports: !reset [] }
+  schedule-service: { <<: *prod, ports: !reset [] }
+  billing-service: { <<: *prod, ports: !reset [] }
+  frontend: { <<: *prod, ports: !reset [] }
+
+  # Cloudflare Tunnel. Public hostnames are set in the Cloudflare dashboard
+  # (Zero Trust > Networks > Tunnels > <tunnel> > Public hostnames):
+  #   app.<domain> -> http://frontend:5173
+  #   api.<domain> -> http://api-gateway:8080
+  cloudflared:
+    <<: *prod
+    image: cloudflare/cloudflared:2025.11.1
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    depends_on:
+      frontend: { condition: service_healthy }
+    networks: [tms-net]
