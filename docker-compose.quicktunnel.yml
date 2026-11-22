@@ -1,0 +1,29 @@
+# Interim public access without a domain: two Cloudflare Quick Tunnels (*.trycloudflare.com,
+# no Cloudflare account). docs/06-trien-khai-vps.md §4.3.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.quicktunnel.yml up -d
+#
+# Each tunnel gets a random URL that CHANGES whenever its container restarts; read it with
+#   docker compose ... logs tunnel-app tunnel-api | grep trycloudflare.com
+# then put it in .env (FRONTEND_URL, CORS_ORIGINS, NEXT_PUBLIC_API_URL) and rebuild the frontend.
+# Quick Tunnels have no SLA and cap in-flight requests (about 200): fine for a demo only.
+
+x-quick: &quick
+  image: cloudflare/cloudflared:2025.11.1
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: '10m', max-file: '3' }
+  networks: [tms-net]
+
+services:
+  tunnel-app:
+    <<: *quick
+    command: tunnel --no-autoupdate --url http://frontend:5173
+  tunnel-api:
+    <<: *quick
+    command: tunnel --no-autoupdate --url http://api-gateway:8080
+
+  # The named tunnel needs infra/cloudflared/config.yml, which does not exist yet.
+  cloudflared:
+    profiles: [named-tunnel]
