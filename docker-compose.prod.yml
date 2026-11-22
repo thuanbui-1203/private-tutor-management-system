@@ -45,6 +45,8 @@ services:
   cloudflared:
     <<: *prod
     image: cloudflare/cloudflared:2025.11.1
+    # Run as the deploy user (uid 1000) so the credentials file can stay chmod 600.
+    user: '1000:1000'
     command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
     volumes:
       - ./infra/cloudflared:/etc/cloudflared:ro
