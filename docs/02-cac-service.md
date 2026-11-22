@@ -14,6 +14,7 @@
 | 5 | `academic-service` | 3005 | MongoDB `academic_db` | Bài tập, điểm, nhận xét | Tùy chọn (BR-SYS-03) |
 | 6 | `billing-service` | 3006 | PostgreSQL `billing_db` | Hóa đơn, thanh toán, công nợ | ✔ |
 | 7 | `notification-service` | 3007 | PostgreSQL `notification_db` + Redis | Gửi email, SMS, Zalo, push | Tùy chọn (BR-SYS-03) |
+| 8 | `audit-service` | 3008 | PostgreSQL `audit_db` | Nhật ký kiểm toán: Access record, tra Change record ([ADR-0005](adr/0005-audit-log.md)) | ✔ |
 
 **Hạ tầng dùng chung:**
 
@@ -22,7 +23,7 @@
 | PostgreSQL 18 (container) | 5432 | Một container, mỗi service một database và một login role riêng ([ADR-0003](adr/0003-postgresql-database-per-service.md)) |
 | Firebase Authentication (dịch vụ ngoài) | – | Lưu mật khẩu, đăng nhập, cấp ID token ([ADR-0004](adr/0004-firebase-authentication.md)); gói Spark miễn phí |
 | MongoDB 7 (chưa có trong compose) | 27017 | Cho academic-service, chỉ thêm nếu còn thời gian (BR-SYS-03) |
-| RabbitMQ 4.2 | 5672 / 15672 (UI) | Message broker, exchange `tms.events` và `tms.dlx` loại topic; user `tms` |
+| RabbitMQ 4.2 | 5672 / 15672 (UI) | Message broker, exchange `tms.events`, `tms.audit` và `tms.dlx` loại topic; user `tms` |
 | Redis 7.4 | 6379 | Rate limit, cache, delayed job (BullMQ) |
 | Mailpit | 1025 (SMTP) / 8025 (UI) | Hộp thư giả để test email ở môi trường dev |
 | Prometheus 3.5 + Grafana 12.3 | 9090 / 3000 (chỉ 127.0.0.1) | Metrics; dashboard **TMS – Luồng API** theo dõi mọi endpoint ([docs/03 §8](03-cach-chay.md)) |
@@ -253,6 +254,19 @@ Hóa đơn đã `ISSUED` không bao giờ bị sửa. Sửa sai được ghi th�
 **Nhận event:** `UserRegistered`, `InvitationCreated`, `EnrollmentConfirmed`, `SessionScheduled`, `SessionCancelled`, `SessionRescheduled`, `AttendanceRecorded` (khi vắng), `GradeRecorded`, `InvoiceIssued`, `InvoiceOverdue`, `PaymentReceived`, `MonthlyReportGenerated`
 **Cách thiết kế:** mỗi kênh gửi là một *adapter* (`EmailChannel`, `SmsChannel`, `ZaloChannel`, `PushChannel`) cài đặt chung một interface `NotificationChannel`. Nhờ vậy có thể đổi nhà cung cấp mà không sửa logic nghiệp vụ.
 
+## 9b. Audit Service
+
+Nhật ký kiểm toán ([ADR-0005](adr/0005-audit-log.md)). Chỉ Admin truy cập.
+
+**Dữ liệu:** `access_log` (một dòng mỗi request qua gateway; chỉ được thêm, job dọn theo `AUDIT_RETENTION_DAYS`, mặc định 365 ngày). Change record nằm ở bảng `audit_log` trong database của từng service, đọc qua `GET /internal/audit` của service đó.
+
+| Method | Endpoint | Mô tả | Quyền |
+|---|---|---|---|
+| GET | `/audit/access?userId=&correlationId=&method=&status=&from=&to=&limit=&cursor=` | Access record, mới nhất trước, phân trang bằng `nextCursor` | ADMIN |
+| GET | `/audit/changes?correlationId=&entityId=&actorId=&from=&to=&limit=` | Change record của mọi service, gộp theo thời gian; `unavailable` liệt kê service không trả lời | ADMIN |
+
+**Nhận:** Access record trên exchange `tms.audit`, routing key `access.recorded`, queue `audit.access-recorded` (bản ghi sai hợp đồng vào `audit.dlq`). Lưu theo `id` nên nhận trùng không tạo dòng mới.
+
 ---
 
 ## 10. Quy ước RabbitMQ
@@ -265,6 +279,7 @@ Hóa đơn đã `ISSUED` không bao giờ bị sửa. Sửa sai được ghi th�
 | Dead letter | Exchange `tms.dlx` → queue `<service>.dlq` |
 | Retry | Tối đa 3 lần, delay 5s → 30s → 2 phút |
 | Ack | Ack thủ công, chỉ sau khi đã commit DB |
+| Nhật ký | Exchange riêng `tms.audit` (topic) cho Access record, không lẫn với event nghiệp vụ |
 
 ## 11. Cấu trúc thư mục đề xuất
 

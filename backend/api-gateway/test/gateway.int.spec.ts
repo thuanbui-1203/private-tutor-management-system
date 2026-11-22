@@ -16,7 +16,7 @@ import request from 'supertest';
 const EMULATOR = process.env.TEST_AUTH_EMULATOR ?? '127.0.0.1:9099';
 const PROJECT = 'demo-tms';
 const REDIS_URL = process.env.TEST_REDIS_URL ?? 'redis://localhost:6379';
-const SERVICES = ['identity', 'student', 'class', 'schedule', 'billing'] as const;
+const SERVICES = ['identity', 'student', 'class', 'schedule', 'billing', 'audit'] as const;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 interface Seen {

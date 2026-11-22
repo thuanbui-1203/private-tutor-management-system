@@ -15,6 +15,7 @@ describe('gateway route table (docs/02 §2)', () => {
     ['GET', '/schedules', 'schedule', 'role'],
     ['GET', '/calendar/tok.ics', 'schedule', 'public'],
     ['GET', '/billing/invoices', 'billing', 'role'],
+    ['GET', '/audit/access', 'audit', 'role'],
   ])('%s %s → %s (%s)', (method, path, service, access) => {
     expect(resolveRoute(method, path)).toEqual({ kind: 'service', service, access });
   });

@@ -1,0 +1,35 @@
+// audit-service owns audit_db (ADR-0003, ADR-0005). No other service may connect to it.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// One request seen by the API gateway (Access record, ADR-0005). Insert-only: triggers in the
+/// `access_log` migration reject UPDATE and TRUNCATE, and DELETE outside the retention purge.
+model AccessLog {
+  id            String   @id @db.Uuid
+  occurredAt    DateTime @map("occurred_at") @db.Timestamptz(6)
+  correlationId String   @map("correlation_id") @db.Uuid
+  userId        String?  @map("user_id") @db.Uuid
+  role          String?
+  ip            String
+  userAgent     String?  @map("user_agent")
+  method        String
+  path          String
+  queryKeys     String[] @map("query_keys")
+  status        Int
+  durationMs    Float    @map("duration_ms")
+  service       String?
+  receivedAt    DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@index([occurredAt, id])
+  @@index([userId, occurredAt])
+  @@index([correlationId])
+  @@map("access_log")
+}

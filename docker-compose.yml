@@ -193,6 +193,23 @@ services:
       BILLING_BANK_ACCOUNT_NAME: ${BILLING_BANK_ACCOUNT_NAME:-}
     ports: ['3006:3006']
 
+  # Audit trail (ADR-0005): stores the gateway's Access records, serves /audit/** to Admins
+  # and reads every service's Change records through their /internal/audit.
+  audit-service:
+    <<: *backend
+    build: { context: ., dockerfile: backend/audit-service/Dockerfile }
+    environment:
+      <<: *common-env
+      PORT: '3008'
+      DATABASE_URL: ${AUDIT_DB_URL}
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-365}
+      IDENTITY_SERVICE_URL: http://identity-service:3001
+      STUDENT_SERVICE_URL: http://student-service:3002
+      CLASS_SERVICE_URL: http://class-service:3003
+      SCHEDULE_SERVICE_URL: http://schedule-service:3004
+      BILLING_SERVICE_URL: http://billing-service:3006
+    ports: ['3008:3008']
+
   # academic-service (:3005, MongoDB) and notification-service (:3007) are added
   # only if time allows (BR-SYS-03).
 

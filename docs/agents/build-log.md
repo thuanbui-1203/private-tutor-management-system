@@ -323,3 +323,17 @@ measure and left to the user.
     no personal values, refused change leaves none, `GET /internal/audit`). Integration:
     identity 15, student 37, class 24, schedule 23, billing 40, all passing. Mutation checks:
     removing `class.update`'s record or mislabelling `payment.reverse` each fails a test.
+- **#54 audit-service** on `feat/54-audit-service` (stacked on #53):
+  - New NestJS service on port **3008** (3007 stays reserved for notification-service), own
+    `audit_db` + role (init.sql; `infra/postgres/add-audit-db.sql` for existing volumes).
+  - Consumes `tms.audit` / `access.recorded` into `access_log` (idempotent on id; contract
+    violations → `audit.dlq`; DB failure → requeue after 1 s). Triggers reject UPDATE and
+    TRUNCATE, and DELETE except inside the retention purge (`SET LOCAL audit.purge = 'on'`).
+  - `GET /audit/access` (filters, keyset paging) and `GET /audit/changes` (fan-out to the
+    five `/internal/audit`, merged, `unavailable` for services that did not answer); ADMIN only.
+  - Gateway routes `/audit/**`; compose, dev override, e2e stack and `scripts/e2e.mjs` include it.
+  - Tests: 5 integration (real broker publish → stored; duplicate → one row; invalid →
+    dead-lettered; filters/paging/403/401/400; insert-only + purge; fan-out with three
+    services down), 2 unit; gateway 19 unit + 10 integration. Mutation checks: dropping
+    `skipDuplicates` or opening the API to TUTOR each fails a test.
+  - Ran the production image on the dev network: `/health/ready` database up, broker up.

@@ -2,7 +2,7 @@
  * Where each public API path goes (docs/02-cac-service.md §2). Paths are matched
  * after the `/api` prefix is removed; the downstream service receives the same path.
  */
-export type ServiceKey = 'identity' | 'student' | 'class' | 'schedule' | 'billing';
+export type ServiceKey = 'identity' | 'student' | 'class' | 'schedule' | 'billing' | 'audit';
 
 export type Access =
   /** No token at all (invitation accept, iCal feed with its own token). */
@@ -40,6 +40,7 @@ const BY_PREFIX: Record<string, ServiceKey | 'not-implemented'> = {
   schedules: 'schedule',
   sessions: 'schedule',
   billing: 'billing',
+  audit: 'audit', // Admin-only audit trail (ADR-0005)
   // Out of MVP scope (BR-SYS-03).
   academic: 'not-implemented',
   notifications: 'not-implemented',
@@ -68,6 +69,7 @@ export function serviceUrls(env: NodeJS.ProcessEnv = process.env): Record<Servic
     class: env.CLASS_SERVICE_URL ?? 'http://class-service:3003',
     schedule: env.SCHEDULE_SERVICE_URL ?? 'http://schedule-service:3004',
     billing: env.BILLING_SERVICE_URL ?? 'http://billing-service:3006',
+    audit: env.AUDIT_SERVICE_URL ?? 'http://audit-service:3008',
   };
 }
 
