@@ -149,7 +149,21 @@ $DC restart identity-service student-service class-service schedule-service bill
 
 Tài khoản đăng nhập xem ở [DEMO-ACCOUNTS.md](../DEMO-ACCOUNTS.md).
 
-### 5.6 Backup hằng ngày
+### 5.6 Nâng cấp VPS đã chạy lên bản có audit-service (#51)
+`init.sql` chỉ chạy với volume rỗng, nên trên VPS đã có dữ liệu phải tạo `audit_db` bằng tay, rồi thêm 3 biến vào `.env`:
+
+```bash
+dc exec -T postgres psql -U tms -d postgres < infra/postgres/add-audit-db.sql
+cat >> .env <<EOF
+AUDIT_DB_URL=postgresql://audit:audit@postgres:5432/audit_db
+AUDIT_RETENTION_DAYS=365
+BANK_DATA_KEY=$(openssl rand -base64 32)   # KHÔNG đổi sau khi đã lưu tài khoản ngân hàng
+EOF
+```
+
+Trên VPS 2 GB, mỗi image build mất khoảng 5 phút, và `migrate.sh` build lại stage `build` của từng service (thêm khoảng 5 phút mỗi service). Một lần nâng cấp đầy đủ mất khoảng 70 phút.
+
+### 5.7 Backup hằng ngày
 ```bash
 mkdir -p ~/backups
 (crontab -l 2>/dev/null; echo '0 2 * * * bash /home/deploy/tms/scripts/vps/backup-db.sh >> /home/deploy/backups/backup.log 2>&1') | crontab -
@@ -210,3 +224,6 @@ Ghi lại những gì đã làm trên VPS và dashboard (không ghi mật khẩu
 | 2026-11-22 | Bấm Authorize trong Brave (lần thứ 4), `cert.pem` về VPS, zone **timgiasu.date**. Tạo named tunnel `tms-vps` (id `85b76a86-11ec-4d71-a7f5-12b83fe721fe`), CNAME `app.timgiasu.date` và `api.timgiasu.date`; `infra/cloudflared/config.yml` + `tms-vps.json` (chmod 600, cloudflared chạy uid 1000) | Cert và credentials chỉ nằm trên VPS (`~/.cloudflared`, `~/tms/infra/cloudflared`) |
 | 2026-11-22 | `.env`: 3 URL sang `https://app.timgiasu.date` / `https://api.timgiasu.date/api`; Firebase Authorized domains thêm `app.timgiasu.date`; build lại frontend; gỡ 2 Quick Tunnel; `dc up -d --remove-orphans`. Tunnel nối qua Cloudflare HKG | |
 | 2026-11-22 | Kiểm tra trên tên miền thật: app 200 (0,66 s); `/health/ready` ok; CORS cho `https://app.timgiasu.date`; bundle frontend trỏ `api.timgiasu.date/api`; đăng nhập `gv.minh@tms.demo`, rồi classes/students/invoices đều 200; Quick Tunnel cũ trả 530 (đã tắt) | Domain trycloudflare cũ vẫn còn trong Firebase Authorized domains, xoá được trên Console |
+| 2026-11-22 | Merge toàn bộ PR còn mở: chuỗi audit #59–#65 (xung đột với main ở comment `tms-common.module.ts`, constructor gateway [giữ cả metrics lẫn Access record], volume compose, flow-simulator [lấy bản #58]) và #66. Đóng issue #51 | Trước khi merge, đã kiểm tra trên nhánh tích hợp: build, lint, format, 213 unit test, e2e 8/8 trên stack mới. `main` sau merge giống hệt cây đã kiểm tra |
+| 2026-11-22 | Bản cuối lên VPS: backup, `git checkout main` (`de2c6a3`), tạo `audit_db`, thêm `AUDIT_DB_URL`, `AUDIT_RETENTION_DAYS`, `BANK_DATA_KEY` (sinh ngẫu nhiên, chỉ có trên VPS), build 8 image, migrate 6 database, `up` | Khoảng 70 phút; 12 container healthy; RAM trống khoảng 240 MB |
+| 2026-11-22 | Kiểm tra sau triển khai: app 200, `/health/ready` ok, CORS đúng; Tutor: classes, students, invoices, bank-account đều 200; Tutor gọi `/audit/access` nhận 403 (đúng); Admin: users, `/audit/access`, `/audit/changes` 200; Access record ghi IP thật của client (`TRUST_PROXY` hoạt động) | Danh sách hoá đơn trả 403 cho Parent là đúng thiết kế (chỉ TUTOR/ADMIN) |
