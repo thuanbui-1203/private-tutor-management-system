@@ -1,0 +1,56 @@
+# Production overrides for the VPS (docs/06-trien-khai-vps.md).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Never combine with docker-compose.override.yml (hot reload): name both files explicitly.
+#
+# What changes compared with the local stack:
+# - No port is published on the host. Docker writes its own iptables rules and bypasses
+#   UFW, so a published port is open to the internet even with the firewall on. Traffic
+#   reaches the stack only through cloudflared (Cloudflare Tunnel), which dials out.
+# - Every container restarts after a crash or a VPS reboot (unless-stopped).
+# - Mailpit (dev mail catcher) does not start.
+# - Docker logs are capped so they cannot fill the disk.
+# - Prometheus and Grafana start only with `--profile monitoring` (about 300 MB of RAM
+#   that a 2 GB VPS cannot spare).
+
+x-prod: &prod
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: '10m', max-file: '3' }
+
+services:
+  postgres: { <<: *prod, ports: !reset [] }
+  rabbitmq: { <<: *prod, ports: !reset [] }
+  redis: { <<: *prod, ports: !reset [] }
+  # Grafana stays on 127.0.0.1 of the VPS: open it with `ssh -L 3000:127.0.0.1:3000 ...`.
+  prometheus: { <<: *prod, ports: !reset [], profiles: [monitoring] }
+  grafana: { <<: *prod, profiles: [monitoring] }
+
+  mailpit:
+    profiles: [dev] # never started by `up` unless --profile dev
+
+  api-gateway: { <<: *prod, ports: !reset [] }
+  identity-service: { <<: *prod, ports: !reset [] }
+  student-service: { <<: *prod, ports: !reset [] }
+  class-service: { <<: *prod, ports: !reset [] }
+  schedule-service: { <<: *prod, ports: !reset [] }
+  billing-service: { <<: *prod, ports: !reset [] }
+  audit-service: { <<: *prod, ports: !reset [] }
+  frontend: { <<: *prod, ports: !reset [] }
+
+  # Cloudflare Tunnel, created from the CLI (docs/06-trien-khai-vps.md §4.2). infra/cloudflared/
+  # (not committed) holds config.yml (tunnel id + ingress: app.<domain> -> frontend:5173,
+  # api.<domain> -> api-gateway:8080) and the tunnel's credentials <id>.json.
+  cloudflared:
+    <<: *prod
+    image: cloudflare/cloudflared:2025.11.1
+    # Run as the deploy user (uid 1000) so the credentials file can stay chmod 600.
+    user: '1000:1000'
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./infra/cloudflared:/etc/cloudflared:ro
+    depends_on:
+      frontend: { condition: service_healthy }
+    networks: [tms-net]

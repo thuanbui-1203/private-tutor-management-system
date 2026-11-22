@@ -137,6 +137,13 @@ services:
       REDIS_URL: ${REDIS_URL}
       # Access records wait here while RabbitMQ is unavailable (ADR-0005).
       AUDIT_SPOOL_DIR: /var/lib/tms-gateway
+      # Browser origins allowed to call the API (comma-separated): the frontend's public URL.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      # Express `trust proxy`: set when a proxy (cloudflared) sits in front, so rate limiting
+      # sees the client IP instead of the proxy's. Empty = trust nothing.
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      RATE_LIMIT_IP_PER_MINUTE: ${RATE_LIMIT_IP_PER_MINUTE:-600}
+      RATE_LIMIT_USER_PER_MINUTE: ${RATE_LIMIT_USER_PER_MINUTE:-300}
     volumes:
       - ./infra/keys:/run/keys:ro
       - gateway-audit-spool:/var/lib/tms-gateway
@@ -154,6 +161,8 @@ services:
       DATABASE_URL: ${IDENTITY_DB_URL}
       # BR-CL-08: ask class-service before disabling a Tutor (#11).
       CLASS_SERVICE_URL: http://class-service:3003
+      # Base of invitation links (acceptUrl): the frontend's public URL.
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
     ports: ['3001:3001']
 
   student-service:
