@@ -39,6 +39,8 @@ scrape_configs:
         labels: { service: schedule-service }
       - targets: ['billing-service:3006']
         labels: { service: billing-service }
+      - targets: ['audit-service:3008']
+        labels: { service: audit-service }
 
   # RabbitMQ's built-in Prometheus plugin. /metrics/per-object labels each queue, which is
   # cheap with the handful of queues TMS has (one per consumer + DLQs).

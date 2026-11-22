@@ -1,0 +1,55 @@
+# Grafana on the laptop, watching the stack on the VPS (docs/06-trien-khai-vps.md §6).
+#
+#   1. On the VPS, Prometheus must run:
+#        ssh tms-vps "cd ~/tms && docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile monitoring up -d prometheus"
+#   2. On the laptop:  docker compose -f docker-compose.grafana-vps.yml up -d
+#      then open http://localhost:3030 (admin / GRAFANA_ADMIN_PASSWORD from .env, default admin)
+#   3. Done:  docker compose -f docker-compose.grafana-vps.yml down
+#
+# Needs TMS_VPS_HOST (the VPS IP, kept out of the repo) in the laptop's .env, and the SSH key
+# ~/.ssh/tms_vps that logs in as `deploy`. Nothing on the VPS is exposed: `vps-tunnel`
+# forwards its own port 9090 to 127.0.0.1:9090 on the VPS over SSH.
+name: tms-grafana-vps
+
+services:
+  vps-tunnel:
+    image: alpine:3.20
+    # The key is copied first: a key bind-mounted from Windows shows mode 0777, which ssh refuses.
+    command:
+      - sh
+      - -c
+      - >-
+        apk add --no-cache openssh-client >/dev/null &&
+        install -m 600 /keys/tms_vps /tmp/key &&
+        exec ssh -N -i /tmp/key -o StrictHostKeyChecking=accept-new
+        -o UserKnownHostsFile=/tmp/known_hosts -o ServerAliveInterval=30
+        -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes
+        -L 0.0.0.0:9090:127.0.0.1:9090 deploy@$$TMS_VPS_HOST
+    environment:
+      TMS_VPS_HOST: ${TMS_VPS_HOST:?set TMS_VPS_HOST (the VPS IP) in .env}
+    volumes:
+      - ${USERPROFILE:-~}/.ssh/tms_vps:/keys/tms_vps:ro
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.3.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_SERVER_ROOT_URL: http://localhost:3030/
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/tms-api.json
+    volumes:
+      # Same dashboards as the local stack; only the data source points at the VPS.
+      - ./infra/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./infra/grafana/vps/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-vps-data:/var/lib/grafana
+    # 3030, not 3000: the local stack's Grafana may already use 3000 (and 3001 is identity).
+    ports: ['127.0.0.1:3030:3000']
+    depends_on: [vps-tunnel]
+    restart: unless-stopped
+
+volumes:
+  grafana-vps-data:

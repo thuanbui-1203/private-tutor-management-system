@@ -1,0 +1,16 @@
+# Grafana on the laptop reading the VPS's Prometheus (docker-compose.grafana-vps.yml).
+# `vps-tunnel` is the SSH tunnel container in the same compose project; the uid matches the
+# one every dashboard panel references.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus (VPS)
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://vps-tunnel:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s

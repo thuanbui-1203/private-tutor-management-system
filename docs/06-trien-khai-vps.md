@@ -212,7 +212,7 @@ Ghi lại những gì đã làm trên VPS và dashboard (không ghi mật khẩu
 | Ngày | Việc | Ghi chú |
 |---|---|---|
 | 2026-11-22 | Chuẩn bị code: `docker-compose.prod.yml`, `TRUST_PROXY`, script `scripts/vps/*`, tài liệu này | PR #66, nhánh `deploy/vps-cloudflare` |
-| 2026-11-22 | Bizfly: server `ubuntu-2vcpu-2gb-1-timgiasu`, IP `14.225.215.93`, Ubuntu 24.04.2, 2 vCPU / 1,9 GB RAM / 38 GB | Người dùng tự tạo |
+| 2026-11-22 | Bizfly: server `ubuntu-2vcpu-2gb-1-timgiasu`, IP trong `~/.ssh/config` (alias `tms-vps`; không ghi vào repo public), Ubuntu 24.04.2, 2 vCPU / 1,9 GB RAM / 38 GB | Người dùng tự tạo |
 | 2026-11-22 | Chạy `setup-server.sh`: user `deploy` + key `~/.ssh/tms_vps` (alias `tms-vps` trong `~/.ssh/config` của máy Windows), 4 GB swap, Docker 29.10 / Compose 5.8, UFW chỉ mở OpenSSH, fail2ban, múi giờ Asia/Ho_Chi_Minh | |
 | 2026-11-22 | `sshd_config` của Bizfly **không có** `Include sshd_config.d/*`, nên file drop-in bị bỏ qua: sửa thẳng `PermitRootLogin no`, `PasswordAuthentication no` trong file chính (bản cũ: `/etc/ssh/sshd_config.bak`). Đã kiểm tra: root/mật khẩu bị từ chối | Script đã sửa để làm việc này |
 | 2026-11-22 | Clone nhánh `deploy/vps-cloudflare` vào `~/tms`; đưa lên `.env` (mật khẩu Postgres/Grafana sinh ngẫu nhiên) và `infra/keys/firebase-service-account.json` (chmod 600; `deploy` uid 1000 = `node` trong container) | |

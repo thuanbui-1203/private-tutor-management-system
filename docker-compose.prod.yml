@@ -11,8 +11,9 @@
 # - Every container restarts after a crash or a VPS reboot (unless-stopped).
 # - Mailpit (dev mail catcher) does not start.
 # - Docker logs are capped so they cannot fill the disk.
-# - Prometheus and Grafana start only with `--profile monitoring` (about 300 MB of RAM
-#   that a 2 GB VPS cannot spare).
+# - Prometheus and Grafana start only with `--profile monitoring`. On the 2 GB VPS only
+#   Prometheus runs there; Grafana runs on the laptop and reads it through an SSH tunnel
+#   (docker-compose.grafana-vps.yml, docs/06-trien-khai-vps.md §6).
 
 x-prod: &prod
   restart: unless-stopped
@@ -24,8 +25,12 @@ services:
   postgres: { <<: *prod, ports: !reset [] }
   rabbitmq: { <<: *prod, ports: !reset [] }
   redis: { <<: *prod, ports: !reset [] }
-  # Grafana stays on 127.0.0.1 of the VPS: open it with `ssh -L 3000:127.0.0.1:3000 ...`.
-  prometheus: { <<: *prod, ports: !reset [], profiles: [monitoring] }
+  # Prometheus listens on 127.0.0.1 of the VPS only (no login: never publish it further);
+  # the laptop's Grafana reaches it through SSH. Grafana on the VPS stays on 127.0.0.1 too.
+  prometheus:
+    <<: *prod
+    ports: !override ['127.0.0.1:9090:9090']
+    profiles: [monitoring]
   grafana: { <<: *prod, profiles: [monitoring] }
 
   mailpit:
