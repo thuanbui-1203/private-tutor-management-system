@@ -12,6 +12,12 @@ import { ageOn } from '@/lib/format';
 import { emptyParent, studentFormProblems, type ParentRow } from '@/lib/rules';
 import type { InvitationOutcome, StudentView } from '@/lib/types';
 
+/** POST /students: `parentInvitation` is there when the Student and the primary Parent were both invited. */
+type Created = StudentView & {
+  invitation: InvitationOutcome;
+  parentInvitation?: InvitationOutcome;
+};
+
 export default function NewStudentPage() {
   const router = useRouter();
   const { session } = useAuth();
@@ -24,9 +30,7 @@ export default function NewStudentPage() {
   const [invite, setInvite] = useState(true);
   const [parents, setParents] = useState<ParentRow[]>([emptyParent(true)]);
   const [error, setError] = useState<string>('');
-  const [created, setCreated] = useState<(StudentView & { invitation: InvitationOutcome }) | null>(
-    null,
-  );
+  const [created, setCreated] = useState<Created | null>(null);
 
   const minor = dob ? ageOn(dob) < 18 : false;
   const setParent = (i: number, patch: Partial<ParentRow>) =>
@@ -61,10 +65,7 @@ export default function NewStudentPage() {
         })),
     };
     try {
-      const res = await api.post<StudentView & { invitation: InvitationOutcome }>(
-        '/students',
-        body,
-      );
+      const res = await api.post<Created>('/students', body);
       setCreated(res.data);
     } catch (err) {
       setError(describeError(err));
@@ -89,6 +90,15 @@ export default function NewStudentPage() {
           <Notice tone="warning">
             Hồ sơ đã lưu nhưng chưa gửi được lời mời. Bạn có thể gửi lại trong trang học sinh.
           </Notice>
+        )}
+        {created.parentInvitation?.status === 'sent' && (
+          <Notice tone="success">
+            Đã gửi lời mời kích hoạt tài khoản tới {created.parentInvitation.email} (phụ huynh
+            chính).
+          </Notice>
+        )}
+        {created.parentInvitation?.status === 'failed' && (
+          <Notice tone="warning">Chưa gửi được lời mời cho phụ huynh chính.</Notice>
         )}
         <div className="row">
           <button

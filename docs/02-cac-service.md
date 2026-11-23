@@ -82,7 +82,7 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 | Method | Endpoint | Mô tả | Quyền |
 |---|---|---|---|
 | POST | `/auth/register` | Giáo viên tự đăng ký: tạo tài khoản Firebase ở frontend, rồi gọi endpoint này để tạo bản ghi `users` và gán vai trò `TUTOR` | ID token hợp lệ, chưa có vai trò |
-| POST | `/auth/invitations` | Mời phụ huynh hoặc học sinh (body `email`, `fullName`, `role` = `PARENT` / `STUDENT`): tạo tài khoản Firebase chưa có mật khẩu, bản ghi `users` `PENDING` và lời mời riêng (1 lần, 7 ngày, chỉ lưu SHA-256 của token, BR-AU-02); phát `InvitationCreated`. Gửi lại cho người còn `PENDING` sẽ thu hồi link cũ. Ngoài production, response kèm `acceptUrl` (chưa có Notification để gửi email) | TUTOR, ADMIN |
+| POST | `/auth/invitations` | Mời phụ huynh hoặc học sinh (body `email`, `fullName`, `role` = `PARENT` / `STUDENT`): tạo tài khoản Firebase chưa có mật khẩu, bản ghi `users` `PENDING` và lời mời riêng (1 lần, 7 ngày, chỉ lưu SHA-256 của token, BR-AU-02); phát `InvitationCreated`. Gửi lại cho người còn `PENDING` sẽ thu hồi link cũ. Identity gửi email kích hoạt (link `<FRONTEND_URL>/invite/<token>`) qua SMTP (`SMTP_*`; Mailpit khi phát triển); gửi lỗi chỉ ghi log, lời mời vẫn còn và gửi lại được. Ngoài production, response kèm `acceptUrl` để test | TUTOR, ADMIN |
 | POST | `/internal/invitations` | Như trên, cho student-service khi tạo học sinh (BR-ST-04); body thêm `invitedBy`. Gateway chặn `/internal/**` | Nội bộ |
 | POST | `/auth/invitations/{token}/accept` | Kích hoạt tài khoản từ lời mời (body `password`, tối thiểu 8 ký tự): đặt mật khẩu qua Firebase Admin SDK, gán claim `userId` + `role`, chuyển `ACTIVE`, phát `UserRegistered`. Token không tồn tại → 404; đã dùng, đã thu hồi hoặc hết hạn → 410 | Public |
 | GET | `/users/me` | Thông tin người đang đăng nhập | Đã đăng nhập |
@@ -115,7 +115,7 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 **Quy tắc đã cài đặt:**
 - Dưới 18 tuổi (tính theo ngày ở Việt Nam) bắt buộc có phụ huynh chính và người thanh toán là phụ huynh chính (BR-ST-04, BR-ST-05); đủ 18 tuổi có thể tự thanh toán nhưng khi đó phải có email; đủ 18 tuổi không tự đổi người thanh toán. Vi phạm → 422.
 - Ai xem được gì (BR-ST-06, BR-ST-07): giáo viên chủ sở hữu và Admin thấy tất cả kể cả `note`; phụ huynh chính thấy học phí (`payer`, `payerContact`) và liên hệ các phụ huynh; phụ huynh phụ không thấy học phí và liên hệ; học sinh thấy học phí chỉ khi tự thanh toán. Người không liên quan nhận 404 (không phải 403) để không lộ học sinh có tồn tại.
-- Lời mời (BR-ST-04): gửi cho học sinh nếu có email, nếu không thì cho phụ huynh chính có email; Identity lỗi thì học sinh vẫn được tạo, response ghi `invitation.status = failed`.
+- Lời mời (BR-ST-04): gửi cho học sinh nếu có email (`invitation`), và cho cả phụ huynh chính có email chưa có tài khoản (`parentInvitation`); học sinh không có email thì `invitation` gửi cho phụ huynh chính. Người đã có tài khoản (Identity trả 409) → `skipped`. Identity lỗi thì học sinh vẫn được tạo, response ghi `status = failed`.
 - Nhập lại cùng một phụ huynh (cùng email) cho anh chị em thì dùng lại bản ghi cũ; cùng một người do hai giáo viên nhập là hai bản ghi, nhưng một tài khoản phụ huynh thấy con ở cả hai.
 
 **Tác vụ định kỳ:** mỗi giờ chuyển học sinh `PAUSED` quá 60 ngày sang `DROPPED` (BR-ST-02).

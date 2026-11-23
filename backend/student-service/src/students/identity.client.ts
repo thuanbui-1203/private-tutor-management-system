@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InternalHttpClient } from '@tms/common';
+import { HttpError, InternalHttpClient } from '@tms/common';
 import {
   InternalCreateInvitationResponse,
   type InternalCreateInvitationRequest,
@@ -36,6 +36,11 @@ export class IdentityClient {
         invitationId: res.invitationId,
       };
     } catch (err) {
+      // 409: this person already has an active account (or one with another role),
+      // so there is nothing to activate. Not a failure the Tutor has to retry.
+      if (err instanceof HttpError && err.status === 409) {
+        return { status: 'skipped', reason: 'already has an account' };
+      }
       const reason = err instanceof Error ? err.message : String(err);
       this.logger.warn(`invitation for ${request.email} not sent: ${reason}`);
       return { status: 'failed', reason };

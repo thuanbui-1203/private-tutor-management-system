@@ -10,6 +10,7 @@ import { enqueueEvent, recordChange } from '@tms/common';
 import type { InternalCreateInvitationRequest } from '@tms/contracts';
 import { FirebaseAuthService } from '../firebase/firebase-auth.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { InvitationMailer } from './invitation-mailer';
 
 /** BR-AU-02: an invitation link is valid for 7 days. */
 export const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -20,7 +21,7 @@ export interface InvitationCreated {
   invitationId: string;
   userId: string;
   expiresAt: string;
-  /** Only outside production: Notification (which would email it) is out of MVP scope. */
+  /** Only outside production, for local testing without an inbox. */
   acceptUrl?: string;
 }
 
@@ -31,6 +32,7 @@ export class InvitationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly firebase: FirebaseAuthService,
+    private readonly mailer: InvitationMailer,
   ) {}
 
   /**
@@ -88,9 +90,17 @@ export class InvitationsService {
       return created;
     });
 
-    const acceptUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:5173'}/invitations/${token}`;
+    // The frontend's activation page is /invite/[token].
+    const acceptUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:5173'}/invite/${token}`;
     const exposeLink = process.env.NODE_ENV !== 'production';
     if (exposeLink) this.logger.log(`invitation for ${email}: ${acceptUrl}`);
+    await this.mailer.send({
+      to: email,
+      fullName: request.fullName,
+      role: request.role,
+      acceptUrl,
+      expiresAt,
+    });
     return {
       invitationId: invitation.id,
       userId: invitation.userId,

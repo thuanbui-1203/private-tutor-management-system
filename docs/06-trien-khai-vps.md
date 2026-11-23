@@ -90,6 +90,24 @@ Vào Console: **Authentication → Settings → Authorized domains → Add domai
 node ../../scripts/vps/fb-domains.cjs ../../infra/keys/firebase-service-account.json <host-của-frontend>
 ```
 
+### 4.4 Gmail: gửi email kích hoạt tài khoản
+`identity-service` gửi email kích hoạt qua SMTP. Trên VPS không có Mailpit, nên dùng Gmail:
+
+1. Tài khoản Google gửi thư phải bật **Xác minh 2 bước**.
+2. Vào https://myaccount.google.com/apppasswords, tạo App Password (tên tuỳ ý, ví dụ `tms-vps`), nhận 16 ký tự.
+3. Thêm vào `~/tms/.env` trên VPS (bỏ dấu cách trong App Password), rồi `dc up -d identity-service`:
+   ```bash
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=465
+   SMTP_SECURE=true
+   SMTP_USER=<địa chỉ gmail>
+   SMTP_PASS=<app password>
+   SMTP_FROM="Tim Gia Su <địa chỉ gmail>"
+   ```
+4. Kiểm tra: thêm học sinh có email, rồi `dc logs identity-service | grep "activation email"` phải thấy `activation email sent to ...`.
+
+Gmail cho khoảng 500 thư mỗi ngày, đủ cho demo. Thư đầu tiên có thể vào mục Spam hoặc Quảng cáo.
+
 ## 5. Các bước trên server
 
 Chạy từ máy Windows (Git Bash):

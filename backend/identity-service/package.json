@@ -28,6 +28,7 @@
     "@tms/common": "workspace:*",
     "@tms/contracts": "workspace:*",
     "firebase-admin": "catalog:",
+    "nodemailer": "catalog:",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:",
     "zod": "catalog:"
