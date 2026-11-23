@@ -222,7 +222,7 @@ Thuật ngữ chuẩn nằm ở [GLOSSARY.md](../GLOSSARY.md); quyết định k
 |---|---|
 | BR-AU-01 | Mỗi người dùng giữ đúng 1 vai trò. Admin có thể sở hữu lớp như một giáo viên. |
 | BR-AU-02 | Lời mời kích hoạt dùng 1 lần, hiệu lực 7 ngày; gửi lại sẽ thu hồi link cũ. |
-| BR-ST-04 | Mọi học sinh có tài khoản theo mặc định (tạo lời mời khi thêm học sinh). Dưới 18 tuổi bắt buộc có thông tin phụ huynh; lời mời gửi cho phụ huynh nếu em chưa có email. |
+| BR-ST-04 | Mọi học sinh có tài khoản theo mặc định (tạo lời mời khi thêm học sinh). Dưới 18 tuổi bắt buộc có thông tin phụ huynh; lời mời gửi cho học sinh nếu em có email, và cho cả phụ huynh chính (nếu có email và chưa có tài khoản); em chưa có email thì chỉ mời phụ huynh chính. Lời mời được gửi qua email. |
 | BR-ST-05 | Mỗi học sinh có 1 người thanh toán (Payer) duy nhất: phụ huynh chính, hoặc chính học sinh nếu đã đủ 18 tuổi. Đủ 18 tuổi không tự đổi Payer. |
 | BR-ST-06 | Một học sinh có thể có nhiều phụ huynh, đúng 1 phụ huynh chính. Phụ huynh phụ xem lịch, điểm, nhận xét nhưng không xem học phí. |
 | BR-ST-07 | Ghi chú trong hồ sơ học sinh chỉ giáo viên và Admin xem. |

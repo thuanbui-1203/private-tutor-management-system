@@ -121,10 +121,19 @@ export class StudentsService {
       return full;
     });
 
-    const invitation = body.invite
-      ? await this.sendInvitation(actor, student)
-      : { status: 'skipped', reason: 'not requested' };
-    return { ...viewFor(student, 'staff'), invitation };
+    if (!body.invite) {
+      return {
+        ...viewFor(student, 'staff'),
+        invitation: { status: 'skipped', reason: 'not requested' },
+      };
+    }
+    const invitation = await this.sendInvitation(actor, student);
+    const parentInvitation = await this.sendParentInvitation(actor, student);
+    return {
+      ...viewFor(student, 'staff'),
+      invitation,
+      ...(parentInvitation && { parentInvitation }),
+    };
   }
 
   async list(
@@ -415,5 +424,25 @@ export class StudentsService {
         ? 'the primary Parent has no email'
         : 'the Student has no email',
     };
+  }
+
+  /**
+   * When the Student was invited directly, the primary Parent (if they have an email)
+   * is invited too, so they can follow schedule and fees with their own account.
+   * Returns undefined when sendInvitation already went to the Parent or there is no one.
+   */
+  private async sendParentInvitation(
+    actor: AuthUser,
+    student: StudentRecord,
+  ): Promise<InvitationOutcome | undefined> {
+    const primary = primaryOf(student);
+    if (!student.email || !primary?.email || primary.userId) return undefined;
+    if (primary.email.toLowerCase() === student.email.toLowerCase()) return undefined;
+    return this.identity.invite({
+      email: primary.email,
+      fullName: primary.fullName,
+      role: 'PARENT',
+      invitedBy: actor.id,
+    });
   }
 }

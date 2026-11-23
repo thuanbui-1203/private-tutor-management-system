@@ -163,6 +163,13 @@ services:
       CLASS_SERVICE_URL: http://class-service:3003
       # Base of invitation links (acceptUrl): the frontend's public URL.
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      # Activation emails (BR-AU-02): Mailpit by default, real SMTP on the VPS (docs/06 §4.4).
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURE: ${SMTP_SECURE:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-TMS <no-reply@tms.local>}
     ports: ['3001:3001']
 
   student-service:

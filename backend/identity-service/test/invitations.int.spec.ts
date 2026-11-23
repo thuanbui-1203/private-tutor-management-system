@@ -52,7 +52,7 @@ describe('Identity: Invitations and user administration (#7)', () => {
   const http = () => request(app.getHttpServer());
   const invite = (email: string, role = 'PARENT', as = TUTOR) =>
     http().post('/auth/invitations').set(as).send({ email, fullName: 'Nguyễn Thị Lan', role });
-  const tokenOf = (acceptUrl: string) => acceptUrl.split('/invitations/')[1];
+  const tokenOf = (acceptUrl: string) => acceptUrl.split('/invite/')[1];
   const accept = (token: string, password = PASSWORD) =>
     http().post(`/auth/invitations/${token}/accept`).send({ password });
 

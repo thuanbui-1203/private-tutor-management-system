@@ -163,6 +163,18 @@ describe('Student: Student and Parent records (#9)', () => {
     expect(res.body.invitation).toMatchObject({ status: 'sent', to: 'STUDENT', email });
   });
 
+  it('a minor with their own email: both the Student and the primary Parent are invited', async () => {
+    const kid = `kid.${randomUUID().slice(0, 6)}@example.com`;
+    const lan = `lan.${randomUUID().slice(0, 6)}@example.com`;
+    const res = await minorWithParents([parent(true, lan)], { email: kid }).expect(201);
+    expect(res.body.invitation).toMatchObject({ status: 'sent', to: 'STUDENT', email: kid });
+    expect(res.body.parentInvitation).toMatchObject({ status: 'sent', to: 'PARENT', email: lan });
+    expect(invitations.slice(-2).map((i) => [i.role, i.email])).toEqual([
+      ['STUDENT', kid],
+      ['PARENT', lan],
+    ]);
+  });
+
   it('turning 18 does not switch the Payer', async () => {
     const res = await minorWithParents([parent(true)]).expect(201);
     const updated = await http()
