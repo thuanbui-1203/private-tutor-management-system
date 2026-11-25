@@ -175,8 +175,20 @@ export async function eventually<T>(
   throw last;
 }
 
-/** `docker compose` on the e2e project (used only for the outage scenario). */
+/**
+ * `docker compose` on the e2e project (used only for the outage scenario). When the services
+ * run as plain processes (scripts/e2e-host.mjs), that runner stops and starts them instead.
+ */
 export function compose(...args: string[]) {
+  const control = process.env.E2E_HOST_CONTROL;
+  if (control) {
+    const action = args[0] === 'stop' ? 'stop' : 'start';
+    const url = `${control}/${action}/${args.at(-1)}`;
+    const script = 'fetch(process.argv[1]).then((r) => process.exit(r.ok ? 0 : 1))';
+    const done = spawnSync(process.execPath, ['-e', script, url], { encoding: 'utf8' });
+    if (done.status !== 0) throw new Error(`${url}: ${done.stderr}`);
+    return done.stdout;
+  }
   const root = resolve(__dirname, '../../..');
   const r = spawnSync(
     'docker',
