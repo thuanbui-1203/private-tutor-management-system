@@ -14,7 +14,6 @@ export type Role = 'ADMIN' | 'TUTOR' | 'PARENT' | 'STUDENT';
 
 export interface TestUser {
   email: string;
-  password: string;
   uid: string;
   userId: string;
   role: Role | null;
@@ -42,20 +41,28 @@ export async function setClaims(uid: string, claims: Record<string, string>) {
   );
 }
 
-/** A fresh emulator account, with claims unless `role` is null. */
-export async function createUser(role: Role | null, password = 'matkhau123'): Promise<TestUser> {
-  const email = `${(role ?? 'none').toLowerCase()}.${randomUUID().slice(0, 8)}@example.com`;
+/** The emulator account of a Google address (the same `sub` the sign-in page uses). */
+export async function googleAccount(email: string): Promise<string> {
+  const google = JSON.stringify({ sub: `google-${email}`, email, email_verified: true });
   const { localId } = await emulator(
-    `/identitytoolkit.googleapis.com/v1/accounts:signUp?key=${KEY}`,
+    `/identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${KEY}`,
     {
-      email,
-      password,
+      postBody: `id_token=${encodeURIComponent(google)}&providerId=google.com`,
+      requestUri: 'http://localhost',
       returnSecureToken: true,
+      returnIdpCredential: true,
     },
   );
+  return localId;
+}
+
+/** A fresh emulator account, with claims unless `role` is null. */
+export async function createUser(role: Role | null): Promise<TestUser> {
+  const email = `${(role ?? 'none').toLowerCase()}.${randomUUID().slice(0, 8)}@example.com`;
+  const uid = await googleAccount(email);
   const userId = randomUUID();
-  if (role) await setClaims(localId, { role, userId });
-  return { email, password, uid: localId, userId, role };
+  if (role) await setClaims(uid, { role, userId });
+  return { email, uid, userId, role };
 }
 
 /** The Firebase uid inside an ID token (no signature check: the emulator issued it). */
@@ -121,8 +128,7 @@ export async function stubApi(page: Page, handlers: Record<string, Handler | Rep
 export async function signIn(page: Page, user: TestUser) {
   await page.goto('/login');
   await page.getByLabel('Email').fill(user.email);
-  await page.getByLabel('Mật khẩu').fill(user.password);
-  await page.getByRole('button', { name: 'Đăng nhập' }).click();
+  await page.getByRole('button', { name: 'Đăng nhập với Google' }).click();
 }
 
 /** Every recorded API call carried the signed-in user's ID token. */

@@ -56,23 +56,27 @@ async function emulator(path: string, body: unknown) {
   return r.body;
 }
 
+/** Google sign-in, as the frontend does it (the emulator's fake Google). */
+function google(email: string): Promise<{ idToken: string; localId: string }> {
+  const account = JSON.stringify({ sub: `google-${email}`, email, email_verified: true });
+  return emulator('accounts:signInWithIdp', {
+    postBody: `id_token=${encodeURIComponent(account)}&providerId=google.com`,
+    requestUri: 'http://localhost',
+    returnSecureToken: true,
+    returnIdpCredential: true,
+  });
+}
+
 /** A client that calls the gateway as one signed-in user. */
 export class Client {
   constructor(
     public token: string,
     readonly email: string,
-    private readonly password: string,
   ) {}
 
   /** Signs in again so new custom claims (role, userId) are in the ID token. */
   async refresh() {
-    this.token = (
-      await emulator('accounts:signInWithPassword', {
-        email: this.email,
-        password: this.password,
-        returnSecureToken: true,
-      })
-    ).idToken;
+    this.token = (await google(this.email)).idToken;
   }
 
   request<T = Json>(
@@ -109,12 +113,7 @@ export const anonymous = <T = Json>(path: string, headers: Record<string, string
  */
 export async function withClaims(role: 'ADMIN' | 'PARENT', userId = randomUUID()) {
   const email = `${role.toLowerCase()}.${randomUUID().slice(0, 8)}@e2e.test`;
-  const password = 'e2e-password-1';
-  const { localId, idToken } = await emulator('accounts:signUp', {
-    email,
-    password,
-    returnSecureToken: true,
-  });
+  const { localId, idToken } = await google(email);
   const r = await call(
     `${EMULATOR}/identitytoolkit.googleapis.com/v1/projects/demo-tms/accounts:update`,
     {
@@ -124,7 +123,7 @@ export async function withClaims(role: 'ADMIN' | 'PARENT', userId = randomUUID()
     },
   );
   if (r.status !== 200) throw new Error(`claims: ${r.status} ${JSON.stringify(r.body)}`);
-  const client = new Client(idToken, email, password);
+  const client = new Client(idToken, email);
   await client.refresh();
   return { client, userId };
 }
@@ -132,14 +131,9 @@ export async function withClaims(role: 'ADMIN' | 'PARENT', userId = randomUUID()
 /** A brand-new Tutor: Firebase account → POST /api/auth/register → token with the claims. */
 export async function newTutor(): Promise<Client> {
   const email = `tutor.${randomUUID().slice(0, 8)}@e2e.test`;
-  const password = 'e2e-password-1';
-  const { idToken } = await emulator('accounts:signUp', {
-    email,
-    password,
-    returnSecureToken: true,
-  });
-  const client = new Client(idToken, email, password);
-  const reg = await client.post('/auth/register');
+  const { idToken } = await google(email);
+  const client = new Client(idToken, email);
+  const reg = await client.post('/auth/register', { role: 'TUTOR' });
   if (reg.status !== 201) throw new Error(`register: ${reg.status} ${JSON.stringify(reg.body)}`);
   await client.refresh();
   return client;

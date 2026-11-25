@@ -81,24 +81,28 @@ Sau khi chạy xong:
 
 **Tài khoản mẫu.** `pnpm seed` tạo Admin; `pnpm seed:demo` ([`scripts/seed-demo.mjs`](../scripts/seed-demo.mjs)) tạo bộ dữ liệu demo qua API Gateway đúng như người dùng thật: giáo viên tự đăng ký, giáo viên thêm học sinh và gửi lời mời, người được mời kích hoạt; rồi lớp, lịch học hằng tuần (từ ngày mai), ghi danh và thanh toán. Cần stack đang chạy và `NODE_ENV` khác `production`. Chạy lại không tạo trùng (thấy `gv.minh@tms.demo` đã có thì chỉ báo và dừng).
 
-| Vai trò | Email | Mật khẩu | Dùng để demo |
+| Vai trò | Email | Đăng nhập | Dùng để demo |
 |---|---|---|---|
-| ADMIN | admin@tms.local | `$SEED_ADMIN_PASSWORD` | Quản lý người dùng, xem mọi giáo viên |
-| TUTOR | gv.minh@tms.demo | `$DEMO_PASSWORD` | Thầy Minh (Toán): lớp **Toán 9 – Ôn thi vào 10** (nhóm, 1.200.000 ₫/tháng, T2 + T5 18:00) và **Toán 7 – Kèm 1-1** (250.000 ₫/buổi, T3 17:30); 4 học sinh |
-| TUTOR | gv.lan@tms.demo | `$DEMO_PASSWORD` | Cô Lan (Tiếng Anh): **IELTS Foundation** (nhóm, 1.500.000 ₫/tháng, T2 + T4 19:00) và **Tiếng Anh 6 – Nhóm nhỏ** (200.000 ₫/buổi, CN 09:00); 3 học sinh |
-| PARENT | ph.hoa@tms.demo | `$DEMO_PASSWORD` | Phụ huynh có **2 con**: Nguyễn Minh Khoa (Toán 9, đã đóng đủ) và Nguyễn Thu Hà (Toán 7, theo buổi) |
-| PARENT | ph.nam@tms.demo | `$DEMO_PASSWORD` | Con Trần Gia Bảo (Toán 9): **chưa thanh toán**, ghi danh đang `AWAITING_PAYMENT`, có VietQR. Sau 7 ngày không trả sẽ tự rút khỏi lớp |
-| PARENT | ph.tuan@tms.demo | `$DEMO_PASSWORD` | Con Lê Hoàng Phúc (Toán 9): **đã trả một phần** (600.000 / 1.200.000 ₫) |
-| PARENT | ph.thao@tms.demo | `$DEMO_PASSWORD` | Con Võ Đức Huy: học 2 lớp của cô Lan (Tiếng Anh 6 theo buổi + IELTS đã đóng đủ) |
-| PARENT | ph.mai@tms.demo | `$DEMO_PASSWORD` | Con Đặng Bảo Ngọc (Tiếng Anh 6, theo buổi) |
-| STUDENT | hs.khoa@tms.demo | `$DEMO_PASSWORD` | Nguyễn Minh Khoa (lớp 9, có phụ huynh): xem lịch học, chuyên cần |
-| STUDENT | hs.quynhanh@tms.demo | `$DEMO_PASSWORD` | Phạm Quỳnh Anh (lớp 12, **tự thanh toán**, không có phụ huynh): IELTS đã đóng đủ |
+| ADMIN | admin@tms.local | Google (emulator) | Quản lý người dùng, xem mọi giáo viên |
+| TUTOR | gv.minh@tms.demo | Google (emulator) | Thầy Minh (Toán): lớp **Toán 9 – Ôn thi vào 10** (nhóm, 1.200.000 ₫/tháng, T2 + T5 18:00) và **Toán 7 – Kèm 1-1** (250.000 ₫/buổi, T3 17:30); 4 học sinh |
+| TUTOR | gv.lan@tms.demo | Google (emulator) | Cô Lan (Tiếng Anh): **IELTS Foundation** (nhóm, 1.500.000 ₫/tháng, T2 + T4 19:00) và **Tiếng Anh 6 – Nhóm nhỏ** (200.000 ₫/buổi, CN 09:00); 3 học sinh |
+| PARENT | ph.hoa@tms.demo | Google (emulator) | Phụ huynh có **2 con**: Nguyễn Minh Khoa (Toán 9, đã đóng đủ) và Nguyễn Thu Hà (Toán 7, theo buổi) |
+| PARENT | ph.nam@tms.demo | Google (emulator) | Con Trần Gia Bảo (Toán 9): **chưa thanh toán**, ghi danh đang `AWAITING_PAYMENT`, có VietQR. Sau 7 ngày không trả sẽ tự rút khỏi lớp |
+| PARENT | ph.tuan@tms.demo | Google (emulator) | Con Lê Hoàng Phúc (Toán 9): **đã trả một phần** (600.000 / 1.200.000 ₫) |
+| PARENT | ph.thao@tms.demo | Google (emulator) | Con Võ Đức Huy: học 2 lớp của cô Lan (Tiếng Anh 6 theo buổi + IELTS đã đóng đủ) |
+| PARENT | ph.mai@tms.demo | Google (emulator) | Con Đặng Bảo Ngọc (Tiếng Anh 6, theo buổi) |
+| STUDENT | hs.khoa@tms.demo | Google (emulator) | Nguyễn Minh Khoa (lớp 9, có phụ huynh): xem lịch học, chuyên cần |
+| STUDENT | hs.quynhanh@tms.demo | Google (emulator) | Phạm Quỳnh Anh (lớp 12, **tự thanh toán**, không có phụ huynh): IELTS đã đóng đủ |
 
-Các học sinh Thu Hà, Gia Bảo, Hoàng Phúc, Đức Huy, Bảo Ngọc không có tài khoản riêng (đăng nhập bằng tài khoản phụ huynh). Với project Firebase thật phải đặt `SEED_ADMIN_PASSWORD` và `DEMO_PASSWORD` (repo công khai nên không có mặc định); emulator có mật khẩu mặc định. Đổi gateway bằng `DEMO_GATEWAY`. Script dùng Firebase Auth Emulator khi có `FIREBASE_AUTH_EMULATOR_HOST`, nếu không thì dùng project thật với `NEXT_PUBLIC_FIREBASE_API_KEY` (đọc từ `.env` / `frontend/.env.local`).
+Các học sinh Thu Hà, Gia Bảo, Hoàng Phúc, Đức Huy, Bảo Ngọc không có tài khoản riêng (đăng nhập bằng tài khoản phụ huynh). `pnpm seed:demo` **chỉ chạy với emulator**; đổi gateway bằng `DEMO_GATEWAY`.
 
-> Seed Admin chạy lặp lại được (không tạo trùng), tạo tài khoản trên Firebase Authentication kèm custom claim `userId` và `role`, cùng bản ghi `users` trong `identity_db`. Đổi email / mật khẩu bằng `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`.
+> **Đăng nhập Google.** Mọi vai trò đăng nhập bằng Google, không có mật khẩu ([ADR-0004](adr/0004-firebase-authentication.md)).
 >
-> Khi phát triển nên chạy seed vào emulator để không tạo tài khoản trên project thật: bật `pnpm emulators`, rồi chạy `FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIREBASE_PROJECT_ID=demo-tms pnpm seed` (hoặc bỏ dấu `#` trước `FIREBASE_AUTH_EMULATOR_HOST` trong `backend/identity-service/.env`). Project `demo-tms` chỉ tồn tại trong emulator. Test tích hợp của Identity luôn dùng emulator.
+> - **Với emulator** (nên dùng khi phát triển): chạy `pnpm emulators` (Auth cổng 9099, Realtime Database cổng 9002, dữ liệu giữ trong `.emulator-data/`). Đặt `FIREBASE_AUTH_EMULATOR_HOST=host.docker.internal:9099` và `FIREBASE_PROJECT_ID=demo-tms` trong `.env`; `NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099` và `NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-tms` trong `frontend/.env.local`. Trang đăng nhập cho nhập email muốn đóng vai. Container trong Docker chỉ gọi được emulator nếu nó nghe ngoài `127.0.0.1`; cách chắc chắn là chạy service bằng Node trên máy.
+> - **Với project thật**: nút Google mở cửa sổ chọn tài khoản.
+> - **Admin**: đặt `ADMIN_EMAILS` (địa chỉ Google, cách nhau dấu phẩy) trong `.env`, hoặc chạy `SEED_ADMIN_EMAIL=... pnpm seed`. Người đó thành Admin ở lần đăng nhập đầu.
+>
+> Test tích hợp của Identity và gateway luôn dùng emulator. `pnpm test:e2e:host` chạy toàn bộ e2e mà không build image.
 
 ## 3. Biến môi trường
 

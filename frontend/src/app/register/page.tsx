@@ -1,36 +1,43 @@
 'use client';
 /**
- * Tutor self-signup: Firebase account → POST /auth/register with the ID token → forced token
- * refresh to pick up the `role = TUTOR` claim → the Tutor home. `?complete=1` is for an
- * account that exists in Firebase but has no role yet (an interrupted signup).
+ * First sign-in: Google → choose a role → POST /auth/register with the ID token → forced token
+ * refresh to pick up the `role` claim → that role's home. An address in ADMIN_EMAILS becomes an
+ * Admin whatever was chosen, and a known address gets its own account back.
  */
-import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useState } from 'react';
-import { ActionButton, ErrorBox, Field, Loading, Notice } from '@/components/ui';
-import { describeError, request } from '@/lib/api';
-import { authErrorMessage, useAuth } from '@/lib/auth';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { GoogleSignIn } from '@/components/google-sign-in';
+import { ActionButton, ErrorBox, Loading, Notice } from '@/components/ui';
+import { ApiError, describeError, request } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { HOME_OF } from '@/lib/labels';
 
-function RegisterForm() {
+const CHOICES = [
+  ['TUTOR', 'Tôi là gia sư'],
+  ['STUDENT', 'Tôi là học sinh'],
+  ['PARENT', 'Tôi là phụ huynh'],
+] as const;
+
+export default function RegisterPage() {
   const auth = useAuth();
   const router = useRouter();
-  const params = useSearchParams();
-  const completing = params.get('complete') === '1' && !!auth.session && !auth.session.role;
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
 
-  async function finish() {
+  async function choose(role: (typeof CHOICES)[number][0]) {
+    setError('');
     try {
-      await request('POST', '/auth/register');
+      await request('POST', '/auth/register', { body: { role } });
     } catch (err) {
+      const invited =
+        err instanceof ApiError && (err.body as { code?: string } | null)?.code === 'INVITED';
       setError(
-        describeError(err, {
-          409: 'Tài khoản này đã được đăng ký. Hãy đăng nhập lại.',
-          401: 'Phiên đăng ký không hợp lệ. Hãy đăng nhập lại rồi thử lại.',
-        }),
+        invited
+          ? 'Email này đã được giáo viên mời. Hãy mở liên kết trong email lời mời để kích hoạt.'
+          : describeError(err, {
+              401: 'Phiên đăng ký không hợp lệ. Hãy đăng nhập lại rồi thử lại.',
+              403: 'Tài khoản này đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên.',
+              409: 'Tài khoản này đã được đăng ký. Hãy đăng xuất rồi đăng nhập lại.',
+            }),
       );
       return;
     }
@@ -38,32 +45,36 @@ function RegisterForm() {
     router.replace(s?.role ? HOME_OF[s.role] : '/');
   }
 
-  async function submit() {
-    setError('');
-    if (password.length < 8) return setError('Mật khẩu cần ít nhất 8 ký tự.');
-    if (password !== confirm) return setError('Hai mật khẩu không khớp.');
-    try {
-      await auth.signUp(email.trim(), password);
-    } catch (err) {
-      return setError(authErrorMessage(err));
-    }
-    await finish();
-  }
-
   if (auth.loading) return <Loading />;
-
-  if (completing) {
+  if (!auth.session) {
     return (
       <main className="centered">
-        <h1>Hoàn tất đăng ký</h1>
-        <Notice tone="info">
-          Tài khoản <b>{auth.session?.email}</b> chưa có vai trò. Nếu bạn là giáo viên, hãy hoàn tất
-          đăng ký. Nếu bạn là phụ huynh hoặc học sinh, hãy mở liên kết trong email lời mời mà giáo
-          viên đã gửi.
-        </Notice>
-        <ErrorBox error={error} />
-        <div className="row">
-          <ActionButton onClick={finish}>Tôi là giáo viên – hoàn tất đăng ký</ActionButton>
+        <h1>Tạo tài khoản</h1>
+        <GoogleSignIn
+          label="Tiếp tục với Google"
+          onSignedIn={(s) => {
+            if (s.role) router.replace(HOME_OF[s.role]);
+          }}
+        />
+      </main>
+    );
+  }
+
+  return (
+    <main className="centered">
+      <h1>Hoàn tất đăng ký</h1>
+      <Notice tone="info">
+        Bạn đang đăng nhập bằng <b>{auth.session.email}</b>. Hãy chọn vai trò. Vai trò không tự đổi
+        được sau này.
+      </Notice>
+      <ErrorBox error={error} />
+      <div className="stack">
+        {CHOICES.map(([role, label]) => (
+          <div key={role}>
+            <ActionButton onClick={() => choose(role)}>{label}</ActionButton>
+          </div>
+        ))}
+        <div>
           <ActionButton
             variant="secondary"
             onClick={async () => {
@@ -74,57 +85,7 @@ function RegisterForm() {
             Đăng xuất
           </ActionButton>
         </div>
-      </main>
-    );
-  }
-
-  return (
-    <main className="centered">
-      <h1>Đăng ký tài khoản giáo viên</h1>
-      <form className="card stack" onSubmit={(e) => e.preventDefault()}>
-        <Field label="Email">
-          <input
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </Field>
-        <Field label="Mật khẩu" hint="Ít nhất 8 ký tự">
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </Field>
-        <Field label="Nhập lại mật khẩu">
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            required
-          />
-        </Field>
-        <ErrorBox error={error} />
-        <ActionButton type="submit" onClick={submit} busyLabel="Đang tạo tài khoản…">
-          Đăng ký
-        </ActionButton>
-      </form>
-      <p>
-        Đã có tài khoản? <Link href="/login">Đăng nhập</Link>
-      </p>
+      </div>
     </main>
-  );
-}
-
-export default function RegisterPage() {
-  return (
-    <Suspense fallback={<Loading />}>
-      <RegisterForm />
-    </Suspense>
   );
 }

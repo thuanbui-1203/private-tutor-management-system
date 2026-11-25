@@ -1,18 +1,19 @@
 'use client';
 /**
- * The authentication module (ADR-0004): wraps the Firebase client SDK. It exposes who is
- * signed in, their role and Identity `userId` (custom claims), and the sign-in / sign-up /
- * sign-out / password-reset operations. Everything else asks this module, never Firebase.
+ * The authentication module (ADR-0004): wraps the Firebase client SDK. Everyone signs in with
+ * Google. It exposes who is signed in, their role and Identity `userId` (custom claims), and
+ * the sign-in / sign-out operations. Everything else asks this module, never Firebase.
  */
 import {
-  createUserWithEmailAndPassword,
+  GoogleAuthProvider,
   onIdTokenChanged,
-  sendPasswordResetEmail,
-  signInWithEmailAndPassword,
+  signInWithCredential,
+  signInWithPopup,
   signOut as firebaseSignOut,
   type User,
 } from 'firebase/auth';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { config } from './config';
 import { firebaseAuth } from './firebase';
 import type { Role } from './types';
 
@@ -30,10 +31,9 @@ interface AuthApi {
   loading: boolean;
   /** True after the user pressed "sign out" (as opposed to a session that expired). */
   signedOut: boolean;
-  signIn(email: string, password: string): Promise<Session>;
-  signUp(email: string, password: string): Promise<void>;
+  /** Google sign-in. `emulatorEmail`: who to be, with the Auth emulator only. */
+  signInWithGoogle(emulatorEmail?: string): Promise<Session>;
   signOut(): Promise<void>;
-  resetPassword(email: string): Promise<void>;
   /** Force a new ID token so freshly set claims (role after sign-up) are picked up. */
   refreshClaims(): Promise<Session | null>;
   /** A valid ID token for the API (refreshed by Firebase when about to expire). */
@@ -50,6 +50,21 @@ async function sessionOf(user: User, forceRefresh = false): Promise<Session> {
     role: (claims.role as Role | undefined) ?? null,
     userId: (claims.userId as string | undefined) ?? null,
   };
+}
+
+/**
+ * With the emulator there is no Google: it accepts an unsigned token for any address, so local
+ * work and tests need no real account. The real Firebase refuses such a token.
+ */
+function google(emulatorEmail?: string) {
+  if (config.authEmulatorHost) {
+    const email = emulatorEmail?.trim().toLowerCase() ?? '';
+    const token = JSON.stringify({ sub: `google-${email}`, email, email_verified: true });
+    return signInWithCredential(firebaseAuth(), GoogleAuthProvider.credential(token));
+  }
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' }); // shared computers
+  return signInWithPopup(firebaseAuth(), provider);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -78,22 +93,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       session,
       loading,
       signedOut,
-      async signIn(email, password) {
+      async signInWithGoogle(emulatorEmail) {
         setSignedOut(false);
-        const { user } = await signInWithEmailAndPassword(firebaseAuth(), email, password);
+        const { user } = await google(emulatorEmail);
         const s = await sessionOf(user);
         setSession(s);
         return s;
-      },
-      async signUp(email, password) {
-        await createUserWithEmailAndPassword(firebaseAuth(), email, password);
       },
       async signOut() {
         setSignedOut(true);
         await firebaseSignOut(firebaseAuth());
         setSession(null);
       },
-      resetPassword: (email) => sendPasswordResetEmail(firebaseAuth(), email),
       refreshClaims,
       async idToken() {
         return (await firebaseAuth().currentUser?.getIdToken()) ?? null;
@@ -115,19 +126,15 @@ export function useAuth(): AuthApi {
 export function authErrorMessage(err: unknown): string {
   const code = (err as { code?: string })?.code ?? '';
   switch (code) {
-    case 'auth/invalid-credential':
-    case 'auth/wrong-password':
-    case 'auth/user-not-found':
-    case 'auth/invalid-email':
-      return 'Email hoặc mật khẩu không đúng.';
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return 'Bạn đã đóng cửa sổ đăng nhập Google.';
+    case 'auth/popup-blocked':
+      return 'Trình duyệt đã chặn cửa sổ đăng nhập Google. Hãy cho phép cửa sổ bật lên rồi thử lại.';
     case 'auth/too-many-requests':
-      return 'Bạn đã nhập sai quá nhiều lần. Vui lòng thử lại sau ít phút hoặc đặt lại mật khẩu.';
+      return 'Có quá nhiều lần đăng nhập. Vui lòng thử lại sau ít phút.';
     case 'auth/user-disabled':
       return 'Tài khoản này đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên.';
-    case 'auth/email-already-in-use':
-      return 'Email này đã được dùng cho một tài khoản khác. Hãy đăng nhập.';
-    case 'auth/weak-password':
-      return 'Mật khẩu quá yếu: cần ít nhất 8 ký tự.';
     case 'auth/network-request-failed':
       return 'Không kết nối được máy chủ đăng nhập. Kiểm tra mạng rồi thử lại.';
     default:

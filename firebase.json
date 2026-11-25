@@ -1,6 +1,8 @@
 {
+  "database": { "rules": "infra/firebase/database.rules.json" },
   "emulators": {
     "auth": { "host": "127.0.0.1", "port": 9099 },
+    "database": { "host": "127.0.0.1", "port": 9002 },
     "ui": { "enabled": false },
     "singleProjectMode": true
   }
