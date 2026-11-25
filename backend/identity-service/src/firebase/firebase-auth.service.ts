@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { signInAllowed } from '@tms/common';
 import { applicationDefault, getApps, initializeApp, type App } from 'firebase-admin/app';
 import { getAuth, type Auth, type DecodedIdToken } from 'firebase-admin/auth';
 import type { Role } from '@tms/contracts';
@@ -33,29 +34,24 @@ export class FirebaseAuthService {
     return getAuth(this.app);
   }
 
-  /** Verifies signature, expiry and revocation. Throws on any invalid token. */
-  verifyIdToken(idToken: string): Promise<DecodedIdToken> {
-    return this.auth.verifyIdToken(idToken, true);
+  /** Verifies signature, expiry, revocation and Google sign-in. Throws on any invalid token. */
+  async verifyIdToken(idToken: string): Promise<DecodedIdToken> {
+    const decoded = await this.auth.verifyIdToken(idToken, true);
+    if (!signInAllowed(decoded)) throw new Error('sign-in provider not allowed');
+    return decoded;
+  }
+
+  /** The verified token of an `Authorization: Bearer …` header, or 401. */
+  async fromHeader(authorization?: string): Promise<DecodedIdToken> {
+    const idToken = authorization?.match(/^Bearer (.+)$/i)?.[1];
+    if (!idToken) throw new UnauthorizedException('missing Firebase ID token');
+    return this.verifyIdToken(idToken).catch(() => {
+      throw new UnauthorizedException('sign in with Google: invalid or revoked ID token');
+    });
   }
 
   async setClaims(firebaseUid: string, claims: TmsClaims): Promise<void> {
     await this.auth.setCustomUserClaims(firebaseUid, { ...claims });
-  }
-
-  /**
-   * Firebase account for an invited Parent or Student: no password until the
-   * invitation is accepted. Reuses an existing account with that email only if it
-   * has no role yet (someone who signed up but never registered); returns null otherwise.
-   */
-  async accountForInvitation(email: string, displayName: string): Promise<string | null> {
-    const existing = await this.auth.getUserByEmail(email).catch(() => null);
-    if (existing) return existing.customClaims?.role ? null : existing.uid;
-    const created = await this.auth.createUser({ email, displayName, emailVerified: false });
-    return created.uid;
-  }
-
-  async activate(firebaseUid: string, password: string): Promise<void> {
-    await this.auth.updateUser(firebaseUid, { password, emailVerified: true, disabled: false });
   }
 
   async setDisabled(firebaseUid: string, disabled: boolean): Promise<void> {

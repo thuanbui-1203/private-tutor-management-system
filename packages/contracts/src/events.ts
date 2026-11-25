@@ -46,7 +46,13 @@ export const EVENT_CATALOG = {
     routingKey: 'user.registered',
     producer: 'identity',
     consumers: ['student', 'notification'],
-    data: z.object({ userId: Id, email: z.email(), role: Role }),
+    data: z.object({
+      userId: Id,
+      email: z.email(),
+      role: Role,
+      /** Signed up on their own: not yet linked to records others created about this e-mail. */
+      selfRegistered: z.boolean().optional(),
+    }),
   }),
   InvitationCreated: define({
     routingKey: 'invitation.created',

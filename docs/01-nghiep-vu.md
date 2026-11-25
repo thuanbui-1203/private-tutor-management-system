@@ -160,7 +160,7 @@
 
 | Event | Routing key | Service phát | Payload chính | Service nhận |
 |---|---|---|---|---|
-| `UserRegistered` | `user.registered` | Identity | userId, email, role | Student, Notification |
+| `UserRegistered` | `user.registered` | Identity | userId, email, role, selfRegistered? | Student, Notification |
 | `InvitationCreated` | `invitation.created` | Identity | invitationId, userId, email, expiresAt | Notification |
 | `StudentCreated` / `StudentUpdated` | `student.created` / `student.updated` | Student | studentId, fullName, tutorId, payerContact | Billing, Notification |
 | `StudentStatusChanged` | `student.status-changed` | Student | studentId, from, to | Class, Billing |

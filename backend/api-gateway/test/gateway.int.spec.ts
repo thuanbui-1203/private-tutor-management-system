@@ -37,6 +37,17 @@ async function emulator(path: string, body: unknown) {
   return (await res.json()) as { idToken: string; localId: string };
 }
 
+/** Signs in with the emulator's fake Google. */
+function google(email: string, emailVerified = true) {
+  const idp = JSON.stringify({ sub: `google-${email}`, email, email_verified: emailVerified });
+  return emulator('accounts:signInWithIdp', {
+    postBody: `id_token=${encodeURIComponent(idp)}&providerId=google.com`,
+    requestUri: 'http://localhost',
+    returnSecureToken: true,
+    returnIdpCredential: true,
+  });
+}
+
 /** An unsigned token like the emulator issues, with arbitrary claims (forged / expired). */
 function craftToken(claims: Record<string, unknown>) {
   const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -72,19 +83,11 @@ describe('API gateway (#8)', () => {
   /** An emulator account with (optionally) the userId + role claims Identity would set. */
   async function account(claims?: { role: string }) {
     const email = `gw.${randomUUID().slice(0, 8)}@example.com`;
-    const created = await emulator('accounts:signUp', {
-      email,
-      password: 'secret123',
-      returnSecureToken: true,
-    });
+    const created = await google(email);
     const userId = randomUUID();
     if (claims)
       await firebaseAuth().setCustomUserClaims(created.localId, { userId, role: claims.role });
-    const { idToken } = await emulator('accounts:signInWithPassword', {
-      email,
-      password: 'secret123',
-      returnSecureToken: true,
-    });
+    const { idToken } = await google(email);
     return { uid: created.localId, userId, idToken };
   }
 
@@ -148,6 +151,30 @@ describe('API gateway (#8)', () => {
     expect(seen.length).toBe(before); // nothing reached a service
   });
 
+  it('rejects an account that did not sign in with Google, whatever its claims (ADR-0004)', async () => {
+    const before = seen.length;
+    const email = `pw.${randomUUID().slice(0, 8)}@example.com`;
+    const credentials = { email, password: 'secret123', returnSecureToken: true };
+    const { localId } = await emulator('accounts:signUp', credentials);
+    await firebaseAuth().setCustomUserClaims(localId, { userId: randomUUID(), role: 'ADMIN' });
+    const { idToken } = await emulator('accounts:signInWithPassword', credentials);
+    await http().get('/api/users').set('authorization', `Bearer ${idToken}`).expect(401);
+
+    const unverified = await google(`uv.${randomUUID().slice(0, 8)}@example.com`, false);
+    await http()
+      .post('/api/auth/register')
+      .set('authorization', `Bearer ${unverified.idToken}`)
+      .expect(401);
+    expect(seen.length).toBe(before);
+
+    process.env.AUTH_SIGN_IN_PROVIDERS = 'google.com, password'; // while accounts are moved over
+    try {
+      await http().get('/api/users').set('authorization', `Bearer ${idToken}`).expect(200);
+    } finally {
+      delete process.env.AUTH_SIGN_IN_PROVIDERS;
+    }
+  });
+
   it('rejects a revoked token with 401', async () => {
     const user = await account({ role: 'TUTOR' });
     await http().get('/api/users/me').set('authorization', `Bearer ${user.idToken}`).expect(200);
@@ -189,14 +216,18 @@ describe('API gateway (#8)', () => {
     expect(last().headers['x-user-id']).toBeUndefined();
   });
 
-  it('lets invitation accept through without a token, body intact', async () => {
+  it('invitation accept needs a Google sign-in and passes the token on, body intact', async () => {
+    await http().post('/api/auth/invitations/tok123/accept').expect(401);
+    const invitee = await account(); // no role yet
     await http()
       .post('/api/auth/invitations/tok123/accept')
-      .set('x-user-id', randomUUID()) // spoofing attempt on a public route
-      .send({ password: 'long-enough-1' })
+      .set('authorization', `Bearer ${invitee.idToken}`)
+      .set('x-user-id', randomUUID()) // spoofing attempt
+      .send({ hello: 'there' })
       .expect(200);
     expect(last()).toMatchObject({ service: 'identity', path: '/auth/invitations/tok123/accept' });
-    expect(JSON.parse(last().body)).toEqual({ password: 'long-enough-1' });
+    expect(JSON.parse(last().body)).toEqual({ hello: 'there' });
+    expect(last().headers.authorization).toBe(`Bearer ${invitee.idToken}`);
     expect(last().headers['x-user-id']).toBeUndefined();
   });
 

@@ -1,17 +1,20 @@
-import { Body, Controller, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
+import { Body, Controller, Headers, HttpCode, HttpStatus, Param, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { z } from 'zod';
+import type { z } from 'zod';
 import { CurrentUser, Public, Roles, type AuthUser, ZodBody } from '@tms/common';
 import { InternalCreateInvitationRequest } from '@tms/contracts';
+import { FirebaseAuthService } from '../firebase/firebase-auth.service';
 import { InvitationsService } from './invitations.service';
 
 const InviteBody = InternalCreateInvitationRequest.omit({ invitedBy: true });
-const AcceptBody = z.object({ password: z.string().min(8).max(128) });
 
 @ApiTags('invitations')
 @Controller()
 export class InvitationsController {
-  constructor(private readonly invitations: InvitationsService) {}
+  constructor(
+    private readonly invitations: InvitationsService,
+    private readonly firebase: FirebaseAuthService,
+  ) {}
 
   /** A Tutor or Admin invites a Parent or Student; re-sending revokes the previous link. */
   @Roles('TUTOR', 'ADMIN')
@@ -34,14 +37,14 @@ export class InvitationsController {
     return this.invitations.invite(body);
   }
 
-  /** The invitee sets a password; the account becomes ACTIVE with its userId + role claims. */
+  /**
+   * The invitee, signed in with Google as the invited e-mail; the account becomes ACTIVE with
+   * its userId + role claims. Identity verifies the ID token itself, as for /auth/register.
+   */
   @Public()
   @Post('auth/invitations/:token/accept')
   @HttpCode(HttpStatus.OK)
-  accept(
-    @Param('token') token: string,
-    @Body(new ZodBody(AcceptBody)) body: z.infer<typeof AcceptBody>,
-  ) {
-    return this.invitations.accept(token, body.password);
+  async accept(@Param('token') token: string, @Headers('authorization') authorization?: string) {
+    return this.invitations.accept(token, await this.firebase.fromHeader(authorization));
   }
 }

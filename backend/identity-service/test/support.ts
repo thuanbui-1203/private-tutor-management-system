@@ -26,11 +26,21 @@ async function emulatorCall(path: string, body: unknown) {
   return json as { idToken: string; localId: string };
 }
 
-/** What the frontend does with the Firebase SDK. */
-export const signUp = (email: string, password = 'secret123') =>
-  emulatorCall('accounts:signUp', { email, password, returnSecureToken: true });
-export const signIn = (email: string, password = 'secret123') =>
-  emulatorCall('accounts:signInWithPassword', { email, password, returnSecureToken: true });
+/** What the frontend does with the Firebase SDK: Google sign-in (the emulator's fake Google). */
+export const signIn = (email: string, emailVerified = true) => {
+  const google = JSON.stringify({ sub: `google-${email}`, email, email_verified: emailVerified });
+  return emulatorCall('accounts:signInWithIdp', {
+    postBody: `id_token=${encodeURIComponent(google)}&providerId=google.com`,
+    requestUri: 'http://localhost',
+    returnSecureToken: true,
+    returnIdpCredential: true,
+  });
+};
+/** The first sign-in of a new person. */
+export const signUp = (email: string) => signIn(email);
+/** An account that did not come through Google. */
+export const signUpWithPassword = (email: string) =>
+  emulatorCall('accounts:signUp', { email, password: 'secret123', returnSecureToken: true });
 
 export const claimsOf = (idToken: string) =>
   JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString()) as Record<string, unknown>;

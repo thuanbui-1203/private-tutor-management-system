@@ -15,7 +15,10 @@ export class UserLinker implements OnModuleInit {
   }
 
   async link(event: EventEnvelope<'UserRegistered'>, tx: SqlExecutor): Promise<void> {
-    const { userId, email, role } = event.data;
+    const { userId, email, role, selfRegistered } = event.data;
+    // Only accepting an invitation agrees to the link. Otherwise any Tutor could attach someone
+    // to a Student (and to what that gives access to) just by typing in their e-mail.
+    if (selfRegistered) return;
     const table = role === 'STUDENT' ? 'students' : role === 'PARENT' ? 'parents' : undefined;
     if (!table) return; // Tutors and Admins have no record here
     await tx.$executeRawUnsafe(

@@ -31,7 +31,8 @@ enum UserStatus {
 /// (X-User-Id, events, other services' columns); `firebase_uid` never leaves Identity.
 model User {
   id          String     @id @default(uuid()) @db.Uuid
-  firebaseUid String     @unique @map("firebase_uid")
+  /// Null until the first Google sign-in of an invited or seeded user.
+  firebaseUid String?    @unique @map("firebase_uid")
   email       String     @unique
   role        Role
   status      UserStatus @default(PENDING)
