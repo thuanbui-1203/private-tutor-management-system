@@ -6,6 +6,7 @@ import { ChargesModule } from './charges/charges.module';
 import { CopiesModule } from './copies/copies.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { PaymentsModule } from './payments/payments.module';
+import { PayrollModule } from './payroll/payroll.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PrismaService } from './prisma/prisma.service';
 
@@ -26,6 +27,7 @@ import { PrismaService } from './prisma/prisma.service';
     InvoicesModule,
     PaymentsModule,
     BankModule,
+    PayrollModule,
     // Test-only hooks for the end-to-end suite (#21); off unless E2E_HOOKS=true.
     ...(process.env.E2E_HOOKS === 'true' ? [E2eHooksModule] : []),
   ],

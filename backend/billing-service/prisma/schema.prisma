@@ -312,3 +312,137 @@ model BankAccount {
 
   @@map("bank_accounts")
 }
+
+// ---------------------------------------------------------------- Payroll (docs/07 §6)
+
+/// What the centre pays a Tutor per taught Session of a Class, set by an Admin. A row per
+/// month it starts in, like FeePolicy: a new rate never changes Sessions already taught.
+model PayRate {
+  classId       String   @map("class_id") @db.Uuid
+  effectiveFrom String   @map("effective_from") @db.Char(7)
+  amount        Int
+  setBy         String   @map("set_by") @db.Uuid
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([classId, effectiveFrom])
+  @@map("pay_rates")
+}
+
+/// Billing's copy of Attendance, only to know whether anyone attended a Session.
+model SessionAttendance {
+  sessionId  String           @map("session_id") @db.Uuid
+  studentId  String           @map("student_id") @db.Uuid
+  status     AttendanceStatus
+  /// Time of the event applied: an older event arriving late never overwrites a newer one.
+  occurredAt DateTime         @map("occurred_at") @db.Timestamptz(6)
+
+  @@id([sessionId, studentId])
+  @@map("session_attendance")
+}
+
+enum WorkItemKind {
+  WORK
+  ADJUSTMENT
+}
+
+/// Pay for one taught Session, or a correction of it after it entered a run (never edited then).
+model WorkItem {
+  id        String       @id @default(uuid()) @db.Uuid
+  kind      WorkItemKind
+  sessionId String       @map("session_id") @db.Uuid
+  classId   String       @map("class_id") @db.Uuid
+  tutorId   String       @map("tutor_id") @db.Uuid
+  date      DateTime     @db.Date
+  period    String       @db.Char(7)
+  /// Someone was PRESENT or LATE. False = the Session is not paid.
+  attended  Boolean
+  /// The rate in force when taught; null until an Admin sets one.
+  rate      Int?
+  /// rate when attended, 0 when not, null without a rate; the difference on an ADJUSTMENT.
+  amount    Int?
+  payoutId  String?      @map("payout_id") @db.Uuid
+  payout    Payout?      @relation(fields: [payoutId], references: [id])
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([sessionId])
+  @@index([tutorId, period])
+  @@index([payoutId])
+  @@map("work_items")
+}
+
+enum PayrollRunStatus {
+  DRAFT
+  AWAITING_FUNDS
+  SETTLING
+  PARTIAL
+  COMPLETED
+  CANCELLED
+}
+
+/// One payroll: the owner pays `total` once, and it is split into one Payout per Tutor.
+model PayrollRun {
+  id                String           @id @default(uuid()) @db.Uuid
+  period            String           @db.Char(7)
+  status            PayrollRunStatus @default(DRAFT)
+  total             Int
+  received          Int              @default(0)
+  createdBy         String           @map("created_by") @db.Uuid
+  approvedBy        String?          @map("approved_by") @db.Uuid
+  approvedAt        DateTime?        @map("approved_at") @db.Timestamptz(6)
+  fundedAt          DateTime?        @map("funded_at") @db.Timestamptz(6)
+  completedAt       DateTime?        @map("completed_at") @db.Timestamptz(6)
+  payTokenHash      String?          @unique @map("pay_token_hash")
+  payTokenExpiresAt DateTime?        @map("pay_token_expires_at") @db.Timestamptz(6)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  payouts           Payout[]
+  fundings          PayrollFunding[]
+
+  @@index([createdAt])
+  @@map("payroll_runs")
+}
+
+/// Money received for a run. Insert-only; the provider's transaction id makes it idempotent.
+model PayrollFunding {
+  transactionId String     @id @map("transaction_id") @db.VarChar(100)
+  runId         String     @map("run_id") @db.Uuid
+  run           PayrollRun @relation(fields: [runId], references: [id])
+  amount        Int
+  receivedAt    DateTime   @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@index([runId])
+  @@map("payroll_fundings")
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+}
+
+/// One Tutor's share of a run: the sum of their WorkItems in it.
+model Payout {
+  id            String       @id @default(uuid()) @db.Uuid
+  runId         String       @map("run_id") @db.Uuid
+  run           PayrollRun   @relation(fields: [runId], references: [id])
+  tutorId       String       @map("tutor_id") @db.Uuid
+  amount        Int
+  status        PayoutStatus @default(PENDING)
+  attempts      Int          @default(0)
+  /// Where the money went, masked (ADR-0006).
+  bankBin       String?      @map("bank_bin")
+  accountLast4  String?      @map("account_last4")
+  providerRef   String?      @map("provider_ref")
+  failureReason String?      @map("failure_reason") @db.VarChar(300)
+  claimedAt     DateTime?    @map("claimed_at") @db.Timestamptz(6)
+  paidAt        DateTime?    @map("paid_at") @db.Timestamptz(6)
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  items         WorkItem[]
+
+  @@unique([runId, tutorId])
+  @@index([tutorId])
+  @@map("payouts")
+}

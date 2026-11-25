@@ -5,7 +5,7 @@
 export type ServiceKey = 'identity' | 'student' | 'class' | 'schedule' | 'billing' | 'audit';
 
 export type Access =
-  /** No token at all (invitation accept, iCal feed with its own token). */
+  /** No token at all (invitation accept, iCal feed, payment link: each has its own). */
   | 'public'
   /** A valid ID token without a role yet (Tutor self-signup); the token is forwarded. */
   | 'token-only'
@@ -29,6 +29,25 @@ const EXCEPTIONS: { method?: string; pattern: RegExp; service: ServiceKey; acces
   { pattern: /^\/students\/[^/]+\/classes$/, service: 'class', access: 'role' },
   { pattern: /^\/students\/[^/]+\/attendance$/, service: 'schedule', access: 'role' },
   { method: 'GET', pattern: /^\/calendar\/[^/]+\.ics$/, service: 'schedule', access: 'public' },
+  // Payroll (docs/07 §6): the provider signs its notice; the sandbox link carries its own token.
+  {
+    method: 'POST',
+    pattern: /^\/billing\/payroll\/webhook$/,
+    service: 'billing',
+    access: 'public',
+  },
+  {
+    method: 'GET',
+    pattern: /^\/billing\/sandbox\/payments\/[^/]+$/,
+    service: 'billing',
+    access: 'public',
+  },
+  {
+    method: 'POST',
+    pattern: /^\/billing\/sandbox\/payments\/[^/]+$/,
+    service: 'billing',
+    access: 'public',
+  },
 ];
 
 const BY_PREFIX: Record<string, ServiceKey | 'not-implemented'> = {

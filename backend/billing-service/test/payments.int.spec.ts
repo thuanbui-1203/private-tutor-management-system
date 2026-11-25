@@ -549,6 +549,15 @@ describe('Billing: Payments, Reversals and reports (#20)', () => {
     });
     expect(own.body.payload).toContain('01109988776655');
 
+    // The centre pays its Tutors: tuition never goes to a Tutor directly (docs/07 §6).
+    process.env.PAYOUT_MODE = 'sandbox';
+    try {
+      const centre = await http().get(`/billing/invoices/${invoice.id}/qr`).set(tutor).expect(200);
+      expect(centre.body).toMatchObject({ bankBin: '970436', accountNumber: '0011001234567' });
+    } finally {
+      delete process.env.PAYOUT_MODE;
+    }
+
     await http().delete('/billing/bank-account/consent').set(tutor).expect(200);
     const fallback = await http().get(`/billing/invoices/${invoice.id}/qr`).set(tutor).expect(200);
     expect(fallback.body).toMatchObject({ bankBin: '970436', accountNumber: '0011001234567' });

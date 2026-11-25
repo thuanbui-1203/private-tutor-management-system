@@ -214,6 +214,11 @@ services:
       BILLING_BANK_ACCOUNT_NAME: ${BILLING_BANK_ACCOUNT_NAME:-}
       # Encrypts bank account numbers stored with consent (ADR-0006); empty = cannot store.
       BANK_DATA_KEY: ${BANK_DATA_KEY:-}
+      ATTENDANCE_EDIT_WINDOW_HOURS: ${ATTENDANCE_EDIT_WINDOW_HOURS:-48}
+      # Paying Tutors (docs/07 §6): `sandbox` moves no real money; empty = off.
+      PAYOUT_MODE: ${PAYOUT_MODE:-}
+      PAYOUT_WEBHOOK_SECRET: ${PAYOUT_WEBHOOK_SECRET:-}
+      SANDBOX_PUBLIC_URL: ${SANDBOX_PUBLIC_URL:-}
     ports: ['3006:3006']
 
   # Audit trail (ADR-0005): stores the gateway's Access records, serves /audit/** to Admins

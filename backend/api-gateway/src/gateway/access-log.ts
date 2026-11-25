@@ -17,8 +17,9 @@ import { Counter } from 'prom-client';
 // Access records (ADR-0005): one per request under /api, published to `tms.audit` for
 // audit-service. Never holds a body, a header value, a query value or a token.
 
-/** Path segments that are secrets in themselves (an invitation or calendar token). */
+/** Path segments that are secrets in themselves (an invitation, calendar or payment token). */
 const SECRET_SEGMENTS: [RegExp, string][] = [
+  [/^\/billing\/sandbox\/payments\/[^/]+$/, '/billing/sandbox/payments/:token'],
   [/^\/auth\/invitations\/[^/]+\/accept$/, '/auth/invitations/:token/accept'],
   [/^\/calendar\/[^/]+\.ics$/, '/calendar/:token.ics'],
 ];
