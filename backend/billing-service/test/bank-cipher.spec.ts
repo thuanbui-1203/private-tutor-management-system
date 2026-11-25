@@ -34,7 +34,7 @@ describe('BankCipher (ADR-0006)', () => {
   it('without a key nothing is stored: 503 before touching the database', async () => {
     delete process.env.BANK_DATA_KEY;
     const prisma = { $transaction: jest.fn() };
-    const service = new BankAccountsService(prisma as never);
+    const service = new BankAccountsService(prisma as never, {} as never);
     await expect(
       service.save(
         { id: owner, role: 'TUTOR' },

@@ -367,6 +367,30 @@ describe('Student: Student and Parent records (#9)', () => {
       .expect(404);
   });
 
+  it('lists who pays for a Tutor’s Students, and nobody else (/internal/tutors/{id}/payers)', async () => {
+    const payersOf = async (id: string) =>
+      (await http().get(`/internal/tutors/${id}/payers`).expect(200)).body.userIds as string[];
+    const lan = `lan.${randomUUID().slice(0, 6)}@example.com`;
+    const binh = `binh.${randomUUID().slice(0, 6)}@example.com`;
+    const kid = `kid.${randomUUID().slice(0, 6)}@example.com`;
+    const hoa = `hoa.${randomUUID().slice(0, 6)}@example.com`;
+    await minorWithParents([parent(true, lan), parent(false, binh)], { email: kid }).expect(201);
+    await createStudent({ fullName: 'Lê Hoa', dob: ADULT_DOB, email: hoa }).expect(201);
+    const idOf = async (role: 'PARENT' | 'STUDENT', email: string) =>
+      (await activate(role, email))['x-user-id'];
+    const [primary, secondary, minor, adult] = [
+      await idOf('PARENT', lan),
+      await idOf('PARENT', binh),
+      await idOf('STUDENT', kid),
+      await idOf('STUDENT', hoa),
+    ];
+    const payers = await payersOf(tutor['x-user-id']);
+    expect(payers).toEqual(expect.arrayContaining([primary, adult]));
+    expect(payers).not.toContain(secondary);
+    expect(payers).not.toContain(minor);
+    expect(await payersOf(randomUUID())).toEqual([]);
+  });
+
   it('enforces one primary Parent in the database too', async () => {
     const { body: s } = await minorWithParents([parent(true), parent(false)]).expect(201);
     await expect(

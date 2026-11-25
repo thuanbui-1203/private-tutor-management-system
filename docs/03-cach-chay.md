@@ -83,18 +83,18 @@ Sau khi chạy xong:
 
 | Vai trò | Email | Mật khẩu | Dùng để demo |
 |---|---|---|---|
-| ADMIN | admin@tms.local | `Admin@123` | Quản lý người dùng, xem mọi giáo viên |
-| TUTOR | gv.minh@tms.demo | `Demo@1234` | Thầy Minh (Toán): lớp **Toán 9 – Ôn thi vào 10** (nhóm, 1.200.000 ₫/tháng, T2 + T5 18:00) và **Toán 7 – Kèm 1-1** (250.000 ₫/buổi, T3 17:30); 4 học sinh |
-| TUTOR | gv.lan@tms.demo | `Demo@1234` | Cô Lan (Tiếng Anh): **IELTS Foundation** (nhóm, 1.500.000 ₫/tháng, T2 + T4 19:00) và **Tiếng Anh 6 – Nhóm nhỏ** (200.000 ₫/buổi, CN 09:00); 3 học sinh |
-| PARENT | ph.hoa@tms.demo | `Demo@1234` | Phụ huynh có **2 con**: Nguyễn Minh Khoa (Toán 9, đã đóng đủ) và Nguyễn Thu Hà (Toán 7, theo buổi) |
-| PARENT | ph.nam@tms.demo | `Demo@1234` | Con Trần Gia Bảo (Toán 9): **chưa thanh toán**, ghi danh đang `AWAITING_PAYMENT`, có VietQR. Sau 7 ngày không trả sẽ tự rút khỏi lớp |
-| PARENT | ph.tuan@tms.demo | `Demo@1234` | Con Lê Hoàng Phúc (Toán 9): **đã trả một phần** (600.000 / 1.200.000 ₫) |
-| PARENT | ph.thao@tms.demo | `Demo@1234` | Con Võ Đức Huy: học 2 lớp của cô Lan (Tiếng Anh 6 theo buổi + IELTS đã đóng đủ) |
-| PARENT | ph.mai@tms.demo | `Demo@1234` | Con Đặng Bảo Ngọc (Tiếng Anh 6, theo buổi) |
-| STUDENT | hs.khoa@tms.demo | `Demo@1234` | Nguyễn Minh Khoa (lớp 9, có phụ huynh): xem lịch học, chuyên cần |
-| STUDENT | hs.quynhanh@tms.demo | `Demo@1234` | Phạm Quỳnh Anh (lớp 12, **tự thanh toán**, không có phụ huynh): IELTS đã đóng đủ |
+| ADMIN | admin@tms.local | `$SEED_ADMIN_PASSWORD` | Quản lý người dùng, xem mọi giáo viên |
+| TUTOR | gv.minh@tms.demo | `$DEMO_PASSWORD` | Thầy Minh (Toán): lớp **Toán 9 – Ôn thi vào 10** (nhóm, 1.200.000 ₫/tháng, T2 + T5 18:00) và **Toán 7 – Kèm 1-1** (250.000 ₫/buổi, T3 17:30); 4 học sinh |
+| TUTOR | gv.lan@tms.demo | `$DEMO_PASSWORD` | Cô Lan (Tiếng Anh): **IELTS Foundation** (nhóm, 1.500.000 ₫/tháng, T2 + T4 19:00) và **Tiếng Anh 6 – Nhóm nhỏ** (200.000 ₫/buổi, CN 09:00); 3 học sinh |
+| PARENT | ph.hoa@tms.demo | `$DEMO_PASSWORD` | Phụ huynh có **2 con**: Nguyễn Minh Khoa (Toán 9, đã đóng đủ) và Nguyễn Thu Hà (Toán 7, theo buổi) |
+| PARENT | ph.nam@tms.demo | `$DEMO_PASSWORD` | Con Trần Gia Bảo (Toán 9): **chưa thanh toán**, ghi danh đang `AWAITING_PAYMENT`, có VietQR. Sau 7 ngày không trả sẽ tự rút khỏi lớp |
+| PARENT | ph.tuan@tms.demo | `$DEMO_PASSWORD` | Con Lê Hoàng Phúc (Toán 9): **đã trả một phần** (600.000 / 1.200.000 ₫) |
+| PARENT | ph.thao@tms.demo | `$DEMO_PASSWORD` | Con Võ Đức Huy: học 2 lớp của cô Lan (Tiếng Anh 6 theo buổi + IELTS đã đóng đủ) |
+| PARENT | ph.mai@tms.demo | `$DEMO_PASSWORD` | Con Đặng Bảo Ngọc (Tiếng Anh 6, theo buổi) |
+| STUDENT | hs.khoa@tms.demo | `$DEMO_PASSWORD` | Nguyễn Minh Khoa (lớp 9, có phụ huynh): xem lịch học, chuyên cần |
+| STUDENT | hs.quynhanh@tms.demo | `$DEMO_PASSWORD` | Phạm Quỳnh Anh (lớp 12, **tự thanh toán**, không có phụ huynh): IELTS đã đóng đủ |
 
-Các học sinh Thu Hà, Gia Bảo, Hoàng Phúc, Đức Huy, Bảo Ngọc không có tài khoản riêng (đăng nhập bằng tài khoản phụ huynh). Đổi mật khẩu chung bằng `DEMO_PASSWORD`, đổi gateway bằng `DEMO_GATEWAY`. Script dùng Firebase Auth Emulator khi có `FIREBASE_AUTH_EMULATOR_HOST`, nếu không thì dùng project thật với `NEXT_PUBLIC_FIREBASE_API_KEY` (đọc từ `.env` / `frontend/.env.local`).
+Các học sinh Thu Hà, Gia Bảo, Hoàng Phúc, Đức Huy, Bảo Ngọc không có tài khoản riêng (đăng nhập bằng tài khoản phụ huynh). Với project Firebase thật phải đặt `SEED_ADMIN_PASSWORD` và `DEMO_PASSWORD` (repo công khai nên không có mặc định); emulator có mật khẩu mặc định. Đổi gateway bằng `DEMO_GATEWAY`. Script dùng Firebase Auth Emulator khi có `FIREBASE_AUTH_EMULATOR_HOST`, nếu không thì dùng project thật với `NEXT_PUBLIC_FIREBASE_API_KEY` (đọc từ `.env` / `frontend/.env.local`).
 
 > Seed Admin chạy lặp lại được (không tạo trùng), tạo tài khoản trên Firebase Authentication kèm custom claim `userId` và `role`, cùng bản ghi `users` trong `identity_db`. Đổi email / mật khẩu bằng `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`.
 >

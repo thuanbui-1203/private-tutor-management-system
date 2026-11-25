@@ -9,6 +9,7 @@ import type {
   Contact,
   InternalStudentAccessResponse,
   InternalStudentResponse,
+  InternalTutorPayersResponse,
 } from '@tms/contracts';
 import type { Parent, Prisma, Student, StudentParent } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -295,6 +296,20 @@ export class StudentsService {
       (relation === 'primary-parent' && student.payer === 'PRIMARY_PARENT') ||
       (relation === 'self' && student.payer === 'SELF');
     return { studentId: id, userId, relation, isPayer };
+  }
+
+  /** billing-service: the accounts of whoever pays for this Tutor's Students (BR-ST-05). */
+  async payersOf(tutorId: string): Promise<InternalTutorPayersResponse> {
+    const students = await this.prisma.student.findMany({
+      where: { tutorId, anonymisedAt: null },
+      include: WITH_PARENTS,
+    });
+    const userIds = new Set<string>();
+    for (const s of students) {
+      const payer = s.payer === 'SELF' ? s.userId : primaryOf(s)?.userId;
+      if (payer) userIds.add(payer);
+    }
+    return { tutorId, userIds: [...userIds] };
   }
 
   /** Re-publishes StudentUpdated for every Student whose Payer contact may have changed. */

@@ -22,7 +22,7 @@ python tools/load-tester/tms_load.py
    ```
 2. **Mở app**: `python tools/load-tester/tms_load.py`. Giá trị mặc định đã trỏ sẵn vào demo:
    - API gateway: `https://api.timgiasu.date/api`
-   - Tài khoản: `gv.minh@tms.demo, gv.lan@tms.demo`, mật khẩu `Demo@1234` (xem [DEMO-ACCOUNTS.md](../../DEMO-ACCOUNTS.md)). App tự đăng nhập Firebase, không cần dán token.
+   - Tài khoản: `gv.minh@tms.demo, gv.lan@tms.demo`, mật khẩu lấy từ biến môi trường `DEMO_PASSWORD` hoặc nhập trong app (xem [DEMO-ACCOUNTS.md](../../DEMO-ACCOUNTS.md)). App tự đăng nhập Firebase, không cần dán token.
    - Firebase API key: đọc từ `NEXT_PUBLIC_FIREBASE_API_KEY` trong `.env` ở gốc repo.
 3. Tab **Stress test**: chọn số VU, thời gian, kịch bản, bấm **▶ Chạy stress test**, rồi bấm **📈 Mở Grafana**. Dashboard **TMS – Luồng API** hiện vùng màu cam đúng khoảng thời gian chạy. Các panel nên xem: Request/s theo status code, Latency p95, Top endpoint, RAM và CPU từng service.
 

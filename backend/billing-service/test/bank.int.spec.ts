@@ -3,6 +3,8 @@
  * throwaway database. Run: docker compose up -d postgres && pnpm --filter @tms/billing-service test:int
  */
 import { randomBytes } from 'node:crypto';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
@@ -16,9 +18,21 @@ describe('Billing: bank details with consent (#56)', () => {
   let app: INestApplication;
   const tutor = as('TUTOR');
   const parent = as('PARENT');
+  /** Fake student-service: tutorId → the users who pay for that Tutor's Students. */
+  const payers = new Map<string, string[]>();
+  let studentsUp = true;
+  let fakeStudents: Server;
 
   beforeAll(async () => {
     env = await createTestDb('billing_bank_it');
+    fakeStudents = createServer((req, res) => {
+      const tutorId = req.url!.match(/^\/internal\/tutors\/([^/]+)\/payers$/)?.[1];
+      if (!studentsUp || !tutorId) return void res.writeHead(studentsUp ? 404 : 503).end();
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ tutorId, userIds: payers.get(tutorId) ?? [] }));
+    });
+    await new Promise<void>((r) => fakeStudents.listen(0, '127.0.0.1', r));
+    process.env.STUDENT_SERVICE_URL = `http://127.0.0.1:${(fakeStudents.address() as AddressInfo).port}`;
     process.env.BANK_DATA_KEY = randomBytes(32).toString('base64');
     const { AppModule } = await import('../src/app.module');
     app = (
@@ -30,6 +44,7 @@ describe('Billing: bank details with consent (#56)', () => {
   afterAll(async () => {
     await app?.close();
     await env?.close();
+    await new Promise((r) => fakeStudents?.close(r));
   });
 
   const http = () => request(app.getHttpServer());
@@ -112,6 +127,7 @@ describe('Billing: bank details with consent (#56)', () => {
   it('Tutors see the full number of a Payer only while consent is active; withdrawal masks and erases', async () => {
     const ownerId = parent['x-user-id'];
     const find = (list: { ownerId: string }[]) => list.find((a) => a.ownerId === ownerId);
+    payers.set(tutor['x-user-id'], [ownerId]);
     await http().put('/billing/bank-account').set(parent).send(body()).expect(200);
     await http().get('/billing/bank-accounts').set(parent).expect(403);
     const before = await http().get('/billing/bank-accounts').set(tutor).expect(200);
@@ -160,6 +176,29 @@ describe('Billing: bank details with consent (#56)', () => {
       status: 'MASKED',
     });
     await http().delete('/billing/bank-account/consent').set(parent).expect(404);
+  });
+
+  it('a Tutor sees only the Payers of their own Students; an Admin sees all; unverifiable → 503', async () => {
+    const payer = as('PARENT');
+    const stranger = as('TUTOR');
+    const ids = async (who: ReturnType<typeof as>) => {
+      const { body: list } = await http().get('/billing/bank-accounts').set(who).expect(200);
+      return list.map((a: { ownerId: string }) => a.ownerId);
+    };
+    await http().put('/billing/bank-account').set(payer).send(body()).expect(200);
+    // A Tutor who just signed up teaches nobody, so they see nobody's account.
+    expect(await ids(stranger)).toEqual([]);
+    payers.set(stranger['x-user-id'], [payer['x-user-id']]);
+    expect(await ids(stranger)).toEqual([payer['x-user-id']]);
+    expect(await ids(as('ADMIN'))).toContain(payer['x-user-id']);
+
+    studentsUp = false;
+    try {
+      const res = await http().get('/billing/bank-accounts').set(stranger).expect(503);
+      expect(JSON.stringify(res.body)).not.toContain(NUMBER);
+    } finally {
+      studentsUp = true;
+    }
   });
 
   it('the database refuses a plain number, or a number left behind after masking', async () => {

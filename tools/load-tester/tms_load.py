@@ -17,6 +17,7 @@ Chỉ dùng thư viện chuẩn (Python 3.10+).   Chạy:  python tools/load-tes
 from __future__ import annotations
 
 import json
+import os
 import queue
 import random
 import re
@@ -37,7 +38,7 @@ DEFAULT_API = "https://api.timgiasu.date/api"
 DEFAULT_GRAFANA = "http://localhost:3030"
 DASHBOARD_UID = "tms-api"
 DEMO_ACCOUNTS = "gv.minh@tms.demo, gv.lan@tms.demo"
-DEMO_PASSWORD = "Demo@1234"
+DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "")  # never in the source: the repo is public
 SAMPLE_ID = "00000000-0000-4000-8000-000000000001"
 USER_AGENT = "TMS-LoadTester/1.0 (+tools/load-tester)"
 

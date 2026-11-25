@@ -33,10 +33,10 @@ export class BankAccountsController {
     return this.accounts.withdraw(actor);
   }
 
-  /** Payers' accounts for refunds: full number only while their consent is active. */
+  /** Payers' accounts for refunds (a Tutor: their own Students' Payers only). */
   @Get('bank-accounts')
   @Roles('TUTOR', 'ADMIN')
-  payers() {
-    return this.accounts.payerAccounts();
+  payers(@CurrentUser() actor: AuthUser) {
+    return this.accounts.payerAccounts(actor);
   }
 }

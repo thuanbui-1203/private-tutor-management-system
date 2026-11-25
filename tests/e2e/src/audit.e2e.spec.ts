@@ -68,8 +68,9 @@ describe('End-to-end: audit trail and consent (#58)', () => {
     expect(access).toMatchObject({ userId: null, role: null, status: 401, service: null });
   });
 
-  test('3. A Payer stores a bank account with consent, the Tutor sees it, withdrawal leaves it masked', async () => {
+  test('3. A Payer stores a bank account with consent: the Admin sees it, an unrelated Tutor does not, withdrawal leaves it masked', async () => {
     const tutor = await newTutor();
+    const { client: admin } = await withClaims('ADMIN');
     const { client: payer, userId: payerId } = await withClaims('PARENT');
     const account = {
       bankBin: '970436',
@@ -85,7 +86,10 @@ describe('End-to-end: audit trail and consent (#58)', () => {
     expect(JSON.stringify(saved.body)).not.toContain(account.accountNumber);
 
     const mine = (list: { ownerId: string }[]) => list.find((a) => a.ownerId === payerId);
-    const visible = await tutor.get('/billing/bank-accounts');
+    const unrelated = await tutor.get('/billing/bank-accounts');
+    expect(unrelated.status).toBe(200);
+    expect(mine(unrelated.body)).toBeUndefined();
+    const visible = await admin.get('/billing/bank-accounts');
     expect(mine(visible.body)).toMatchObject({
       accountNumber: account.accountNumber,
       status: 'ACTIVE',
@@ -95,7 +99,7 @@ describe('End-to-end: audit trail and consent (#58)', () => {
     expect(withdrawn.status).toBe(200);
     expect(withdrawn.body.account).toMatchObject({ status: 'MASKED', accountName: null });
 
-    const after = await tutor.get('/billing/bank-accounts');
+    const after = await admin.get('/billing/bank-accounts');
     expect(mine(after.body)).toMatchObject({
       accountNumber: null,
       accountNumberMasked: '••••9012',
