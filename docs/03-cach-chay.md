@@ -61,6 +61,7 @@ pnpm seed:demo             # tài khoản + dữ liệu demo: 2 giáo viên, 7 h
 |---|---|---|---|
 | `docker compose up -d` | Chạy từ stage `build` của Dockerfile, `src/` gắn từ máy host, tự reload khi sửa code (khoảng 5–10 giây) | Không chạy trong Docker; chạy `pnpm --filter @tms/frontend dev` trên máy host | Phát triển hằng ngày |
 | `pnpm compose -f docker-compose.yml up -d --build` | Image production | Image production (cổng 5173) | Kiểm tra bản build, demo, chấm bài |
+| `pnpm dev:host --seed` ([scripts/dev-host.mjs](../scripts/dev-host.mjs)) | Chạy bằng Node trên máy, từ `dist/`; hạ tầng trong compose project riêng `tms-local` (dữ liệu riêng, không đụng project `tms`); emulator Auth + Realtime Database cũng chạy trên máy | `next dev` cổng 5173, đăng nhập qua emulator | Bấm thử cả app mà không build image (nhẹ hơn nhiều). `--seed` chạy `seed:demo`; Ctrl+C dừng và lưu dữ liệu emulator vào `.emulator-data/`; `docker compose -p tms-local down -v` xóa dữ liệu |
 
 **Vì sao `pnpm compose` thay cho `docker compose` khi build:** Docker Compose v5 build qua Bake, và trên Windows Bake dừng mọi lần build với lỗi `additional privileges requested: pass "--allow=fs.read=..."`. Lệnh `pnpm compose <tham số>` chạy `docker compose <tham số>` với `COMPOSE_BAKE=false` (builder cổ điển). Biến này chỉ có tác dụng khi đặt trong môi trường shell, không có tác dụng khi ghi trong `.env`. Các lệnh không build (`ps`, `logs`, `down`...) dùng `docker compose` bình thường.
 
