@@ -335,4 +335,32 @@ describe('Class: enrollment Saga, Class side (#12)', () => {
     await http().get(`/students/${studentId}/classes`).set(as('PARENT')).expect(404);
     await http().get(`/students/${studentId}/classes`).set(as('TUTOR')).expect(404);
   });
+
+  it('only a VERIFIED Tutor takes Students (BR-TU-01); the newest status wins', async () => {
+    const owner = as('TUTOR');
+    const classId = await newClass({}, owner);
+    const status = (to: 'VERIFIED' | 'SUSPENDED', at: string) => {
+      const event = createEvent(
+        'TutorStatusChanged',
+        { tutorId: owner['x-user-id'], from: to === 'VERIFIED' ? 'SUBMITTED' : 'VERIFIED', to },
+        { correlationId: randomUUID(), occurredAt: new Date(at) },
+      );
+      const service = app.get(EnrollmentsService);
+      return app
+        .get(PrismaService)
+        .$transaction((tx) => service.onTutorStatus(event as never, tx as never));
+    };
+    process.env.REQUIRE_VERIFIED_TUTOR = 'true';
+    try {
+      const refused = await enroll(classId, studentOf(owner), owner).expect(422);
+      expect(refused.body.code).toBe('TUTOR_NOT_VERIFIED');
+      await status('VERIFIED', '2026-11-27T10:00:00Z');
+      await status('SUSPENDED', '2026-11-27T09:00:00Z'); // older, arriving late: ignored
+      await enroll(classId, studentOf(owner), owner).expect(201);
+      await status('SUSPENDED', '2026-11-27T11:00:00Z');
+      await enroll(classId, studentOf(owner), owner).expect(422);
+    } finally {
+      process.env.REQUIRE_VERIFIED_TUTOR = 'false';
+    }
+  });
 });

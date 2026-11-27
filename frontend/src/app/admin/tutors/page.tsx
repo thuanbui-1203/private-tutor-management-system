@@ -12,10 +12,10 @@ import {
   Notice,
   useLoad,
 } from '@/components/ui';
+import { AreaList } from '@/components/locations';
 import { api, describeError, downloadFile } from '@/lib/api';
 import { formatDate, formatMoney, WEEKDAY_LABEL } from '@/lib/format';
 import {
-  areaLabel,
   CREDENTIAL_LABEL,
   DECISION_LABEL,
   gradesLabel,
@@ -247,7 +247,9 @@ function Review({ tutorId, onDecided }: { tutorId: string; onDecided: () => void
             </ul>
 
             <h3>Khu vực và giờ rảnh</h3>
-            <p>{p.areas.map(areaLabel).join('; ') || '—'}</p>
+            <p>
+              <AreaList areas={p.areas} />
+            </p>
             <p>
               {p.availability
                 .map((a) => `${WEEKDAY_LABEL[a.weekday]} ${a.startTime}–${a.endTime}`)

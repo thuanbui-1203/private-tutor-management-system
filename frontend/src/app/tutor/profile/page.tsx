@@ -15,10 +15,10 @@ import {
   Notice,
   useLoad,
 } from '@/components/ui';
+import { useLocations } from '@/components/locations';
 import { ApiError, api, describeError, downloadFile } from '@/lib/api';
 import { formatDate, formatMoney, WEEKDAY_LABEL } from '@/lib/format';
 import {
-  areaLabel,
   CREDENTIAL_LABEL,
   fileToBase64,
   gradesLabel,
@@ -317,6 +317,7 @@ function AreasEditor({
   areas: AreaView[];
   onChange: (a: AreaView[]) => void;
 }) {
+  const places = useLocations(areas);
   const [kind, setKind] = useState<AreaView['kind']>('LOCAL');
   const [province, setProvince] = useState('');
   const [ward, setWard] = useState('');
@@ -347,7 +348,7 @@ function AreasEditor({
       <ul>
         {areas.map((a, i) => (
           <li key={i}>
-            {areaLabel(a)}{' '}
+            {places.label(a)}{' '}
             <button
               type="button"
               className="link"
@@ -368,15 +369,32 @@ function AreasEditor({
         </Field>
         {kind === 'LOCAL' && (
           <>
-            <Field label="Mã tỉnh/TP">
-              <input
-                inputMode="numeric"
+            <Field label="Tỉnh/Thành phố">
+              <select
                 value={province}
-                onChange={(e) => setProvince(e.target.value)}
-              />
+                onChange={(e) => {
+                  setProvince(e.target.value);
+                  setWard('');
+                  if (e.target.value) places.loadWards(Number(e.target.value));
+                }}
+              >
+                <option value="">Chọn tỉnh/thành phố</option>
+                {places.provinces.map((p) => (
+                  <option key={p.code} value={p.code}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
             </Field>
-            <Field label="Mã phường/xã" hint="Để trống: cả tỉnh">
-              <input inputMode="numeric" value={ward} onChange={(e) => setWard(e.target.value)} />
+            <Field label="Phường/Xã">
+              <select value={ward} disabled={!province} onChange={(e) => setWard(e.target.value)}>
+                <option value="">Cả tỉnh/thành phố</option>
+                {(places.wards[Number(province)] ?? []).map((w) => (
+                  <option key={w.code} value={w.code}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
             </Field>
           </>
         )}

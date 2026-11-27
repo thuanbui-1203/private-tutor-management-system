@@ -94,7 +94,7 @@ Sau khi chạy xong:
 | STUDENT | hs.khoa@tms.demo | Google (emulator) | Nguyễn Minh Khoa (lớp 9, có phụ huynh): xem lịch học, chuyên cần |
 | STUDENT | hs.quynhanh@tms.demo | Google (emulator) | Phạm Quỳnh Anh (lớp 12, **tự thanh toán**, không có phụ huynh): IELTS đã đóng đủ |
 
-Các học sinh Thu Hà, Gia Bảo, Hoàng Phúc, Đức Huy, Bảo Ngọc không có tài khoản riêng (đăng nhập bằng tài khoản phụ huynh). `pnpm seed:demo` **chỉ chạy với emulator**; đổi gateway bằng `DEMO_GATEWAY`.
+Các học sinh Thu Hà, Gia Bảo, Hoàng Phúc, Đức Huy, Bảo Ngọc không có tài khoản riêng (đăng nhập bằng tài khoản phụ huynh). `pnpm seed:demo` **chỉ chạy với emulator**; nó xác minh hai giáo viên mẫu bằng một Admin giả lập `reviewer@tms.demo`, vì lớp của giáo viên chưa xác minh không nhận học sinh (BR-TU-01); đổi gateway bằng `DEMO_GATEWAY`.
 
 > **Đăng nhập Google.** Mọi vai trò đăng nhập bằng Google, không có mật khẩu ([ADR-0004](adr/0004-firebase-authentication.md)).
 >

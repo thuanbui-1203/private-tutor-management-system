@@ -136,3 +136,14 @@ model Enrollment {
   @@index([status, paymentDeadline])
   @@map("enrollments")
 }
+
+/// What tutor-service says about each Tutor (TutorStatusChanged). BR-TU-01: only a VERIFIED
+/// Tutor's Classes take Students.
+model TutorStanding {
+  tutorId   String   @id @map("tutor_id") @db.Uuid
+  status    String   @db.VarChar(20)
+  /// When the event happened: an older event arriving late never overwrites a newer one.
+  changedAt DateTime @map("changed_at") @db.Timestamptz(6)
+
+  @@map("tutor_standings")
+}

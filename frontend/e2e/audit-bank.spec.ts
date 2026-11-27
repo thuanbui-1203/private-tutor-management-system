@@ -12,7 +12,20 @@ const users: Partial<Record<Role, TestUser>> = {};
 async function as(role: Role, page: Page, stubs: Parameters<typeof stubApi>[1]) {
   users[role] ??= await createUser(role);
   const user = users[role]!;
-  const api = await stubApi(page, { 'GET /users/me': { body: meOf(user) }, ...stubs });
+  const api = await stubApi(page, {
+    'GET /users/me': { body: meOf(user) },
+    'GET /billing/banks': {
+      body: [
+        {
+          bin: '970436',
+          code: 'VCB',
+          shortName: 'Vietcombank',
+          name: 'Ngân hàng TMCP Ngoại Thương Việt Nam',
+        },
+      ],
+    },
+    ...stubs,
+  });
   await signIn(page, user);
   return api;
 }
@@ -57,7 +70,7 @@ test('a Tutor cannot save bank details without ticking consent; with it the body
     `Phiên bản điều khoản: ${POLICY}`,
   );
 
-  await page.getByLabel('Mã ngân hàng (BIN)').fill('970436');
+  await page.getByLabel('Ngân hàng', { exact: true }).selectOption('970436');
   await page.getByLabel('Số tài khoản').fill('0123 4567 89012');
   await page.getByLabel('Tên chủ tài khoản').fill('TRAN THI LAN');
   const save = page.getByRole('button', { name: 'Lưu tài khoản' });

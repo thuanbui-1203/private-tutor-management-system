@@ -129,6 +129,8 @@ export async function signIn(page: Page, user: TestUser) {
   await page.goto('/login');
   await page.getByLabel('Email').fill(user.email);
   await page.getByRole('button', { name: 'Đăng nhập với Google' }).click();
+  // Signed in: the app leaves the sign-in page (for a home, a role choice, or an error reason).
+  await page.waitForURL((url) => url.pathname !== '/login' || url.search !== '');
 }
 
 /** Every recorded API call carried the signed-in user's ID token. */

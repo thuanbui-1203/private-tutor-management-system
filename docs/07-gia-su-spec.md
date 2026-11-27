@@ -1,6 +1,6 @@
 # 07. Spec phần gia sư
 
-> Trạng thái: đã duyệt 2026-11-25. **Đã cài đặt: mục 6, mục 7 (trừ phụ huynh đồng ý ghi danh), mục 2 (trừ minh chứng học viên BR-TU-05 và bảng điểm theo môn), mục 5.** Các mục khác chưa. Chạy và thử ở **local**.
+> Trạng thái: đã duyệt 2026-11-25. **Đã cài đặt:** mục 2 (trừ minh chứng học viên BR-TU-05 và bảng điểm theo môn), danh mục ngân hàng, tỉnh, phường/xã ở mục 3 (chưa có tìm gia sư), mục 5, mục 6, mục 7 (trừ phụ huynh đồng ý ghi danh). Các mục khác chưa. Chạy và thử ở **local**.
 > "Giáo viên" (`Tutor`) là thuật ngữ chuẩn trong [GLOSSARY.md](../GLOSSARY.md); tài liệu này dùng "gia sư" theo yêu cầu gốc.
 
 ## 1. Đã chốt
@@ -35,7 +35,7 @@ Trạng thái: `DRAFT → SUBMITTED → VERIFIED | NEEDS_CHANGES | REJECTED`; `V
 
 Quy tắc:
 
-- **BR-TU-01:** chỉ hồ sơ `VERIFIED` và môn đã duyệt mới xuất hiện trong tìm kiếm và nhận ghi danh.
+- **BR-TU-01:** chỉ hồ sơ `VERIFIED` và môn đã duyệt mới xuất hiện trong tìm kiếm và nhận ghi danh. Đã cài phần ghi danh: class-service giữ trạng thái từ `TutorStatusChanged`, lớp của gia sư chưa `VERIFIED` trả 422 `TUTOR_NOT_VERIFIED` (tắt bằng `REQUIRE_VERIFIED_TUTOR=false`). Chưa kiểm tra theo môn đã duyệt.
 - **BR-TU-02:** không thu ảnh CCCD. Xác minh danh tính bằng thẻ sinh viên / bằng cấp; phần không cần thiết trong ảnh nên được che trước khi tải lên.
 - **BR-TU-03:** `TEACHER` đang dạy ở trường phải khai trường, xác nhận đã báo cáo Hiệu trưởng và xác nhận học sinh ghi danh không phải học sinh mình được phân công dạy.
 - **BR-TU-04:** học sinh lớp 1–5 chỉ ghi danh được môn nghệ thuật, thể dục thể thao, kĩ năng sống; môn khác → 422.
@@ -48,7 +48,7 @@ Quy tắc:
 
 Học sinh hoặc phụ huynh gửi **yêu cầu học** (`PENDING → ACCEPTED | DECLINED | EXPIRED`, 7 ngày). Gia sư chấp nhận thì chạy luồng ghi danh hiện có.
 
-Danh mục (76 ngân hàng, trong đó 48 hỗ trợ chuyển khoản; 34 tỉnh, 3.321 phường/xã tại 2026-11-25) được đồng bộ vào database mỗi tuần và có bản sao trong repo, nên API ngoài ngừng thì app vẫn chạy. Quốc gia lấy từ dữ liệu tĩnh ISO 3166. Trường đại học: gợi ý, luôn cho nhập tay.
+Danh mục: 76 ngân hàng (48 nhận chuyển khoản NAPAS 247), 34 tỉnh và 3.321 phường/xã sau sắp xếp 2025, lấy ngày 2026-11-27. **Đã đổi so với bản đầu:** không đồng bộ tự động mỗi tuần mà là bản sao nằm trong mã nguồn (`backend/billing-service/src/bank/vn-banks.ts`, `backend/tutor-service/src/locations/vn-locations.ts`), cập nhật bằng `node scripts/update-reference-data.mjs` rồi xem diff và commit. App không gọi API ngoài lúc chạy, nên API ngoài ngừng cũng không ảnh hưởng. Quốc gia: mã ISO 3166 hai chữ. Trường đại học: nhập tay.
 
 ## 4. Lớp học (academic-service, `academic_db`)
 

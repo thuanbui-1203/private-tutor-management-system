@@ -10,6 +10,8 @@
 //      FIREBASE_AUTH_EMULATOR_HOST (default 127.0.0.1:9099).
 //
 // Re-running is safe: if the first demo Tutor already exists, nothing is created.
+import { randomUUID } from 'node:crypto';
+
 const GATEWAY = process.env.DEMO_GATEWAY ?? 'http://localhost:8080/api';
 const EMULATOR = process.env.FIREBASE_AUTH_EMULATOR_HOST ?? '127.0.0.1:9099';
 const IDENTITY_TOOLKIT = `http://${EMULATOR}/identitytoolkit.googleapis.com/v1`;
@@ -234,9 +236,58 @@ const tomorrowVn = () =>
   new Date(Date.now() + 7 * 3_600_000 + 86_400_000).toISOString().slice(0, 10);
 
 // ------------------------------------------------------------------ steps
-async function newTutor(t) {
+async function newTutor(t, admin) {
   await (await signIn(t.email)).ok('POST', '/auth/register', { role: 'TUTOR' });
-  return signIn(t.email); // fresh token carrying the TUTOR role claim
+  const api = await signIn(t.email); // fresh token carrying the TUTOR role claim
+  // Only a verified Tutor's Classes take Students (BR-TU-01): profile, credential, review.
+  await api.ok('PUT', '/tutors/me', {
+    kind: 'GRADUATE',
+    displayName: t.name,
+    school: 'Đại học Sư phạm Hà Nội',
+    schoolCountry: 'VN',
+    subjects: t.classes.map((c) => ({ subject: c.subject, gradeFrom: 6, gradeTo: 12 })),
+    areas: [{ kind: 'LOCAL', provinceCode: 1, wardCode: null }, { kind: 'ONLINE' }],
+    availability: [{ weekday: 2, startTime: '17:00', endTime: '21:00' }],
+  });
+  const pdf = Buffer.from('%PDF-1.4\nBang tot nghiep (du lieu demo)\n%%EOF\n').toString('base64');
+  await api.ok('POST', '/tutors/me/credentials', {
+    kind: 'DEGREE',
+    title: 'Cử nhân Sư phạm',
+    issuer: 'Đại học Sư phạm Hà Nội',
+    country: 'VN',
+    file: { name: 'bang-demo.pdf', contentBase64: pdf },
+  });
+  const p = await api.ok('POST', '/tutors/me/submit');
+  await admin.ok('POST', `/tutors/${p.tutorId}/review`, {
+    decision: 'VERIFY',
+    credentials: p.credentials.map((c) => ({ id: c.id, status: 'VERIFIED' })),
+    subjects: p.subjects.map((s) => ({ id: s.id, status: 'VERIFIED' })),
+  });
+  return api;
+}
+
+/**
+ * An Admin for the review: an emulator account given the claims directly (no users row; the
+ * gateway and tutor-service only read the claims). Only possible with the emulator.
+ */
+async function reviewer() {
+  const email = 'reviewer@tms.demo';
+  const { users } = await firebase('accounts:lookup', {
+    idToken: (await signIn(email)).token,
+  });
+  const res = await fetch(
+    `http://${EMULATOR}/identitytoolkit.googleapis.com/v1/projects/demo-tms/accounts:update`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer owner' },
+      body: JSON.stringify({
+        localId: users[0].localId,
+        customAttributes: JSON.stringify({ role: 'ADMIN', userId: randomUUID() }),
+      }),
+    },
+  );
+  if (!res.ok) throw new Error(`reviewer claims: ${res.status}`);
+  return signIn(email);
 }
 
 async function inviteAndAccept(tutor, email, fullName, role) {
@@ -253,10 +304,11 @@ async function main() {
     return;
   }
 
+  const admin = await reviewer();
   const tutors = {};
   const classes = {};
   for (const t of TUTORS) {
-    const api = await newTutor(t);
+    const api = await newTutor(t, admin);
     tutors[t.key] = api;
     console.log(`✓ Tutor ${t.email}`);
     for (const c of t.classes) {

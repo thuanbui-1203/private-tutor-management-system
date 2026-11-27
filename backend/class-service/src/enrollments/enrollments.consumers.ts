@@ -32,6 +32,9 @@ export class EnrollmentsConsumers
     await this.messaging.subscribe('StudentStatusChanged', (e, tx) =>
       this.enrollments.onStudentStatus(e, tx),
     );
+    await this.messaging.subscribe('TutorStatusChanged', (e, tx) =>
+      this.enrollments.onTutorStatus(e, tx),
+    );
   }
 
   onApplicationBootstrap(): void {

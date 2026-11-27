@@ -64,7 +64,7 @@ describe('Tutor profiles and their verification (docs/07 §2)', () => {
     school: 'Đại học Sư phạm TP.HCM',
     schoolCountry: 'VN',
     subjects: [{ subject: 'Toán', gradeFrom: 6, gradeTo: 9, suggestedFee: 200_000 }],
-    areas: [{ kind: 'LOCAL', provinceCode: 79, wardCode: 26734 }, { kind: 'ONLINE' }],
+    areas: [{ kind: 'LOCAL', provinceCode: 79, wardCode: 26740 }, { kind: 'ONLINE' }],
     availability: [{ weekday: 2, startTime: '18:00', endTime: '20:00' }],
     ...over,
   });
@@ -121,6 +121,8 @@ describe('Tutor profiles and their verification (docs/07 §2)', () => {
       { availability: [{ weekday: 2, startTime: '20:00', endTime: '18:00' }] },
       { subjects: [{ subject: 'Toán', gradeFrom: 9, gradeTo: 6 }] },
       { schoolCountry: 'Vietnam' },
+      { areas: [{ kind: 'LOCAL', provinceCode: 99 }] }, // no such province
+      { areas: [{ kind: 'LOCAL', provinceCode: 79, wardCode: 4 }] }, // Ba Đình is in Hà Nội
       { areas: [{ kind: 'ABROAD', country: 'JP', timezone: 'Mars/Base' }] },
     ];
     for (const over of bad)
@@ -134,6 +136,23 @@ describe('Tutor profiles and their verification (docs/07 §2)', () => {
       .set(tutor)
       .send(profile({ subjects: twice }))
       .expect(422);
+  });
+
+  it('lists the 34 provinces and the wards of one, from the copy shipped with the service', async () => {
+    const who = as('PARENT');
+    const { body: provinces } = await http()
+      .get('/tutors/locations/provinces')
+      .set(who)
+      .expect(200);
+    expect(provinces).toHaveLength(34);
+    expect(provinces).toContainEqual({ code: 79, name: 'Thành phố Hồ Chí Minh' });
+    const { body: wards } = await http()
+      .get('/tutors/locations/provinces/79/wards')
+      .set(who)
+      .expect(200);
+    expect(wards).toContainEqual({ code: 26740, name: 'Phường Sài Gòn' });
+    await http().get('/tutors/locations/provinces/99/wards').set(who).expect(404);
+    await http().get('/tutors/locations/provinces').expect(401);
   });
 
   it('stores a credential file encrypted in the Realtime Database; only its owner and Admins get it back', async () => {

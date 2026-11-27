@@ -5,6 +5,7 @@ import type { BankAccount, Consent, Prisma } from '../generated/prisma/client';
 import { StudentClient } from '../invoices/student.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BankCipher } from './bank-cipher';
+import { VN_BANKS } from './vn-banks';
 
 // Bank details stored only with consent (ADR-0006).
 
@@ -12,7 +13,12 @@ import { BankCipher } from './bank-cipher';
 export const BANK_POLICY_VERSION = '2026-11-22';
 
 export const BankAccountInput = z.object({
-  bankBin: z.string().regex(/^\d{6}$/, 'a NAPAS bank BIN has 6 digits'),
+  bankBin: z
+    .string()
+    .refine(
+      (bin) => VN_BANKS.some((b) => b.bin === bin && b.transfer),
+      'not a Vietnamese bank that takes NAPAS 247 transfers (GET /billing/banks)',
+    ),
   accountNumber: z.string().regex(/^\d{6,19}$/, 'an account number has 6 to 19 digits'),
   accountName: z.string().trim().min(1).max(100),
   consent: z.literal(true, {

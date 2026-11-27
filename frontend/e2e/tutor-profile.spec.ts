@@ -13,7 +13,19 @@ const users: Partial<Record<Role, TestUser>> = {};
 async function as(role: Role, page: Page, stubs: Parameters<typeof stubApi>[1]) {
   users[role] ??= await createUser(role);
   const user = users[role]!;
-  const api = await stubApi(page, { 'GET /users/me': { body: meOf(user) }, ...stubs });
+  const api = await stubApi(page, {
+    'GET /users/me': { body: meOf(user) },
+    'GET /tutors/locations/provinces': {
+      body: [
+        { code: 1, name: 'Thành phố Hà Nội' },
+        { code: 79, name: 'Thành phố Hồ Chí Minh' },
+      ],
+    },
+    'GET /tutors/locations/provinces/79/wards': {
+      body: [{ code: 26740, name: 'Phường Sài Gòn' }],
+    },
+    ...stubs,
+  });
   await signIn(page, user);
   return api;
 }
@@ -217,4 +229,32 @@ test('Admin decides each item, then verifies the profile', async ({ page }) => {
     subjects: [{ id: SUBJ, status: 'VERIFIED', note: null }],
   });
   await expect(card.getByRole('button', { name: 'Tạm khóa' })).toBeVisible();
+});
+
+test('a teaching area is picked from the province and ward lists', async ({ page }) => {
+  let profile: Record<string, unknown> = { ...empty };
+  const api = await as('TUTOR', page, {
+    'GET /tutors/me': () => ({ body: profile }),
+    'PUT /tutors/me': ({ body }) => {
+      profile = { ...profile, ...(body as object) };
+      return { body: profile };
+    },
+  });
+  await page.goto('/tutor/profile');
+  const form = main(page).getByRole('form', { name: 'Thông tin gia sư' });
+  await form.getByLabel('Tỉnh/Thành phố').selectOption('79');
+  await form.getByLabel('Phường/Xã').selectOption('26740');
+  await form.getByRole('button', { name: 'Thêm khu vực' }).click();
+  await expect(form.getByText('Phường Sài Gòn, Thành phố Hồ Chí Minh')).toBeVisible();
+  await form.getByLabel('Tỉnh/Thành phố').selectOption('1');
+  await form.getByRole('button', { name: 'Thêm khu vực' }).click();
+  await expect(form.getByText('Thành phố Hà Nội (cả tỉnh)')).toBeVisible();
+  await form.getByRole('button', { name: 'Lưu thông tin' }).click();
+  await expect(form.getByText('Đã lưu.')).toBeVisible();
+  expect(api.find('PUT', '/tutors/me')[0].body).toMatchObject({
+    areas: [
+      { kind: 'LOCAL', provinceCode: 79, wardCode: 26740 },
+      { kind: 'LOCAL', provinceCode: 1, wardCode: null },
+    ],
+  });
 });

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isProvince, wardIn } from '../locations/locations';
 
 const country = z.string().regex(/^[A-Z]{2}$/, 'an ISO 3166-1 alpha-2 country code, e.g. VN');
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'HH:MM');
@@ -31,12 +32,17 @@ export const SubjectInput = z
   });
 
 export const AreaInput = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('LOCAL'),
-    provinceCode: z.number().int().positive(),
-    /** Null = anywhere in the province. */
-    wardCode: z.number().int().positive().nullable().default(null),
-  }),
+  z
+    .object({
+      kind: z.literal('LOCAL'),
+      provinceCode: z.number().int().refine(isProvince, 'unknown province code'),
+      /** Null = anywhere in the province. */
+      wardCode: z.number().int().positive().nullable().default(null),
+    })
+    .refine((a) => a.wardCode === null || wardIn(a.wardCode, a.provinceCode), {
+      message: 'this ward is not in that province',
+      path: ['wardCode'],
+    }),
   z.object({ kind: z.literal('ONLINE') }),
   z.object({
     kind: z.literal('ABROAD'),
