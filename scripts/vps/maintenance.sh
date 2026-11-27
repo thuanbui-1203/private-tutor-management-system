@@ -10,7 +10,7 @@ cd "$(dirname "$0")/../.."
 
 CONFIG=infra/cloudflared/config.yml
 SAVED=infra/cloudflared/config.live.yml
-APPS='frontend api-gateway identity-service student-service class-service schedule-service billing-service audit-service'
+APPS='frontend api-gateway identity-service student-service class-service schedule-service billing-service audit-service tutor-service'
 PAGE=tms-maintenance
 names() { for a in $APPS; do echo "tms-$a-1"; done; }
 

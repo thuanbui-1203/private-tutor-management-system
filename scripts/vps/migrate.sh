@@ -16,9 +16,10 @@ declare -A URLS=(
   [schedule-service]="$(envval SCHEDULE_DB_URL)"
   [billing-service]="$(envval BILLING_DB_URL)"
   [audit-service]="$(envval AUDIT_DB_URL)"
+  [tutor-service]="$(envval TUTOR_DB_URL)"
 )
 
-for svc in identity-service student-service class-service schedule-service billing-service audit-service; do
+for svc in "${!URLS[@]}"; do
   echo "== $svc"
   docker build -q --target build -f "backend/$svc/Dockerfile" -t "tms-$svc-build" . >/dev/null
   docker run --rm --network "$NETWORK" -e DATABASE_URL="${URLS[$svc]}" "tms-$svc-build" \
