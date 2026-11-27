@@ -295,8 +295,8 @@ export const EVENT_CATALOG = {
   TutorStatusChanged: define({
     routingKey: 'tutor.status-changed',
     producer: 'tutor',
-    // Read later by class (BR-TU-01: only VERIFIED Tutors take Students) and billing (pay).
-    consumers: [],
+    // class: BR-TU-01, only a VERIFIED Tutor's Classes take Students.
+    consumers: ['class'],
     data: z
       .object({ tutorId: Id, from: TutorProfileStatus, to: TutorProfileStatus })
       .refine((d) => d.from !== d.to, { message: 'from and to must differ' }),

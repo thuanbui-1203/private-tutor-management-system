@@ -54,6 +54,7 @@ export class EnrollmentsService {
   async enroll(actor: AuthUser, classId: string, studentId: string): Promise<EnrollResult> {
     const cls = await this.classes.owned(actor, classId);
     this.checkOpen(cls);
+    await this.checkTutorVerified(cls);
     const existing = await this.prisma.enrollment.findUnique({
       where: { classId_studentId: { classId, studentId } },
     });
@@ -285,6 +286,36 @@ export class EnrollmentsService {
 
   private checkOpen(cls: Class) {
     if (cls.status !== 'OPEN') throw new ConflictException('the class is closed');
+  }
+
+  /**
+   * BR-TU-01: only a VERIFIED Tutor takes Students. An unverified Tutor may still prepare
+   * Classes (docs/07 §1). REQUIRE_VERIFIED_TUTOR=false turns the rule off.
+   */
+  private async checkTutorVerified(cls: Class) {
+    if (process.env.REQUIRE_VERIFIED_TUTOR === 'false') return;
+    const standing = await this.prisma.tutorStanding.findUnique({
+      where: { tutorId: cls.tutorId },
+    });
+    if (standing?.status !== 'VERIFIED') {
+      throw new UnprocessableEntityException({
+        message: "the class's Tutor is not verified yet, so it cannot take Students (BR-TU-01)",
+        code: 'TUTOR_NOT_VERIFIED',
+      });
+    }
+  }
+
+  /** TutorStatusChanged: keeps the newest status of each Tutor. */
+  async onTutorStatus(event: EventEnvelope<'TutorStatusChanged'>, sql: SqlExecutor) {
+    await sql.$executeRawUnsafe(
+      `INSERT INTO tutor_standings (tutor_id, status, changed_at)
+       VALUES ($1::uuid, $2, $3::timestamptz)
+       ON CONFLICT (tutor_id) DO UPDATE SET status = EXCLUDED.status, changed_at = EXCLUDED.changed_at
+         WHERE tutor_standings.changed_at < EXCLUDED.changed_at`,
+      event.data.tutorId,
+      event.data.to,
+      event.occurredAt,
+    );
   }
 
   private checkStudent(cls: Class, student: InternalStudentResponse) {

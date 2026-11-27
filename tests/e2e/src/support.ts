@@ -128,15 +128,61 @@ export async function withClaims(role: 'ADMIN' | 'PARENT', userId = randomUUID()
   return { client, userId };
 }
 
-/** A brand-new Tutor: Firebase account → POST /api/auth/register → token with the claims. */
-export async function newTutor(): Promise<Client> {
+/**
+ * A brand-new Tutor: Google sign-in → POST /api/auth/register → token with the claims. Unless
+ * `verified` is false, the Tutor also goes through verification (profile, credential, Admin
+ * review): only a VERIFIED Tutor's Classes take Students (BR-TU-01).
+ */
+export async function newTutor({ verified = true } = {}): Promise<Client> {
   const email = `tutor.${randomUUID().slice(0, 8)}@e2e.test`;
   const { idToken } = await google(email);
   const client = new Client(idToken, email);
   const reg = await client.post('/auth/register', { role: 'TUTOR' });
   if (reg.status !== 201) throw new Error(`register: ${reg.status} ${JSON.stringify(reg.body)}`);
   await client.refresh();
+  if (verified) await verify(client);
   return client;
+}
+
+const ok = (r: Reply, what: string) => {
+  if (r.status >= 300) throw new Error(`${what}: ${r.status} ${JSON.stringify(r.body)}`);
+  return r.body;
+};
+
+/** Takes a Tutor through verification by an Admin (docs/07 §2). */
+export async function verify(tutor: Client) {
+  ok(
+    await tutor.put('/tutors/me', {
+      kind: 'GRADUATE',
+      displayName: tutor.email,
+      school: 'Đại học Sư phạm Hà Nội',
+      schoolCountry: 'VN',
+      subjects: [{ subject: 'Toán', gradeFrom: 6, gradeTo: 12 }],
+      areas: [{ kind: 'ONLINE' }],
+    }),
+    'profile',
+  );
+  const pdf = Buffer.from('%PDF-1.4\nbang tot nghiep\n%%EOF\n').toString('base64');
+  ok(
+    await tutor.post('/tutors/me/credentials', {
+      kind: 'DEGREE',
+      title: 'Cử nhân Sư phạm Toán',
+      issuer: 'Đại học Sư phạm Hà Nội',
+      country: 'VN',
+      file: { name: 'bang.pdf', contentBase64: pdf },
+    }),
+    'credential',
+  );
+  const p = ok(await tutor.post('/tutors/me/submit'), 'submit');
+  const { client: admin } = await withClaims('ADMIN');
+  ok(
+    await admin.post(`/tutors/${p.tutorId}/review`, {
+      decision: 'VERIFY',
+      credentials: p.credentials.map((c: { id: string }) => ({ id: c.id, status: 'VERIFIED' })),
+      subjects: p.subjects.map((s: { id: string }) => ({ id: s.id, status: 'VERIFIED' })),
+    }),
+    'review',
+  );
 }
 
 /** POST to a test-only hook on a service (never through the gateway). */

@@ -18,7 +18,7 @@ import {
   useLoad,
 } from '@/components/ui';
 import { api } from '@/lib/api';
-import type { OwnBankAccountResponse, PayerBankAccount } from '@/lib/types';
+import type { BankView, OwnBankAccountResponse, PayerBankAccount } from '@/lib/types';
 
 /** Why the account is stored: the Tutor receives transfers, a Payer gets refunds. */
 export type BankPurpose = 'receive' | 'refund';
@@ -56,6 +56,8 @@ export function ConsentText({ purpose, version }: { purpose: BankPurpose; versio
 
 export function BankAccountSettings({ purpose }: { purpose: BankPurpose }) {
   const state = useLoad(() => api.get<OwnBankAccountResponse>('/billing/bank-account'));
+  const banks = useLoad(() => api.get<BankView[]>('/billing/banks'));
+  const bankName = (bin: string) => banks.data?.find((b) => b.bin === bin)?.shortName ?? bin;
   const [bankBin, setBankBin] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [accountName, setAccountName] = useState('');
@@ -88,8 +90,8 @@ export function BankAccountSettings({ purpose }: { purpose: BankPurpose }) {
                       <Badge tone="neutral">Đã rút đồng ý, chỉ còn bản đã che</Badge>
                     )}
                   </dd>
-                  <dt>Mã ngân hàng</dt>
-                  <dd>{account.bankBin}</dd>
+                  <dt>Ngân hàng</dt>
+                  <dd>{bankName(account.bankBin)}</dd>
                   <dt>Số tài khoản</dt>
                   <dd data-testid="masked-number">{account.accountNumberMasked}</dd>
                   {account.accountName && (
@@ -125,12 +127,15 @@ export function BankAccountSettings({ purpose }: { purpose: BankPurpose }) {
               onSubmit={(e) => e.preventDefault()}
             >
               <h2>{account?.status === 'ACTIVE' ? 'Đổi tài khoản' : 'Lưu tài khoản'}</h2>
-              <Field label="Mã ngân hàng (BIN)" hint="6 chữ số NAPAS, ví dụ 970436 là Vietcombank">
-                <input
-                  inputMode="numeric"
-                  value={bankBin}
-                  onChange={(e) => setBankBin(e.target.value.trim())}
-                />
+              <Field label="Ngân hàng">
+                <select value={bankBin} onChange={(e) => setBankBin(e.target.value)}>
+                  <option value="">Chọn ngân hàng</option>
+                  {(banks.data ?? []).map((b) => (
+                    <option key={b.bin} value={b.bin}>
+                      {b.shortName} – {b.name}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field label="Số tài khoản">
                 <input
@@ -211,6 +216,8 @@ export function BankAccountSettings({ purpose }: { purpose: BankPurpose }) {
 /** Tutor / Admin: the Payers' accounts, for refunds. Full number only while consented. */
 export function PayerBankAccounts() {
   const state = useLoad(() => api.get<PayerBankAccount[]>('/billing/bank-accounts'));
+  const banks = useLoad(() => api.get<BankView[]>('/billing/banks'));
+  const bankName = (bin: string) => banks.data?.find((b) => b.bin === bin)?.shortName ?? bin;
   return (
     <>
       <h1>Tài khoản ngân hàng của người thanh toán</h1>
@@ -238,7 +245,7 @@ export function PayerBankAccounts() {
                   {list.map((a) => (
                     <tr key={a.ownerId}>
                       <td>{a.accountName ?? '—'}</td>
-                      <td>{a.bankBin}</td>
+                      <td>{bankName(a.bankBin)}</td>
                       <td>{a.accountNumber ?? a.accountNumberMasked}</td>
                       <td>
                         {a.status === 'ACTIVE' ? (

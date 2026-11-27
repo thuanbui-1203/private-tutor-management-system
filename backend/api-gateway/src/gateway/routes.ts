@@ -3,13 +3,7 @@
  * after the `/api` prefix is removed; the downstream service receives the same path.
  */
 export type ServiceKey =
-  | 'identity'
-  | 'student'
-  | 'class'
-  | 'schedule'
-  | 'billing'
-  | 'audit'
-  | 'tutor';
+  'identity' | 'student' | 'class' | 'schedule' | 'billing' | 'audit' | 'tutor';
 
 export type Access =
   /** No token at all (invitation accept, iCal feed, payment link: each has its own). */

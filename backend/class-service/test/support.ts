@@ -29,6 +29,8 @@ export async function createTestDb(prefix: string): Promise<TestDb> {
     await db.query(readFileSync(join(migrations, dir, 'migration.sql'), 'utf8'));
   }
   process.env.DATABASE_URL = `${PG}/${name}`;
+  // BR-TU-01 has its own test; the others are about enrollment, not Tutor verification.
+  process.env.REQUIRE_VERIFIED_TUTOR = 'false';
   delete process.env.RABBITMQ_URL;
   delete process.env.BILLING_SERVICE_URL;
   return {

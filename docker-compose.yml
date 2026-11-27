@@ -189,7 +189,12 @@ services:
   class-service:
     <<: *backend
     build: { context: ., dockerfile: backend/class-service/Dockerfile }
-    environment: { <<: *common-env, PORT: '3003', DATABASE_URL: '${CLASS_DB_URL}' }
+    environment:
+      <<: *common-env
+      PORT: '3003'
+      DATABASE_URL: ${CLASS_DB_URL}
+      # BR-TU-01: only a VERIFIED Tutor's Classes take Students. `false` turns it off.
+      REQUIRE_VERIFIED_TUTOR: ${REQUIRE_VERIFIED_TUTOR:-true}
     ports: ['3003:3003']
 
   schedule-service:

@@ -102,13 +102,6 @@ export const DECISION_LABEL: Record<string, string> = {
 };
 export const gradesLabel = (s: { gradeFrom: number | null; gradeTo: number | null }) =>
   s.gradeFrom === null ? 'Không theo lớp' : `Lớp ${s.gradeFrom}–${s.gradeTo}`;
-export const areaLabel = (a: AreaView) =>
-  a.kind === 'ONLINE'
-    ? 'Dạy online'
-    : a.kind === 'LOCAL'
-      ? `Tỉnh/TP mã ${a.provinceCode}${a.wardCode ? `, phường/xã mã ${a.wardCode}` : ''}`
-      : `Nước ngoài: ${a.country}${a.city ? `, ${a.city}` : ''}${a.timezone ? ` (${a.timezone})` : ''}`;
-
 /** A File as base64, without the `data:...;base64,` prefix. */
 export function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {

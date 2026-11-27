@@ -141,7 +141,7 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 | POST | `/classes/{id}/close` | Đóng lớp: mọi ghi danh còn hiệu lực → `WITHDRAWN` (lý do `CLASS_CLOSED`, mỗi ghi danh một `StudentWithdrawn`), rồi `ClassClosed` (BR-CL-05) | TUTOR (chủ sở hữu), ADMIN |
 | GET | `/classes/{id}/students` | Học sinh đang giữ chỗ hoặc tạm nghỉ trong lớp | TUTOR (chủ sở hữu), ADMIN |
 | GET | `/internal/tutors/{id}/open-classes` | Lớp đang mở của giáo viên, cho identity-service trước khi vô hiệu hóa (BR-CL-08) | Nội bộ |
-| POST | `/classes/{id}/enrollments` | Ghi danh học sinh. Trả `201` với `status = ACTIVE` (lớp `PER_SESSION`) hoặc `AWAITING_PAYMENT` (lớp `MONTHLY`); trả `202` với `PENDING` khi Student Service không phản hồi | TUTOR, ADMIN |
+| POST | `/classes/{id}/enrollments` | Ghi danh học sinh. Gia sư của lớp chưa `VERIFIED` → 422 `TUTOR_NOT_VERIFIED` (BR-TU-01, bản sao từ `TutorStatusChanged`). Trả `201` với `status = ACTIVE` (lớp `PER_SESSION`) hoặc `AWAITING_PAYMENT` (lớp `MONTHLY`); trả `202` với `PENDING` khi Student Service không phản hồi | TUTOR, ADMIN |
 | PATCH | `/classes/{id}/enrollments/{eid}` | `status`: `PAUSED` (từ ACTIVE), `ACTIVE` (từ PAUSED), `WITHDRAWN` (lý do `REQUESTED`, phát `StudentWithdrawn`); chuyển khác → 409 | TUTOR (chủ sở hữu), ADMIN |
 | GET | `/students/{studentId}/classes` | Các lớp của một học sinh; phụ huynh / học sinh được kiểm tra qua student-service `GET /internal/students/{id}/access` | TUTOR (lớp của mình), ADMIN, PARENT (con), STUDENT (bản thân) |
 
@@ -218,6 +218,7 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 | GET | `/billing/bank-account` | Tài khoản ngân hàng của chính mình (số luôn ở dạng `••••1234`), trạng thái `ACTIVE` / `MASKED`, Consent và `policyVersion` hiện hành ([ADR-0006](adr/0006-bank-details-with-consent.md)) | TUTOR, ADMIN, PARENT, STUDENT |
 | PUT | `/billing/bank-account` | Lưu tài khoản; body phải có `consent: true` và `policyVersion` hiện hành, thiếu → 400 và không lưu gì; số tài khoản mã hóa AES-256-GCM bằng `BANK_DATA_KEY` (thiếu khóa → 503) | TUTOR, ADMIN, PARENT, STUDENT |
 | DELETE | `/billing/bank-account/consent` | Rút đồng ý: xóa số đầy đủ và tên chủ tài khoản, giữ BIN + 4 số cuối; Consent giữ lại với `withdrawn_at`; không có Consent đang hiệu lực → 404 | TUTOR, ADMIN, PARENT, STUDENT |
+| GET | `/billing/banks` | Ngân hàng nhận chuyển khoản NAPAS 247 (BIN, tên) cho ô chọn; `PUT /billing/bank-account` chỉ nhận BIN trong danh sách này | Mọi vai trò |
 | GET | `/billing/bank-accounts` | Tài khoản của người thanh toán để hoàn tiền (giáo viên: chỉ người thanh toán của học sinh mình; student-service lỗi thì 503): số đầy đủ khi Consent còn hiệu lực, chỉ bản đã che sau khi rút | TUTOR, ADMIN |
 | POST | `/billing/invoices/{id}/payments` | Ghi nhận thanh toán thủ công `{amount, method, paidAt?, note?}` trên hóa đơn `ISSUED` / `PARTIALLY_PAID` / `OVERDUE`; vượt số còn nợ → 422 kèm `outstanding`; `paidAt` ở tương lai → 422; phát `PaymentReceived` (BR-BI-07) | TUTOR, ADMIN |
 | POST | `/billing/payments/{id}/reversal` | Bút toán đảo cho khoản ghi sai (kèm `reason`), mỗi khoản chỉ đảo một lần, không đảo bút toán đảo; trạng thái hóa đơn tính lại (có thể về `ISSUED` / `OVERDUE`); không phát `PaymentReceived` | TUTOR, ADMIN |
@@ -284,6 +285,7 @@ Hồ sơ gia sư và việc xác minh ([docs/07](07-gia-su-spec.md) §2). Cổng
 
 | Method | Endpoint | Mô tả | Quyền |
 |---|---|---|---|
+| GET | `/tutors/locations/provinces`, `/tutors/locations/provinces/{code}/wards` | 34 tỉnh và phường/xã sau sắp xếp 2025, cho ô chọn; khu vực `LOCAL` chỉ nhận mã có trong danh sách và phường/xã thuộc đúng tỉnh | Mọi vai trò |
 | GET / PUT | `/tutors/me` | Hồ sơ của mình (lần đầu tạo bản `DRAFT`). PUT thay cả danh sách môn, khu vực, giờ rảnh; môn đã duyệt giữ trạng thái, môn mới `PENDING`. Đổi loại, tên, trường khi đã `VERIFIED` thì hồ sơ về `SUBMITTED` | TUTOR, ADMIN |
 | POST | `/tutors/me/credentials` | Minh chứng kèm file (base64 trong JSON): PDF / PNG / JPEG theo byte đầu, tối đa 5 MB (413), kho đầy 507 | TUTOR, ADMIN |
 | DELETE | `/tutors/me/credentials/{id}` | Xóa minh chứng và nội dung file | TUTOR, ADMIN |

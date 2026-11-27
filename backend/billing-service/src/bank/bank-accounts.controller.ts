@@ -2,12 +2,24 @@ import { Body, Controller, Delete, Get, Put } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { CurrentUser, Roles, ZodBody, type AuthUser } from '@tms/common';
 import { BankAccountInput, BankAccountsService } from './bank-accounts.service';
+import { VN_BANKS } from './vn-banks';
 
 /** Bank details, stored only with consent (ADR-0006). */
 @ApiTags('billing')
 @Controller('billing')
 export class BankAccountsController {
   constructor(private readonly accounts: BankAccountsService) {}
+
+  /** Banks that take NAPAS 247 transfers, for the bank picker (scripts/update-reference-data.mjs). */
+  @Get('banks')
+  banks() {
+    return VN_BANKS.filter((b) => b.transfer).map(({ bin, code, shortName, name }) => ({
+      bin,
+      code,
+      shortName,
+      name,
+    }));
+  }
 
   /** Your own account (number masked) and the policy version to consent to. */
   @Get('bank-account')

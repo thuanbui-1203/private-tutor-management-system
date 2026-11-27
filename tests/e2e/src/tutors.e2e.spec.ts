@@ -4,7 +4,16 @@
  * get the file back.
  */
 import { randomBytes } from 'node:crypto';
-import { GATEWAY, newTutor, withClaims, type Client } from './support';
+import {
+  eventually,
+  GATEWAY,
+  newClass,
+  newStudent,
+  newTutor,
+  verify,
+  withClaims,
+  type Client,
+} from './support';
 
 const file = Buffer.concat([Buffer.from('%PDF-1.4\n'), randomBytes(1_500_000)]);
 
@@ -21,7 +30,7 @@ async function download(client: Client, path: string) {
 
 describe('End-to-end: Tutor verification', () => {
   test('a Tutor submits with a 1.5 MB credential, an Admin verifies it; strangers get nothing', async () => {
-    const tutor = await newTutor();
+    const tutor = await newTutor({ verified: false });
     const tutorId = (await tutor.get('/users/me')).body.id as string;
     const { client: admin } = await withClaims('ADMIN');
 
@@ -51,7 +60,7 @@ describe('End-to-end: Tutor verification', () => {
     const mine = await download(tutor, `/tutors/me/credentials/${credentialId}/file`);
     expect(mine.status).toBe(200);
     expect(mine.body.equals(file)).toBe(true);
-    const other = await newTutor();
+    const other = await newTutor({ verified: false });
     expect((await download(other, `/tutors/me/credentials/${credentialId}/file`)).status).toBe(404);
     expect(
       (await download(other, `/tutors/${tutorId}/credentials/${credentialId}/file`)).status,
@@ -70,5 +79,21 @@ describe('End-to-end: Tutor verification', () => {
     });
     expect(verified.status).toBe(200);
     expect((await tutor.get('/tutors/me')).body.status).toBe('VERIFIED');
+  });
+
+  test('an unverified Tutor can prepare a Class but not take Students until verified (BR-TU-01)', async () => {
+    const tutor = await newTutor({ verified: false });
+    const student = await newStudent(tutor);
+    const cls = await newClass(tutor, 'PER_SESSION', 200_000);
+    const refused = await tutor.post(`/classes/${cls.id}/enrollments`, { studentId: student.id });
+    expect(refused.status).toBe(422);
+    expect(refused.body.code).toBe('TUTOR_NOT_VERIFIED');
+
+    await verify(tutor);
+    // TutorStatusChanged travels to class-service through RabbitMQ.
+    await eventually(async () => {
+      const r = await tutor.post(`/classes/${cls.id}/enrollments`, { studentId: student.id });
+      expect(r.status).toBe(201);
+    });
   });
 });

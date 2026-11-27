@@ -201,6 +201,19 @@ describe('Billing: bank details with consent (#56)', () => {
     }
   });
 
+  it('only banks that take NAPAS transfers, from the list the picker shows', async () => {
+    const { body: banks } = await http().get('/billing/banks').set(parent).expect(200);
+    expect(banks).toContainEqual(
+      expect.objectContaining({ bin: '970436', shortName: 'Vietcombank' }),
+    );
+    expect(banks.length).toBeGreaterThan(40);
+    await http()
+      .put('/billing/bank-account')
+      .set(as('PARENT'))
+      .send(body({ bankBin: '123456' }))
+      .expect(400);
+  });
+
   it('the database refuses a plain number, or a number left behind after masking', async () => {
     const owner = as('PARENT');
     const id = owner['x-user-id'];

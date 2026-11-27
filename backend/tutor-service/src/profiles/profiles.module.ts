@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
 import { FILE_STORAGES, RtdbFileStorage } from '../files/file-storage';
 import { FilesService } from '../files/files.service';
+import { LocationsController } from '../locations/locations';
 import { MyProfileController, ReviewController } from './profiles.controller';
 import { ProfilesService } from './profiles.service';
 
 @Module({
-  controllers: [MyProfileController, ReviewController],
+  // LocationsController first: its literal paths must win over `tutors/:id`.
+  controllers: [LocationsController, MyProfileController, ReviewController],
   providers: [
     ProfilesService,
     FilesService,

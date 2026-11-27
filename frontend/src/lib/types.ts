@@ -245,6 +245,14 @@ export interface QrView {
   payload: string;
 }
 
+/** billing `GET /billing/banks`: a bank that takes NAPAS 247 transfers. */
+export interface BankView {
+  bin: string;
+  code: string;
+  shortName: string;
+  name: string;
+}
+
 /** billing `GET /billing/bank-account` (ADR-0006). The number is always masked. */
 export interface ConsentView {
   policyVersion: string;
