@@ -38,9 +38,22 @@ export const signIn = (email: string, emailVerified = true) => {
 };
 /** The first sign-in of a new person. */
 export const signUp = (email: string) => signIn(email);
-/** An account that did not come through Google. */
-export const signUpWithPassword = (email: string) =>
-  emulatorCall('accounts:signUp', { email, password: 'secret123', returnSecureToken: true });
+/**
+ * An e-mail and password account. `verified`: as if the person had opened the link Firebase
+ * e-mails, and then signed in again (only a new token carries `email_verified`).
+ */
+export async function signUpWithPassword(email: string, verified = false) {
+  const credentials = { email, password: 'secret123', returnSecureToken: true };
+  const account = await emulatorCall('accounts:signUp', credentials);
+  if (!verified) return account;
+  const res = await fetch(`${toolkit}/projects/${PROJECT}/accounts:update`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer owner' },
+    body: JSON.stringify({ localId: account.localId, emailVerified: true }),
+  });
+  if (!res.ok) throw new Error(`accounts:update: ${await res.text()}`);
+  return emulatorCall('accounts:signInWithPassword', credentials);
+}
 
 export const claimsOf = (idToken: string) =>
   JSON.parse(Buffer.from(idToken.split('.')[1], 'base64url').toString()) as Record<string, unknown>;

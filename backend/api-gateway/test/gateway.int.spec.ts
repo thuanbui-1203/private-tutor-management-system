@@ -151,25 +151,36 @@ describe('API gateway (#8)', () => {
     expect(seen.length).toBe(before); // nothing reached a service
   });
 
-  it('rejects an account that did not sign in with Google, whatever its claims (ADR-0004)', async () => {
+  it('accepts a password account only once its e-mail is verified, whatever its claims (ADR-0004)', async () => {
     const before = seen.length;
     const email = `pw.${randomUUID().slice(0, 8)}@example.com`;
     const credentials = { email, password: 'secret123', returnSecureToken: true };
     const { localId } = await emulator('accounts:signUp', credentials);
     await firebaseAuth().setCustomUserClaims(localId, { userId: randomUUID(), role: 'ADMIN' });
-    const { idToken } = await emulator('accounts:signInWithPassword', credentials);
-    await http().get('/api/users').set('authorization', `Bearer ${idToken}`).expect(401);
+    const unproven = await emulator('accounts:signInWithPassword', credentials);
+    await http().get('/api/users').set('authorization', `Bearer ${unproven.idToken}`).expect(401);
 
     const unverified = await google(`uv.${randomUUID().slice(0, 8)}@example.com`, false);
     await http()
       .post('/api/auth/register')
       .set('authorization', `Bearer ${unverified.idToken}`)
       .expect(401);
+    // No e-mail at all.
+    const anonymous = await emulator('accounts:signUp', { returnSecureToken: true });
+    await http()
+      .get('/api/users/me')
+      .set('authorization', `Bearer ${anonymous.idToken}`)
+      .expect(401);
     expect(seen.length).toBe(before);
 
-    process.env.AUTH_SIGN_IN_PROVIDERS = 'google.com, password'; // while accounts are moved over
+    // The person opened the verification link: a new token says so.
+    await firebaseAuth().updateUser(localId, { emailVerified: true });
+    const { idToken } = await emulator('accounts:signInWithPassword', credentials);
+    await http().get('/api/users').set('authorization', `Bearer ${idToken}`).expect(200);
+
+    process.env.AUTH_SIGN_IN_PROVIDERS = 'google.com'; // Google only
     try {
-      await http().get('/api/users').set('authorization', `Bearer ${idToken}`).expect(200);
+      await http().get('/api/users').set('authorization', `Bearer ${idToken}`).expect(401);
     } finally {
       delete process.env.AUTH_SIGN_IN_PROVIDERS;
     }

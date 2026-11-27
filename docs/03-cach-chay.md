@@ -97,7 +97,7 @@ Sau khi chạy xong:
 
 Các học sinh Thu Hà, Gia Bảo, Hoàng Phúc, Đức Huy, Bảo Ngọc không có tài khoản riêng (đăng nhập bằng tài khoản phụ huynh). `pnpm seed:demo` **chỉ chạy với emulator**; nó xác minh hai giáo viên mẫu bằng một Admin giả lập `reviewer@tms.demo`, vì lớp của giáo viên chưa xác minh không nhận học sinh (BR-TU-01); đổi gateway bằng `DEMO_GATEWAY`.
 
-> **Đăng nhập Google.** Mọi vai trò đăng nhập bằng Google, không có mật khẩu ([ADR-0004](adr/0004-firebase-authentication.md)).
+> **Đăng nhập.** Mọi vai trò đăng nhập bằng Google, hoặc bằng email + mật khẩu sau khi đã mở liên kết xác minh Firebase gửi ([ADR-0004](adr/0004-firebase-authentication.md)). Với emulator, thư xác minh không được gửi đi; muốn bỏ qua bước này thì dùng nút Google giả lập.
 >
 > - **Với emulator** (nên dùng khi phát triển): chạy `pnpm emulators` (Auth cổng 9099, Realtime Database cổng 9002, dữ liệu giữ trong `.emulator-data/`). Đặt `FIREBASE_AUTH_EMULATOR_HOST=host.docker.internal:9099` và `FIREBASE_PROJECT_ID=demo-tms` trong `.env`; `NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099` và `NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-tms` trong `frontend/.env.local`. Trang đăng nhập cho nhập email muốn đóng vai. Container trong Docker chỉ gọi được emulator nếu nó nghe ngoài `127.0.0.1`; cách chắc chắn là chạy service bằng Node trên máy.
 > - **Với project thật**: nút Google mở cửa sổ chọn tài khoản.

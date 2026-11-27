@@ -1,13 +1,18 @@
 'use client';
 /**
- * The authentication module (ADR-0004): wraps the Firebase client SDK. Everyone signs in with
- * Google. It exposes who is signed in, their role and Identity `userId` (custom claims), and
+ * The authentication module (ADR-0004): wraps the Firebase client SDK. People sign in with
+ * Google, or with an e-mail and password whose address they verified through the link Firebase
+ * e-mails (the API refuses an unverified address). It exposes who is signed in, their role and Identity `userId` (custom claims), and
  * the sign-in / sign-out operations. Everything else asks this module, never Firebase.
  */
 import {
+  createUserWithEmailAndPassword,
   GoogleAuthProvider,
   onIdTokenChanged,
+  sendEmailVerification,
+  sendPasswordResetEmail,
   signInWithCredential,
+  signInWithEmailAndPassword,
   signInWithPopup,
   signOut as firebaseSignOut,
   type User,
@@ -20,6 +25,8 @@ import type { Role } from './types';
 export interface Session {
   uid: string;
   email: string;
+  /** False for a password account whose address is not verified yet: the API refuses it. */
+  emailVerified: boolean;
   /** From the `role` claim; null for an account that has not finished signing up. */
   role: Role | null;
   /** Identity users.id from the `userId` claim. */
@@ -33,6 +40,15 @@ interface AuthApi {
   signedOut: boolean;
   /** Google sign-in. `emulatorEmail`: who to be, with the Auth emulator only. */
   signInWithGoogle(emulatorEmail?: string): Promise<Session>;
+  signInWithEmail(email: string, password: string): Promise<Session>;
+  /** Creates a password account and e-mails the verification link. */
+  signUpWithEmail(email: string, password: string): Promise<Session>;
+  /** E-mails the verification link again. */
+  sendVerification(): Promise<void>;
+  /** Reloads the account after the link was opened; the new token carries `email_verified`. */
+  checkVerified(): Promise<Session | null>;
+  /** E-mails a password reset link (nothing is said about whether the address exists). */
+  resetPassword(email: string): Promise<void>;
   signOut(): Promise<void>;
   /** Force a new ID token so freshly set claims (role after sign-up) are picked up. */
   refreshClaims(): Promise<Session | null>;
@@ -47,6 +63,7 @@ async function sessionOf(user: User, forceRefresh = false): Promise<Session> {
   return {
     uid: user.uid,
     email: user.email ?? '',
+    emailVerified: user.emailVerified,
     role: (claims.role as Role | undefined) ?? null,
     userId: (claims.userId as string | undefined) ?? null,
   };
@@ -66,6 +83,9 @@ function google(emulatorEmail?: string) {
   provider.setCustomParameters({ prompt: 'select_account' }); // shared computers
   return signInWithPopup(firebaseAuth(), provider);
 }
+
+/** Where the links in Firebase's e-mails lead back to. */
+const backToLogin = () => ({ url: `${window.location.origin}/login` });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -100,6 +120,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(s);
         return s;
       },
+      async signInWithEmail(email, password) {
+        setSignedOut(false);
+        const { user } = await signInWithEmailAndPassword(firebaseAuth(), email.trim(), password);
+        const s = await sessionOf(user);
+        setSession(s);
+        return s;
+      },
+      async signUpWithEmail(email, password) {
+        setSignedOut(false);
+        const auth = firebaseAuth();
+        const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        await sendEmailVerification(user, backToLogin());
+        const s = await sessionOf(user);
+        setSession(s);
+        return s;
+      },
+      async sendVerification() {
+        const user = firebaseAuth().currentUser;
+        if (user) await sendEmailVerification(user, backToLogin());
+      },
+      async checkVerified() {
+        const user = firebaseAuth().currentUser;
+        if (!user) return null;
+        await user.reload();
+        const s = await sessionOf(user, true);
+        setSession(s);
+        return s;
+      },
+      async resetPassword(email) {
+        await sendPasswordResetEmail(firebaseAuth(), email.trim(), backToLogin());
+      },
       async signOut() {
         setSignedOut(true);
         await firebaseSignOut(firebaseAuth());
@@ -131,6 +182,23 @@ export function authErrorMessage(err: unknown): string {
       return 'Bạn đã đóng cửa sổ đăng nhập Google.';
     case 'auth/popup-blocked':
       return 'Trình duyệt đã chặn cửa sổ đăng nhập Google. Hãy cho phép cửa sổ bật lên rồi thử lại.';
+    case 'auth/invalid-credential':
+    case 'auth/invalid-login-credentials':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'Email hoặc mật khẩu không đúng. Nếu bạn đã đăng ký bằng Google, hãy bấm nút Google.';
+    case 'auth/email-already-in-use':
+      return 'Email này đã có tài khoản. Hãy đăng nhập bằng mật khẩu hoặc bằng Google.';
+    case 'auth/weak-password':
+      return 'Mật khẩu quá yếu: cần ít nhất 8 ký tự.';
+    case 'auth/invalid-email':
+      return 'Địa chỉ email không hợp lệ.';
+    case 'auth/missing-password':
+      return 'Vui lòng nhập mật khẩu.';
+    case 'auth/account-exists-with-different-credential':
+      return 'Email này đã đăng ký bằng cách khác. Hãy đăng nhập như lần trước (mật khẩu hoặc Google).';
+    case 'auth/operation-not-allowed':
+      return 'Cách đăng nhập này đang tắt. Vui lòng liên hệ quản trị viên.';
     case 'auth/too-many-requests':
       return 'Có quá nhiều lần đăng nhập. Vui lòng thử lại sau ít phút.';
     case 'auth/user-disabled':

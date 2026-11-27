@@ -1,13 +1,14 @@
 'use client';
 /**
- * Accepting an invitation: sign in with Google as the invited address →
- * POST /auth/invitations/{token}/accept with that ID token → refreshed claims → the role's home.
- * It always asks Google again: someone else may still be signed in on a shared computer.
+ * Accepting an invitation: sign in as the invited address (Google, or a password account whose
+ * address is verified) → POST /auth/invitations/{token}/accept with that ID token → refreshed
+ * claims → the role's home. It always asks again: someone else may still be signed in on a
+ * shared computer.
  */
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { GoogleSignIn } from '@/components/google-sign-in';
+import { SignInPanel } from '@/components/sign-in';
 import { ErrorBox, Notice } from '@/components/ui';
 import { ApiError, describeError, request } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -60,9 +61,11 @@ export default function InvitePage() {
   return (
     <main className="centered">
       <h1>Kích hoạt tài khoản</h1>
-      <p className="muted">Đăng nhập Google bằng đúng địa chỉ email đã nhận lời mời.</p>
-      <GoogleSignIn label="Kích hoạt bằng Google" onSignedIn={accept} />
+      <p className="muted lead">
+        Dùng đúng địa chỉ email đã nhận lời mời: đăng nhập Google, hoặc tạo mật khẩu cho email đó.
+      </p>
       <ErrorBox error={error} />
+      <SignInPanel googleLabel="Kích hoạt bằng Google" onReady={accept} />
     </main>
   );
 }

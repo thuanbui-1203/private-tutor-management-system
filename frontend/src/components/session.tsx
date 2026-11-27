@@ -34,8 +34,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Lets only `roles` through. Not signed in → /login; signed in without a role → finish
- * signing up; another role → "no permission". UX only: the gateway and services enforce.
+ * Lets only `roles` through. Not signed in, or e-mail not verified yet → /login (which asks
+ * for the verification); signed in without a role → finish signing up; another role → "no
+ * permission". UX only: the gateway and services enforce.
  */
 export function RoleGate({ roles, children }: { roles: Role[]; children: React.ReactNode }) {
   const { session, loading, signedOut } = useAuth();
@@ -43,11 +44,11 @@ export function RoleGate({ roles, children }: { roles: Role[]; children: React.R
   const pathname = usePathname();
   useEffect(() => {
     if (loading) return;
-    if (!session)
+    if (!session || !session.emailVerified)
       router.replace(signedOut ? '/login' : `/login?next=${encodeURIComponent(pathname)}`);
     else if (!session.role) router.replace('/register?complete=1');
   }, [loading, session, signedOut, router, pathname]);
-  if (loading || !session || !session.role) return <Loading />;
+  if (loading || !session || !session.emailVerified || !session.role) return <Loading />;
   if (!roles.includes(session.role)) return <Forbidden home={HOME_OF[session.role]} />;
   return <>{children}</>;
 }
