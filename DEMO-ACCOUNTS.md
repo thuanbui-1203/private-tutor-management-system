@@ -2,7 +2,9 @@
 
 Đăng nhập tại http://localhost:5173. Tạo bằng `pnpm seed` (Admin) và `pnpm seed:demo` (còn lại), xem [scripts/seed-demo.mjs](scripts/seed-demo.mjs).
 
-Mật khẩu **không ghi trong repo** (repo công khai, project Firebase thật dùng chung với VPS). Khi seed vào project thật phải đặt `SEED_ADMIN_PASSWORD` và `DEMO_PASSWORD`; chỉ Auth Emulator mới có mật khẩu mặc định (xem [backend/identity-service/src/seed.ts](backend/identity-service/src/seed.ts)). Đổi mật khẩu các tài khoản dưới đây: `node scripts/rotate-demo-passwords.mjs`.
+Đăng nhập bằng **Google**, không có mật khẩu ([ADR-0004](docs/adr/0004-firebase-authentication.md)). Các địa chỉ dưới đây không phải tài khoản Google thật nên chỉ dùng được với Auth Emulator (`pnpm emulators`): ở trang đăng nhập, nhập địa chỉ muốn đóng vai. Admin thật: đặt `SEED_ADMIN_EMAIL` (hoặc `ADMIN_EMAILS`) là địa chỉ Google của mình trong `.env`.
+
+Các tài khoản mật khẩu cũ trên project thật không vào app được nữa, nhưng mật khẩu cũ từng nằm trong repo công khai nên vẫn cần đổi: `node scripts/rotate-demo-passwords.mjs --apply`.
 
 ## Admin
 

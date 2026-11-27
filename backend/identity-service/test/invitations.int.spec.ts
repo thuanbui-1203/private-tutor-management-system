@@ -20,7 +20,6 @@ import {
 
 const ADMIN = { 'x-user-id': randomUUID(), 'x-user-role': 'ADMIN' };
 const TUTOR = { 'x-user-id': randomUUID(), 'x-user-role': 'TUTOR' };
-const PASSWORD = 'correct-horse-9';
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe('Identity: Invitations and user administration (#7)', () => {
@@ -53,8 +52,13 @@ describe('Identity: Invitations and user administration (#7)', () => {
   const invite = (email: string, role = 'PARENT', as = TUTOR) =>
     http().post('/auth/invitations').set(as).send({ email, fullName: 'Nguyễn Thị Lan', role });
   const tokenOf = (acceptUrl: string) => acceptUrl.split('/invite/')[1];
-  const accept = (token: string, password = PASSWORD) =>
-    http().post(`/auth/invitations/${token}/accept`).send({ password });
+  /** The status of accepting while signed in with Google as `email`. */
+  const accept = async (token: string, email: string) => {
+    const { idToken } = await signIn(email);
+    return http()
+      .post(`/auth/invitations/${token}/accept`)
+      .set('authorization', `Bearer ${idToken}`);
+  };
 
   /** A Tutor registered through #6, signed in with a token issued at least 1 s ago. */
   async function registeredTutor() {
@@ -63,6 +67,7 @@ describe('Identity: Invitations and user administration (#7)', () => {
     const { body } = await http()
       .post('/auth/register')
       .set('authorization', `Bearer ${idToken}`)
+      .send({ role: 'TUTOR' })
       .expect(201);
     const { idToken: current } = await signIn(email);
     // Firebase compares token issue time to revocation time in whole seconds.
@@ -91,10 +96,18 @@ describe('Identity: Invitations and user administration (#7)', () => {
     ]);
     expect(stored.rows[0].token_hash).not.toContain(tokenOf(acceptUrl)); // only the hash is stored
 
-    const accepted = await accept(tokenOf(acceptUrl)).expect(200);
+    // The link alone is not enough: not for someone else, and not without signing in.
+    const thief = await accept(tokenOf(acceptUrl), uniqueEmail('thief'));
+    expect(thief.status).toBe(403);
+    await http()
+      .post(`/auth/invitations/${tokenOf(acceptUrl)}/accept`)
+      .expect(401);
+
+    const accepted = await accept(tokenOf(acceptUrl), email);
+    expect(accepted.status).toBe(200);
     expect(accepted.body).toEqual({ userId, email, role: 'PARENT', status: 'ACTIVE' });
 
-    const session = await signIn(email, PASSWORD); // the password set through the Admin SDK works
+    const session = await signIn(email);
     expect(claimsOf(session.idToken)).toMatchObject({ userId, role: 'PARENT' });
     const registered = await env.db.query(
       `SELECT count(*)::int AS n FROM outbox_events WHERE event_type = 'UserRegistered'
@@ -103,16 +116,17 @@ describe('Identity: Invitations and user administration (#7)', () => {
     );
     expect(registered.rows[0].n).toBe(1);
 
-    await accept(tokenOf(acceptUrl)).expect(410); // single use
+    expect((await accept(tokenOf(acceptUrl), email)).status).toBe(410); // single use
   });
 
   it('refuses an expired invitation and leaves the user PENDING', async () => {
-    const res = await invite(uniqueEmail('late')).expect(201);
+    const email = uniqueEmail('late');
+    const res = await invite(email).expect(201);
     await env.db.query(
       `UPDATE invitations SET expires_at = now() - interval '1 second' WHERE id = $1`,
       [res.body.invitationId],
     );
-    await accept(tokenOf(res.body.acceptUrl)).expect(410);
+    expect((await accept(tokenOf(res.body.acceptUrl), email)).status).toBe(410);
     const user = await env.db.query('SELECT status FROM users WHERE id = $1', [res.body.userId]);
     expect(user.rows[0].status).toBe('PENDING');
   });
@@ -123,12 +137,12 @@ describe('Identity: Invitations and user administration (#7)', () => {
     const second = await invite(email).expect(201);
     expect(second.body.userId).toBe(first.body.userId);
 
-    await accept(tokenOf(first.body.acceptUrl)).expect(410);
-    await accept(tokenOf(second.body.acceptUrl)).expect(200);
+    expect((await accept(tokenOf(first.body.acceptUrl), email)).status).toBe(410);
+    expect((await accept(tokenOf(second.body.acceptUrl), email)).status).toBe(200);
   });
 
   it('validates who may invite whom', async () => {
-    await accept('no-such-token').expect(404);
+    expect((await accept('no-such-token', uniqueEmail('x'))).status).toBe(404);
     await invite(uniqueEmail('x'), 'ADMIN').expect(400); // only PARENT or STUDENT
     await http()
       .post('/auth/invitations')
@@ -138,7 +152,7 @@ describe('Identity: Invitations and user administration (#7)', () => {
 
     const email = uniqueEmail('active');
     const res = await invite(email, 'STUDENT').expect(201);
-    await accept(tokenOf(res.body.acceptUrl)).expect(200);
+    expect((await accept(tokenOf(res.body.acceptUrl), email)).status).toBe(200);
     await invite(email, 'STUDENT').expect(409); // already active
   });
 
@@ -256,16 +270,20 @@ describe('Identity: Invitations and user administration (#7)', () => {
     });
     expect(userRecords[1].changes).toEqual({ role: { from: 'TUTOR', to: 'ADMIN' } });
 
-    const { body } = await invite(uniqueEmail('parent')).expect(201);
+    const parentEmail = uniqueEmail('parent');
+    const { body } = await invite(parentEmail).expect(201);
     const [created] = await changeRecords(body.invitationId);
     expect(created).toMatchObject({ action: 'invitation.create', actor_id: TUTOR['x-user-id'] });
     expect(created.changes.tokenHash).toEqual({ to: '[secret]' });
-    await accept(tokenOf(body.acceptUrl)).expect(200);
+    expect((await accept(tokenOf(body.acceptUrl), parentEmail)).status).toBe(200);
     const parentRecords = await changeRecords(body.userId);
     expect(parentRecords.map((r) => [r.action, r.actor_id, r.actor_role])).toEqual([
       ['invitation.accept', body.userId, 'PARENT'],
     ]);
-    expect(parentRecords[0].changes).toEqual({ status: { from: 'PENDING', to: 'ACTIVE' } });
+    expect(parentRecords[0].changes).toEqual({
+      status: { from: 'PENDING', to: 'ACTIVE' },
+      firebaseUid: { from: null, to: '[personal]' },
+    });
     expect(JSON.stringify([...userRecords, created, ...parentRecords])).not.toContain(tutor.email);
   });
 });

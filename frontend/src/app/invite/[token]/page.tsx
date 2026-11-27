@@ -1,55 +1,44 @@
 'use client';
 /**
- * Accepting an invitation: set a password → POST /auth/invitations/{token}/accept (public)
- * → sign in with the invited email and that password → the role's home.
+ * Accepting an invitation: sign in with Google as the invited address →
+ * POST /auth/invitations/{token}/accept with that ID token → refreshed claims → the role's home.
+ * It always asks Google again: someone else may still be signed in on a shared computer.
  */
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { ActionButton, ErrorBox, Field, Notice } from '@/components/ui';
+import { GoogleSignIn } from '@/components/google-sign-in';
+import { ErrorBox, Notice } from '@/components/ui';
 import { ApiError, describeError, request } from '@/lib/api';
-import { authErrorMessage, useAuth } from '@/lib/auth';
+import { useAuth } from '@/lib/auth';
 import { HOME_OF } from '@/lib/labels';
 import type { Role } from '@/lib/types';
 
-interface Accepted {
-  userId: string;
-  email: string;
-  role: Role;
-  status: string;
-}
-
 export default function InvitePage() {
   const { token } = useParams<{ token: string }>();
-  const { signIn } = useAuth();
+  const auth = useAuth();
   const router = useRouter();
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [dead, setDead] = useState(false);
 
-  async function submit() {
+  async function accept() {
     setError('');
-    if (password.length < 8) return setError('Mật khẩu cần ít nhất 8 ký tự.');
-    if (password !== confirm) return setError('Hai mật khẩu không khớp.');
-    let accepted: Accepted;
     try {
-      accepted = (
-        await request<Accepted>('POST', `/auth/invitations/${encodeURIComponent(token)}/accept`, {
-          body: { password },
-          auth: false,
-        })
-      ).data;
+      const { data } = await request<{ role: Role }>(
+        'POST',
+        `/auth/invitations/${encodeURIComponent(token)}/accept`,
+      );
+      const s = await auth.refreshClaims();
+      router.replace(HOME_OF[s?.role ?? data.role]);
     } catch (err) {
       if (err instanceof ApiError && (err.status === 404 || err.status === 410)) setDead(true);
-      else setError(describeError(err));
-      return;
-    }
-    try {
-      const s = await signIn(accepted.email, password);
-      router.replace(HOME_OF[s.role ?? accepted.role]);
-    } catch (err) {
-      setError(authErrorMessage(err));
+      else
+        setError(
+          describeError(err, {
+            403: 'Lời mời này dành cho một địa chỉ email khác. Hãy đăng nhập Google bằng đúng email đã nhận lời mời.',
+            409: 'Tài khoản Google này đã có vai trò trong hệ thống, không kích hoạt lời mời được.',
+          }),
+        );
     }
   }
 
@@ -71,31 +60,9 @@ export default function InvitePage() {
   return (
     <main className="centered">
       <h1>Kích hoạt tài khoản</h1>
-      <p className="muted">
-        Đặt mật khẩu để vào hệ thống. Bạn sẽ dùng email nhận lời mời và mật khẩu này để đăng nhập.
-      </p>
-      <form className="card stack" onSubmit={(e) => e.preventDefault()}>
-        <Field label="Mật khẩu mới" hint="Ít nhất 8 ký tự">
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </Field>
-        <Field label="Nhập lại mật khẩu">
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-          />
-        </Field>
-        <ErrorBox error={error} />
-        <ActionButton type="submit" onClick={submit} busyLabel="Đang kích hoạt…">
-          Kích hoạt và đăng nhập
-        </ActionButton>
-      </form>
+      <p className="muted">Đăng nhập Google bằng đúng địa chỉ email đã nhận lời mời.</p>
+      <GoogleSignIn label="Kích hoạt bằng Google" onSignedIn={accept} />
+      <ErrorBox error={error} />
     </main>
   );
 }

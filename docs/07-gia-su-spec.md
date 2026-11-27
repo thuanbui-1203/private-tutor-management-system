@@ -1,6 +1,6 @@
 # 07. Spec phần gia sư
 
-> Trạng thái: đã duyệt 2026-11-25. **Đã cài đặt: mục 6.** Các mục khác chưa. Chạy và thử ở **local**.
+> Trạng thái: đã duyệt 2026-11-25. **Đã cài đặt: mục 6, mục 7 (trừ phụ huynh đồng ý ghi danh), emulator RTDB.** Các mục khác chưa. Chạy và thử ở **local**.
 > "Giáo viên" (`Tutor`) là thuật ngữ chuẩn trong [GLOSSARY.md](../GLOSSARY.md); tài liệu này dùng "gia sư" theo yêu cầu gốc.
 
 ## 1. Đã chốt

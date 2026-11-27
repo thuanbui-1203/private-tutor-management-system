@@ -1,51 +1,18 @@
 // `pnpm seed:demo`: sample accounts and data for demoing the app, created the way real users
 // would create them, through the API gateway:
-//   Tutor   = Firebase sign-up → POST /auth/register
+//   Tutor   = Google sign-in → POST /auth/register
 //   Student / Parent = Tutor creates the Student (no e-mail) → Tutor invites → invitee accepts
 //   then Classes, weekly Schedules, Enrollments and Payments.
-// Run `pnpm seed` (Admin) first. The stack must be up (docker compose) with NODE_ENV not
-// "production" (the invitation link is returned only then).
+// The stack must be up with NODE_ENV not "production" (the invitation link is returned only then).
 //
-// Firebase: the Auth emulator when FIREBASE_AUTH_EMULATOR_HOST is set, otherwise the real
-// project with NEXT_PUBLIC_FIREBASE_API_KEY from .env / frontend/.env.local.
-// Env: DEMO_GATEWAY (default http://localhost:8080/api), DEMO_PASSWORD (required unless the
-// emulator is used).
+// Only with the Auth emulator (`pnpm emulators`): the demo addresses are not real Google accounts.
+// Env: DEMO_GATEWAY (default http://localhost:8080/api),
+//      FIREBASE_AUTH_EMULATOR_HOST (default 127.0.0.1:9099).
 //
-// Re-running is safe: if the first demo Tutor already exists, it only prints the list.
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
-const root = join(import.meta.dirname, '..');
-const readEnv = (file) =>
-  existsSync(file)
-    ? Object.fromEntries(
-        readFileSync(file, 'utf8')
-          .split(/\r?\n/)
-          .map((l) => l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/))
-          .filter(Boolean)
-          .map(([, k, v]) => [k, v.replace(/^["']|["']$/g, '')]),
-      )
-    : {};
-const fileEnv = { ...readEnv(join(root, '.env')), ...readEnv(join(root, 'frontend/.env.local')) };
-
+// Re-running is safe: if the first demo Tutor already exists, nothing is created.
 const GATEWAY = process.env.DEMO_GATEWAY ?? 'http://localhost:8080/api';
-const EMULATOR = process.env.FIREBASE_AUTH_EMULATOR_HOST;
-// No default on a real project: this repo is public, so a default password is a known one.
-const PASSWORD = process.env.DEMO_PASSWORD || (EMULATOR ? 'Demo@1234' : undefined);
-if (!PASSWORD) {
-  console.error('set DEMO_PASSWORD (there is no default on a real Firebase project)');
-  process.exit(1);
-}
-const API_KEY = EMULATOR
-  ? 'demo-key'
-  : (process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? fileEnv.NEXT_PUBLIC_FIREBASE_API_KEY);
-const IDENTITY_TOOLKIT = EMULATOR
-  ? `http://${EMULATOR}/identitytoolkit.googleapis.com/v1`
-  : 'https://identitytoolkit.googleapis.com/v1';
-if (!API_KEY) {
-  console.error('NEXT_PUBLIC_FIREBASE_API_KEY is missing (.env or frontend/.env.local)');
-  process.exit(1);
-}
+const EMULATOR = process.env.FIREBASE_AUTH_EMULATOR_HOST ?? '127.0.0.1:9099';
+const IDENTITY_TOOLKIT = `http://${EMULATOR}/identitytoolkit.googleapis.com/v1`;
 
 // ------------------------------------------------------------------ the demo data set
 const TUTORS = [
@@ -208,19 +175,27 @@ async function call(url, init = {}) {
   return { status: res.status, body };
 }
 async function firebase(path, body) {
-  const r = await call(`${IDENTITY_TOOLKIT}/${path}?key=${API_KEY}`, {
+  const r = await call(`${IDENTITY_TOOLKIT}/${path}?key=demo-key`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', referer: 'http://localhost:5173/' },
+    headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
   if (r.status !== 200) throw new Error(`firebase ${path}: ${r.status} ${JSON.stringify(r.body)}`);
   return r.body;
 }
-const signIn = async (email, password = PASSWORD) =>
-  new Api(
-    (await firebase('accounts:signInWithPassword', { email, password, returnSecureToken: true }))
-      .idToken,
-  );
+/** Google sign-in, as the app does it with the emulator. */
+const signIn = async (email) => {
+  const google = JSON.stringify({ sub: `google-${email}`, email, email_verified: true });
+  const { idToken } = await firebase('accounts:signInWithIdp', {
+    postBody: `id_token=${encodeURIComponent(google)}&providerId=google.com`,
+    requestUri: 'http://localhost',
+    returnSecureToken: true,
+    returnIdpCredential: true,
+  });
+  return new Api(idToken);
+};
+const roleOf = (api) =>
+  JSON.parse(Buffer.from(api.token.split('.')[1], 'base64url').toString()).role;
 
 class Api {
   constructor(token) {
@@ -260,30 +235,20 @@ const tomorrowVn = () =>
 
 // ------------------------------------------------------------------ steps
 async function newTutor(t) {
-  const { idToken } = await firebase('accounts:signUp', {
-    email: t.email,
-    password: PASSWORD,
-    displayName: t.name,
-    returnSecureToken: true,
-  });
-  await new Api(idToken).ok('POST', '/auth/register', {});
+  await (await signIn(t.email)).ok('POST', '/auth/register', { role: 'TUTOR' });
   return signIn(t.email); // fresh token carrying the TUTOR role claim
 }
 
 async function inviteAndAccept(tutor, email, fullName, role) {
   const inv = await tutor.ok('POST', '/auth/invitations', { email, fullName, role });
-  const token = inv.acceptUrl?.match(/\/invitations\/([A-Za-z0-9_-]+)/)?.[1];
+  const token = inv.acceptUrl?.match(/\/invite\/([A-Za-z0-9_-]+)/)?.[1];
   if (!token) throw new Error(`no invitation link for ${email} (is NODE_ENV=production?)`);
-  await new Api('').ok('POST', `/auth/invitations/${token}/accept`, { password: PASSWORD });
+  await (await signIn(email)).ok('POST', `/auth/invitations/${token}/accept`, {});
 }
 
 async function main() {
   // Guard: already seeded?
-  const already = await signIn(TUTORS[0].email).then(
-    () => true,
-    () => false,
-  );
-  if (already) {
+  if (roleOf(await signIn(TUTORS[0].email))) {
     console.log(`Demo data already exists (${TUTORS[0].email} signs in). Nothing created.`);
     return;
   }
@@ -372,7 +337,7 @@ async function main() {
     }
   }
   console.log(
-    `\nDone. ${TUTORS.length} tutors, ${logins.length} parent/student logins (password: DEMO_PASSWORD)`,
+    `\nDone. ${TUTORS.length} tutors, ${logins.length} parent/student logins (Google, emulator)`,
   );
 }
 

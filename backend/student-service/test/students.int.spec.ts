@@ -367,6 +367,23 @@ describe('Student: Student and Parent records (#9)', () => {
       .expect(404);
   });
 
+  it('someone who signed up on their own is not linked to records made about their e-mail', async () => {
+    const lan = `lan.${randomUUID().slice(0, 6)}@example.com`;
+    const { body: s } = await minorWithParents([parent(true, lan)]).expect(201);
+    const userId = randomUUID();
+    const event = createEvent(
+      'UserRegistered',
+      { userId, email: lan, role: 'PARENT', selfRegistered: true },
+      { correlationId: randomUUID() },
+    );
+    await app.get(PrismaService).$transaction((tx) => app.get(UserLinker).link(event, tx));
+    await http().get(`/students/${s.id}`).set(as('PARENT', userId)).expect(404);
+    const { body: payers } = await http()
+      .get(`/internal/tutors/${tutor['x-user-id']}/payers`)
+      .expect(200);
+    expect(payers.userIds).not.toContain(userId);
+  });
+
   it('lists who pays for a Tutor’s Students, and nobody else (/internal/tutors/{id}/payers)', async () => {
     const payersOf = async (id: string) =>
       (await http().get(`/internal/tutors/${id}/payers`).expect(200)).body.userIds as string[];

@@ -1,55 +1,31 @@
 /**
- * `pnpm --filter @tms/identity-service seed` (or `pnpm seed` at the root): creates the
- * Admin account, idempotently. Uses the Firebase Auth emulator when
- * FIREBASE_AUTH_EMULATOR_HOST is set (recommended in development), otherwise the real
- * project from FIREBASE_PROJECT_ID / GOOGLE_APPLICATION_CREDENTIALS.
+ * `pnpm --filter @tms/identity-service seed` (or `pnpm seed` at the root): creates the Admin,
+ * idempotently. No Firebase account and no password: the Admin signs in with Google as this
+ * e-mail, and the first sign-in is matched to this user (POST /auth/register).
  */
 import 'reflect-metadata';
 import { enqueueEvent } from '@tms/common';
-import { FirebaseAuthService } from './firebase/firebase-auth.service';
 import { PrismaService } from './prisma/prisma.service';
 
-const email = (process.env.SEED_ADMIN_EMAIL ?? 'admin@tms.local').toLowerCase();
-/** No default on a real project: this repo is public, so a default password is a known one. */
-const password =
-  process.env.SEED_ADMIN_PASSWORD ||
-  (process.env.FIREBASE_AUTH_EMULATOR_HOST ? 'Admin@123' : undefined);
+const email = (process.env.SEED_ADMIN_EMAIL ?? '').trim().toLowerCase();
 
 async function main(): Promise<void> {
-  if (!password) {
-    throw new Error('set SEED_ADMIN_PASSWORD (there is no default on a real Firebase project)');
-  }
-  const firebase = new FirebaseAuthService();
+  if (!email) throw new Error('set SEED_ADMIN_EMAIL to the Google address of the Admin');
   const prisma = new PrismaService();
   try {
-    const account = await firebase.auth
-      .getUserByEmail(email)
-      .catch(() => firebase.auth.createUser({ email, password, emailVerified: true }));
-
     const admin = await prisma.$transaction(async (tx) => {
-      // Match by Firebase uid, or by email: the emulator forgets accounts on restart, so
-      // the same Admin can come back with a new uid. Keep users.id, re-link the account.
-      const existing =
-        (await tx.user.findUnique({ where: { firebaseUid: account.uid } })) ??
-        (await tx.user.findUnique({ where: { email } }));
+      const existing = await tx.user.findUnique({ where: { email } });
       if (existing) {
         return tx.user.update({
           where: { id: existing.id },
-          data: { firebaseUid: account.uid, role: 'ADMIN', status: 'ACTIVE' },
+          data: { role: 'ADMIN', status: 'ACTIVE' },
         });
       }
-      const created = await tx.user.create({
-        data: { firebaseUid: account.uid, email, role: 'ADMIN', status: 'ACTIVE' },
-      });
+      const created = await tx.user.create({ data: { email, role: 'ADMIN', status: 'ACTIVE' } });
       await enqueueEvent(tx, 'UserRegistered', { userId: created.id, email, role: 'ADMIN' });
       return created;
     });
-    await firebase.setClaims(account.uid, { userId: admin.id, role: 'ADMIN' });
-
-    const target = process.env.FIREBASE_AUTH_EMULATOR_HOST
-      ? `emulator ${process.env.FIREBASE_AUTH_EMULATOR_HOST}`
-      : `project ${process.env.FIREBASE_PROJECT_ID}`;
-    console.log(`Admin ready: ${email} (users.id ${admin.id}) on Firebase ${target}`);
+    console.log(`Admin ready (users.id ${admin.id}): sign in with Google as ${email}`);
   } finally {
     await prisma.$disconnect();
   }

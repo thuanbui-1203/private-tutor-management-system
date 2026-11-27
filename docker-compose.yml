@@ -17,6 +17,7 @@ x-firebase-env: &firebase-env
   FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
   GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS}
   FIREBASE_AUTH_EMULATOR_HOST: ${FIREBASE_AUTH_EMULATOR_HOST:-} # empty = real project
+  AUTH_SIGN_IN_PROVIDERS: ${AUTH_SIGN_IN_PROVIDERS:-} # empty = google.com only
 
 # Every Dockerfile builds from the repo root (pnpm workspace + lockfile).
 x-backend: &backend
@@ -159,6 +160,8 @@ services:
       <<: [*common-env, *firebase-env]
       PORT: '3001'
       DATABASE_URL: ${IDENTITY_DB_URL}
+      # Google addresses that become Admins at their first sign-in (comma-separated).
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       # BR-CL-08: ask class-service before disabling a Tutor (#11).
       CLASS_SERVICE_URL: http://class-service:3003
       # Base of invitation links (acceptUrl): the frontend's public URL.

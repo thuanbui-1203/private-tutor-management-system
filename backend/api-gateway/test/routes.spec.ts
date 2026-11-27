@@ -4,7 +4,7 @@ describe('gateway route table (docs/02 §2)', () => {
   it.each([
     ['GET', '/users/me', 'identity', 'role'],
     ['POST', '/auth/register', 'identity', 'token-only'],
-    ['POST', '/auth/invitations/abc/accept', 'identity', 'public'],
+    ['POST', '/auth/invitations/abc/accept', 'identity', 'token-only'],
     ['POST', '/auth/invitations', 'identity', 'role'],
     ['GET', '/students', 'student', 'role'],
     ['GET', '/parents/me/children', 'student', 'role'],

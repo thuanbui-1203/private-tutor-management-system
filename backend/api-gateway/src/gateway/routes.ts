@@ -23,7 +23,7 @@ const EXCEPTIONS: { method?: string; pattern: RegExp; service: ServiceKey; acces
     method: 'POST',
     pattern: /^\/auth\/invitations\/[^/]+\/accept$/,
     service: 'identity',
-    access: 'public',
+    access: 'token-only',
   },
   { method: 'POST', pattern: /^\/auth\/register$/, service: 'identity', access: 'token-only' },
   { pattern: /^\/students\/[^/]+\/classes$/, service: 'class', access: 'role' },

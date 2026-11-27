@@ -28,22 +28,28 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function tutorToken() {
   const email = `acc.${randomUUID().slice(0, 8)}@example.com`;
-  const call = async (path: string) => {
+  const idp = JSON.stringify({ sub: `google-${email}`, email, email_verified: true });
+  const google = async () => {
     const res = await fetch(
-      `http://${EMULATOR}/identitytoolkit.googleapis.com/v1/${path}?key=fake`,
+      `http://${EMULATOR}/identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=fake`,
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email, password: 'secret123', returnSecureToken: true }),
+        body: JSON.stringify({
+          postBody: `id_token=${encodeURIComponent(idp)}&providerId=google.com`,
+          requestUri: 'http://localhost',
+          returnSecureToken: true,
+          returnIdpCredential: true,
+        }),
       },
     );
     return (await res.json()) as { idToken: string; localId: string };
   };
-  const { localId } = await call('accounts:signUp');
+  const { localId } = await google();
   const userId = randomUUID();
   const auth = getAuth(getApps()[0] ?? initializeApp({ projectId: PROJECT }));
   await auth.setCustomUserClaims(localId, { userId, role: 'TUTOR' });
-  return { userId, idToken: (await call('accounts:signInWithPassword')).idToken };
+  return { userId, idToken: (await google()).idToken };
 }
 
 describe('Access records at the gateway (#55)', () => {

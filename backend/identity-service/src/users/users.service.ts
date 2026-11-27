@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -22,6 +23,17 @@ const toView = ({ id, email, role, status, createdAt }: User): UserView => ({
   createdAt,
 });
 
+/** Roles a person may choose at their first sign-in; ADMIN comes only from ADMIN_EMAILS. */
+export type SelfRole = 'TUTOR' | 'PARENT' | 'STUDENT';
+
+const adminEmails = () =>
+  new Set(
+    (process.env.ADMIN_EMAILS ?? '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  );
+
 /** The Firebase uid never leaves Identity (ADR-0004), not even in a Change record. */
 const PERSONAL = ['firebaseUid'];
 
@@ -36,33 +48,41 @@ export class UsersService {
   ) {}
 
   /**
-   * Tutor self-signup (docs/02 §3). The caller already created the Firebase account
-   * in the frontend. Creates the users row, publishes UserRegistered and sets the
-   * `userId` + `role` claims, all-or-nothing: the claims are set last inside the
-   * transaction, so a Firebase failure rolls the row and the event back.
+   * First sign-in with Google (docs/07 §7): the person chooses a role, except that e-mails in
+   * ADMIN_EMAILS become Admins; nobody can choose ADMIN. Creates the users row, publishes
+   * UserRegistered and sets the `userId` + `role` claims, all-or-nothing: the claims are set
+   * last inside the transaction, so a Firebase failure rolls the row and the event back.
    */
-  async registerTutor(token: DecodedIdToken): Promise<UserView> {
+  async register(token: DecodedIdToken, chosen: SelfRole): Promise<UserView> {
     if (token.role !== undefined || token.userId !== undefined) {
       throw new ConflictException('this account already has a role');
     }
-    if (!token.email) throw new ConflictException('the Firebase account has no email');
+    if (!token.email) throw new ConflictException('the Google account has no email');
     const email = token.email.toLowerCase();
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) return this.signInAgain(token.uid, existing);
 
+    const role = adminEmails().has(email) ? 'ADMIN' : chosen;
     try {
       const user = await this.prisma.$transaction(async (tx) => {
         const created = await tx.user.create({
-          data: { firebaseUid: token.uid, email, role: 'TUTOR', status: 'ACTIVE' },
+          data: { firebaseUid: token.uid, email, role, status: 'ACTIVE' },
         });
-        await enqueueEvent(tx, 'UserRegistered', { userId: created.id, email, role: 'TUTOR' });
+        await enqueueEvent(tx, 'UserRegistered', {
+          userId: created.id,
+          email,
+          role,
+          selfRegistered: true,
+        });
         await recordChange(tx, {
           action: 'user.register',
           entityType: 'User',
           entityId: created.id,
           after: created,
           personal: PERSONAL,
-          actor: { id: created.id, role: 'TUTOR' },
+          actor: { id: created.id, role },
         });
-        await this.firebase.setClaims(token.uid, { userId: created.id, role: 'TUTOR' });
+        await this.firebase.setClaims(token.uid, { userId: created.id, role });
         return created;
       });
       return toView(user);
@@ -70,6 +90,42 @@ export class UsersService {
       if (isUniqueViolation(err)) throw new ConflictException('this account is already registered');
       throw err;
     }
+  }
+
+  /**
+   * The e-mail is already known. Google verified that the caller owns it, so a user whose
+   * Firebase account is new (seeded, or recreated) gets their own account back, with the role
+   * they already have. An invitation still has to be accepted, and a disabled user stays out.
+   */
+  private async signInAgain(uid: string, existing: User): Promise<UserView> {
+    if (existing.status === 'PENDING') {
+      throw new ConflictException({
+        message: 'open the invitation link that was e-mailed to you',
+        code: 'INVITED',
+      });
+    }
+    if (existing.status === 'DISABLED') throw new ForbiddenException('this account is disabled');
+    if (existing.firebaseUid === uid) {
+      throw new ConflictException('this account is already registered');
+    }
+    const user = await this.prisma.$transaction(async (tx) => {
+      const saved = await tx.user.update({
+        where: { id: existing.id },
+        data: { firebaseUid: uid },
+      });
+      await recordChange(tx, {
+        action: 'user.relink',
+        entityType: 'User',
+        entityId: existing.id,
+        before: existing,
+        after: saved,
+        personal: PERSONAL,
+        actor: { id: existing.id, role: existing.role },
+      });
+      await this.firebase.setClaims(uid, { userId: existing.id, role: existing.role });
+      return saved;
+    });
+    return toView(user);
   }
 
   async list(query: { role?: User['role']; status?: User['status'] }): Promise<UserView[]> {
@@ -127,10 +183,12 @@ export class UsersService {
         after: saved,
         personal: PERSONAL,
       });
-      if (role !== user.role) await this.firebase.setClaims(user.firebaseUid, { userId: id, role });
-      if (status !== user.status)
-        await this.firebase.setDisabled(user.firebaseUid, status === 'DISABLED');
-      await this.firebase.revokeSessions(user.firebaseUid);
+      const uid = user.firebaseUid;
+      if (uid !== null) {
+        if (role !== user.role) await this.firebase.setClaims(uid, { userId: id, role });
+        if (status !== user.status) await this.firebase.setDisabled(uid, status === 'DISABLED');
+        await this.firebase.revokeSessions(uid);
+      }
       return saved;
     });
     return toView(updated);

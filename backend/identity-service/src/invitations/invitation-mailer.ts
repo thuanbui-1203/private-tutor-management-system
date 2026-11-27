@@ -30,7 +30,7 @@ export function renderInvitation(mail: InvitationMail) {
     `Chào ${mail.fullName},`,
     '',
     `Giáo viên đã tạo tài khoản ${role} cho bạn trên hệ thống quản lý gia sư.`,
-    'Mở liên kết sau để đặt mật khẩu và kích hoạt tài khoản:',
+    `Mở liên kết sau và đăng nhập Google bằng đúng địa chỉ ${mail.to} để kích hoạt tài khoản:`,
     '',
     mail.acceptUrl,
     '',
@@ -41,7 +41,7 @@ export function renderInvitation(mail: InvitationMail) {
   const url = escapeHtml(mail.acceptUrl);
   const html = `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#1f2937;line-height:1.5">
 <p>Chào <strong>${name}</strong>,</p>
-<p>Giáo viên đã tạo tài khoản <strong>${role}</strong> cho bạn trên hệ thống quản lý gia sư.</p>
+<p>Giáo viên đã tạo tài khoản <strong>${role}</strong> cho bạn trên hệ thống quản lý gia sư. Hãy đăng nhập Google bằng đúng địa chỉ <strong>${escapeHtml(mail.to)}</strong> để kích hoạt.</p>
 <p><a href="${url}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px">Kích hoạt tài khoản</a></p>
 <p style="font-size:13px;color:#6b7280">Hoặc mở liên kết: <a href="${url}">${url}</a><br>
 Liên kết chỉ dùng được một lần và hết hạn lúc ${expires}.<br>

@@ -19,6 +19,22 @@ export interface AuthUser {
   role: Role;
 }
 
+/**
+ * Everyone signs in with Google (ADR-0004): a token from any other Firebase provider, or with
+ * an e-mail Google has not verified, is refused. AUTH_SIGN_IN_PROVIDERS (comma-separated) widens
+ * this, e.g. while accounts are being moved over.
+ */
+export function signInAllowed(token: {
+  email_verified?: boolean;
+  firebase?: { sign_in_provider?: string };
+}): boolean {
+  const allowed = (process.env.AUTH_SIGN_IN_PROVIDERS || 'google.com')
+    .split(',')
+    .map((p) => p.trim());
+  const provider = token.firebase?.sign_in_provider ?? '';
+  return allowed.includes(provider) && (provider !== 'google.com' || token.email_verified === true);
+}
+
 const ROLES_KEY = 'tms:roles';
 const PUBLIC_KEY = 'tms:public';
 

@@ -10,7 +10,6 @@ import {
   Patch,
   Post,
   Query,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
@@ -25,6 +24,9 @@ const UserChangeBody = z
   .refine((c) => c.role !== undefined || c.status !== undefined, {
     message: 'give a role and / or a status',
   });
+
+/** POST /auth/register. ADMIN is never chosen: it comes from ADMIN_EMAILS. */
+const RegisterBody = z.object({ role: Role.extract(['TUTOR', 'PARENT', 'STUDENT']) });
 
 const UserQuery = z.object({
   role: Role.optional(),
@@ -47,13 +49,11 @@ export class UsersController {
   @ApiBearerAuth()
   @Post('auth/register')
   @HttpCode(HttpStatus.CREATED)
-  async register(@Headers('authorization') authorization?: string): Promise<UserView> {
-    const idToken = authorization?.match(/^Bearer (.+)$/i)?.[1];
-    if (!idToken) throw new UnauthorizedException('missing Firebase ID token');
-    const decoded = await this.firebase.verifyIdToken(idToken).catch(() => {
-      throw new UnauthorizedException('invalid or revoked Firebase ID token');
-    });
-    return this.users.registerTutor(decoded);
+  async register(
+    @Body(new ZodBody(RegisterBody)) body: z.infer<typeof RegisterBody>,
+    @Headers('authorization') authorization?: string,
+  ): Promise<UserView> {
+    return this.users.register(await this.firebase.fromHeader(authorization), body.role);
   }
 
   @Get('users/me')

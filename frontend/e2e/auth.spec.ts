@@ -17,15 +17,6 @@ test('a Tutor signs in and lands on the Tutor home; API calls carry the ID token
   expectBearer(api.calls, tutor);
 });
 
-test('a wrong password shows a clear message and stays on the sign-in page', async ({ page }) => {
-  const tutor = await createUser('TUTOR');
-  await signIn(page, { ...tutor, password: 'sai-mat-khau' });
-  await expect(page.getByRole('main').getByRole('alert')).toHaveText(
-    'Email hoặc mật khẩu không đúng.',
-  );
-  await expect(page).toHaveURL(/\/login/);
-});
-
 test('each role lands on its own home', async ({ page }) => {
   for (const [role, path, heading] of [
     ['PARENT', '/parent', 'Lịch học của An'],
@@ -69,8 +60,7 @@ test('signed out: protected pages send you to sign in, and back afterwards', asy
   await page.goto('/tutor');
   await expect(page).toHaveURL(/\/login\?next=%2Ftutor/);
   await page.getByLabel('Email').fill(tutor.email);
-  await page.getByLabel('Mật khẩu').fill(tutor.password);
-  await page.getByRole('button', { name: 'Đăng nhập' }).click();
+  await page.getByRole('button', { name: 'Đăng nhập với Google' }).click();
   await expect(page).toHaveURL(/\/tutor$/);
   await page.reload(); // the session survives a reload
   await expect(page.getByRole('heading', { name: 'Tổng quan giáo viên' })).toBeVisible();
@@ -108,106 +98,102 @@ test('a 5xx shows a friendly retry message', async ({ page }) => {
   await expect(page.getByText(`Xin chào ${tutor.email}`)).toBeVisible();
 });
 
-test('a Tutor signs up: Firebase account → POST /auth/register → refreshed role claim → Tutor home', async ({
-  page,
-}) => {
-  const email = `new.tutor.${Date.now()}@example.com`;
-  let registeredUid: string | undefined;
-  const api = await stubApi(page, {
-    // What Identity does: create users row, set role + userId claims.
-    'POST /auth/register': async (req) => {
-      registeredUid = uidOf(req.authorization);
-      await setClaims(registeredUid!, { role: 'TUTOR', userId: crypto.randomUUID() });
-      return { status: 201, body: { id: 'x', email, role: 'TUTOR', status: 'ACTIVE' } };
-    },
-    'GET /users/me': { body: { id: 'x', email, role: 'TUTOR', status: 'ACTIVE', createdAt: '' } },
+for (const [role, label, home] of [
+  ['TUTOR', 'Tôi là gia sư', /\/tutor$/],
+  ['STUDENT', 'Tôi là học sinh', /\/student$/],
+  ['PARENT', 'Tôi là phụ huynh', /\/parent$/],
+] as const) {
+  test(`first Google sign-in: choosing ${role} registers and lands on that home`, async ({
+    page,
+  }) => {
+    const email = `new.${role.toLowerCase()}.${Date.now()}@example.com`;
+    const api = await stubApi(page, {
+      // What Identity does: create the users row, set the role + userId claims.
+      'POST /auth/register': async (req) => {
+        await setClaims(uidOf(req.authorization)!, { role, userId: crypto.randomUUID() });
+        return { status: 201, body: { id: 'x', email, role, status: 'ACTIVE' } };
+      },
+      'GET /users/me': { body: { id: 'x', email, role, status: 'ACTIVE', createdAt: '' } },
+      'GET /parents/me/children': { body: [] },
+      'GET /students/me': { status: 404, body: { message: 'none' } },
+    });
+    await page.goto('/login');
+    await page.getByLabel('Email').fill(email);
+    await page.getByRole('button', { name: 'Đăng nhập với Google' }).click();
+    await expect(page).toHaveURL(/\/register\?complete=1/);
+    await page.getByRole('button', { name: label }).click();
+    await expect(page).toHaveURL(home);
+    expect(api.find('POST', '/auth/register').map((c) => c.body)).toEqual([{ role }]);
   });
-  await page.goto('/register');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Mật khẩu', { exact: true }).fill('matkhau123');
-  await page.getByLabel('Nhập lại mật khẩu').fill('matkhau123');
-  await page.getByRole('button', { name: 'Đăng ký' }).click();
-  await expect(page).toHaveURL(/\/tutor$/);
-  expect(api.find('POST', '/auth/register')).toHaveLength(1);
-  expect(registeredUid).toBeTruthy();
-});
+}
 
-test('sign-up checks the password before creating anything', async ({ page }) => {
-  const api = await stubApi(page, {});
-  await page.goto('/register');
-  await page.getByLabel('Email').fill(`x.${Date.now()}@example.com`);
-  await page.getByLabel('Mật khẩu', { exact: true }).fill('ngan');
-  await page.getByLabel('Nhập lại mật khẩu').fill('ngan');
-  await page.getByRole('button', { name: 'Đăng ký' }).click();
-  await expect(page.getByRole('main').getByRole('alert')).toHaveText(
-    'Mật khẩu cần ít nhất 8 ký tự.',
-  );
-  expect(api.calls).toEqual([]);
-});
-
-test('an account without a role is sent to finish signing up', async ({ page }) => {
+test('there is no password anywhere, and no way to choose Admin', async ({ page }) => {
   const orphan = await createUser(null);
   await stubApi(page, {});
+  await page.goto('/login');
+  await expect(page.locator('input[type=password]')).toHaveCount(0);
   await signIn(page, orphan);
-  await expect(page).toHaveURL(/\/register\?complete=1/);
   await expect(page.getByRole('heading', { name: 'Hoàn tất đăng ký' })).toBeVisible();
+  await expect(page.locator('input[type=password]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /quản trị/i })).toHaveCount(0);
 });
 
-test('accepting a valid invitation sets the password and signs in as a Parent', async ({
+test('an invited address is told to open its invitation', async ({ page }) => {
+  const invited = await createUser(null);
+  await stubApi(page, {
+    'POST /auth/register': { status: 409, body: { message: 'invited', code: 'INVITED' } },
+  });
+  await signIn(page, invited);
+  await page.getByRole('button', { name: 'Tôi là phụ huynh' }).click();
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('email lời mời');
+});
+
+test('signing in never sends you to another site', async ({ page }) => {
+  const tutor = await createUser('TUTOR');
+  await stubApi(page, { 'GET /users/me': { body: meOf(tutor) } });
+  await page.goto('/login?next=//evil.example/steal');
+  await page.getByLabel('Email').fill(tutor.email);
+  await page.getByRole('button', { name: 'Đăng nhập với Google' }).click();
+  await expect(page).toHaveURL(/localhost:\d+\/tutor$/);
+});
+
+test('an invitation is accepted as the Google account chosen now, not as whoever was signed in', async ({
   page,
 }) => {
-  const email = `invited.${Date.now()}@example.com`;
+  const invited = await createUser(null);
   const api = await stubApi(page, {
     'GET /users/me': {
       body: { id: 'p', email: 'p', role: 'TUTOR', status: 'ACTIVE', createdAt: '' },
     },
-    // What Identity does: activate the Firebase user with this password and its claims.
     'POST /auth/invitations/:token/accept': async (req) => {
-      const password = (req.body as { password: string }).password;
-      const res = await fetch(
-        'http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-key',
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ email, password, returnSecureToken: true }),
-        },
-      );
-      const { localId } = await res.json();
-      await setClaims(localId, { role: 'PARENT', userId: crypto.randomUUID() });
-      return { body: { userId: 'u', email, role: 'PARENT', status: 'ACTIVE' } };
+      await setClaims(uidOf(req.authorization)!, { role: 'PARENT', userId: crypto.randomUUID() });
+      return { body: { userId: 'u', email: invited.email, role: 'PARENT', status: 'ACTIVE' } };
     },
+    'GET /parents/me/children': { body: [] },
   });
-  // Someone else is still signed in on this browser (a shared computer): their token must not
-  // be sent with the public accept call.
+  // Someone else is still signed in on this browser (a shared computer).
   const previous = await createUser('TUTOR');
   await signIn(page, previous);
   await expect(page).toHaveURL(/\/tutor$/);
   await page.goto('/invite/abc123');
-  await page.getByLabel('Mật khẩu mới').fill('matkhau123');
-  await page.getByLabel('Nhập lại mật khẩu').fill('matkhau123');
-  await page.getByRole('button', { name: 'Kích hoạt và đăng nhập' }).click();
+  await page.getByLabel('Email').fill(invited.email);
+  await page.getByRole('button', { name: 'Kích hoạt bằng Google' }).click();
   await expect(page).toHaveURL(/\/parent$/);
   const [accept] = api.find('POST', '/auth/invitations/abc123/accept');
-  expect(accept.body).toEqual({ password: 'matkhau123' });
-  expect(accept.authorization).toBeUndefined(); // public endpoint, no token sent
+  expect(uidOf(accept.authorization)).toBe(invited.uid);
 });
 
-test('an expired, used or revoked invitation says so', async ({ page }) => {
+test('an invitation for another address, or a dead one, says so', async ({ page }) => {
+  const someone = await createUser(null);
+  let status = 403;
   await stubApi(page, {
-    'POST /auth/invitations/:token/accept': { status: 410, body: { message: 'gone' } },
+    'POST /auth/invitations/:token/accept': () => ({ status, body: { message: 'no' } }),
   });
   await page.goto('/invite/old-token');
-  await page.getByLabel('Mật khẩu mới').fill('matkhau123');
-  await page.getByLabel('Nhập lại mật khẩu').fill('matkhau123');
-  await page.getByRole('button', { name: 'Kích hoạt và đăng nhập' }).click();
+  await page.getByLabel('Email').fill(someone.email);
+  await page.getByRole('button', { name: 'Kích hoạt bằng Google' }).click();
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('địa chỉ email khác');
+  status = 410;
+  await page.getByRole('button', { name: 'Kích hoạt bằng Google' }).click();
   await expect(page.getByRole('heading', { name: 'Lời mời không còn hiệu lực' })).toBeVisible();
-});
-
-test('forgot password sends the reset email without revealing whether the account exists', async ({
-  page,
-}) => {
-  await page.goto('/forgot-password');
-  await page.getByLabel('Email đăng nhập').fill(`nobody.${Date.now()}@example.com`);
-  await page.getByRole('button', { name: 'Gửi liên kết đặt lại' }).click();
-  await expect(page.getByText(/Nếu email có trong hệ thống/)).toBeVisible();
 });

@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   GoneException,
   Injectable,
   Logger,
@@ -8,6 +9,7 @@ import {
 import { createHash, randomBytes } from 'node:crypto';
 import { enqueueEvent, recordChange } from '@tms/common';
 import type { InternalCreateInvitationRequest } from '@tms/contracts';
+import type { DecodedIdToken } from 'firebase-admin/auth';
 import { FirebaseAuthService } from '../firebase/firebase-auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InvitationMailer } from './invitation-mailer';
@@ -49,17 +51,12 @@ export class InvitationsService {
       throw new ConflictException(`already invited as ${user.role}`);
     }
 
-    const firebaseUid =
-      user?.firebaseUid ?? (await this.firebase.accountForInvitation(email, request.fullName));
-    if (!firebaseUid)
-      throw new ConflictException('this email already belongs to a registered account');
-
     const token = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
 
     const invitation = await this.prisma.$transaction(async (tx) => {
       user ??= await tx.user.create({
-        data: { firebaseUid, email, role: request.role, status: 'PENDING' },
+        data: { email, role: request.role, status: 'PENDING' },
       });
       await tx.invitation.updateMany({
         where: { userId: user.id, usedAt: null, revokedAt: null },
@@ -110,17 +107,27 @@ export class InvitationsService {
   }
 
   /**
-   * Accepts an invitation once: the conditional update claims it atomically, so two
-   * concurrent accepts cannot both succeed. The Firebase password and claims are set
-   * inside the transaction, so a Firebase failure leaves the invitation unused.
+   * Accepts an invitation once, signed in with Google as the invited e-mail: a forwarded link
+   * is useless to anyone else. The conditional update claims it atomically, so two concurrent
+   * accepts cannot both succeed. The claims are set inside the transaction, so a Firebase
+   * failure leaves the invitation unused.
    */
-  async accept(token: string, password: string) {
+  async accept(token: string, google: DecodedIdToken) {
     const tokenHash = hashToken(token);
     const invitation = await this.prisma.invitation.findUnique({
       where: { tokenHash },
       include: { user: true },
     });
     if (!invitation) throw new NotFoundException('unknown invitation');
+    if (google.email?.toLowerCase() !== invitation.user.email) {
+      throw new ForbiddenException('this invitation is for another e-mail address');
+    }
+    if (google.role !== undefined || google.userId !== undefined) {
+      // A used link: say so, rather than "already has a role".
+      throw invitation.usedAt
+        ? new GoneException('this invitation was used, revoked or has expired')
+        : new ConflictException('this account already has a role');
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const claimed = await tx.invitation.updateMany({
@@ -132,7 +139,7 @@ export class InvitationsService {
 
       const user = await tx.user.update({
         where: { id: invitation.userId },
-        data: { status: 'ACTIVE' },
+        data: { status: 'ACTIVE', firebaseUid: google.uid },
       });
       await recordChange(tx, {
         action: 'invitation.accept',
@@ -148,8 +155,7 @@ export class InvitationsService {
         email: user.email,
         role: user.role,
       });
-      await this.firebase.activate(user.firebaseUid, password);
-      await this.firebase.setClaims(user.firebaseUid, { userId: user.id, role: user.role });
+      await this.firebase.setClaims(google.uid, { userId: user.id, role: user.role });
       return { userId: user.id, email: user.email, role: user.role, status: user.status };
     });
   }

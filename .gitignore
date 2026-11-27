@@ -16,3 +16,6 @@ infra/keys/
 __pycache__/
 dumps/
 infra/cloudflared/
+
+# Local Firebase emulator data
+.emulator-data/
