@@ -56,7 +56,14 @@ services:
   billing-service:
     # A fixed throwaway key: the e2e stack never holds real bank details.
     environment:
-      { E2E_HOOKS: 'true', BANK_DATA_KEY: 'ZTJlLXRlc3Qta2V5LW9ubHktMzItYnl0ZXMtbG9uZyE=' }
+      E2E_HOOKS: 'true'
+      BANK_DATA_KEY: 'ZTJlLXRlc3Qta2V5LW9ubHktMzItYnl0ZXMtbG9uZyE='
+      NODE_ENV: development # the payroll sandbox refuses production
+      PAYOUT_MODE: sandbox
+      PAYOUT_WEBHOOK_SECRET: e2e-only-payroll-webhook-secret-0000
+      SANDBOX_PUBLIC_URL: http://127.0.0.1:25173
+      # Work taught today is payable at once, so a test can pay it (only billing reads this here).
+      ATTENDANCE_EDIT_WINDOW_HOURS: '-24'
     ports: !override ['127.0.0.1:23006:3006']
   audit-service:
     ports: !override ['127.0.0.1:23008:3008']

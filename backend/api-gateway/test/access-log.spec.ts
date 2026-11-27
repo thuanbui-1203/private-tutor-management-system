@@ -13,6 +13,9 @@ describe('Access record fields (#55)', () => {
       '/auth/invitations/:token/accept',
     );
     expect(sanitizePath('/calendar/s3cr3t.ics?download=1')).toBe('/calendar/:token.ics');
+    expect(sanitizePath('/billing/sandbox/payments/s3cr3t')).toBe(
+      '/billing/sandbox/payments/:token',
+    );
     expect(sanitizePath('/auth/invitations')).toBe('/auth/invitations');
   });
 

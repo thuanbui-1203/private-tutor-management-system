@@ -247,8 +247,13 @@ export class PaymentsService {
     if (!PAYABLE.includes(invoice!.status as (typeof PAYABLE)[number])) {
       throw new ConflictException(`a ${invoice!.status} invoice cannot be paid`);
     }
-    // The Tutor's own account while their consent is active (ADR-0006), else BILLING_BANK_*.
-    const target = (await this.bank.transferTarget(invoice!.tutorId)) ?? {
+    // When the centre pays its Tutors (PAYOUT_MODE, docs/07 §6) tuition goes to the centre only:
+    // paid to the Tutor as well, the same Session would be paid twice. Otherwise the Tutor's
+    // own account while their consent is active (ADR-0006), else BILLING_BANK_*.
+    const own = process.env.PAYOUT_MODE
+      ? undefined
+      : await this.bank.transferTarget(invoice!.tutorId);
+    const target = own ?? {
       bankBin: process.env.BILLING_BANK_BIN,
       accountNumber: process.env.BILLING_BANK_ACCOUNT,
       accountName: process.env.BILLING_BANK_ACCOUNT_NAME ?? null,

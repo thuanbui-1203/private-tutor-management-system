@@ -16,6 +16,10 @@ describe('gateway route table (docs/02 §2)', () => {
     ['GET', '/calendar/tok.ics', 'schedule', 'public'],
     ['GET', '/billing/invoices', 'billing', 'role'],
     ['GET', '/audit/access', 'audit', 'role'],
+    ['POST', '/billing/payroll/webhook', 'billing', 'public'],
+    ['GET', '/billing/payroll/runs', 'billing', 'role'],
+    ['POST', '/billing/payroll/runs', 'billing', 'role'],
+    ['POST', '/billing/sandbox/payments/tok', 'billing', 'public'],
   ])('%s %s → %s (%s)', (method, path, service, access) => {
     expect(resolveRoute(method, path)).toEqual({ kind: 'service', service, access });
   });

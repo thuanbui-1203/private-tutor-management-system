@@ -58,6 +58,19 @@ if (existsSync(frontendEnv)) {
   }
 }
 
+// Signs payroll payment notices (docs/07 §6): generated once, never overwritten.
+{
+  const text = readFileSync(rootEnv, 'utf8');
+  if (/^PAYOUT_WEBHOOK_SECRET=[ \t]*$/m.test(text)) {
+    const secret = randomBytes(32).toString('hex');
+    writeFileSync(
+      rootEnv,
+      text.replace(/^PAYOUT_WEBHOOK_SECRET=[ \t]*$/m, `PAYOUT_WEBHOOK_SECRET=${secret}`),
+    );
+    console.log('Generated PAYOUT_WEBHOOK_SECRET in .env.');
+  }
+}
+
 console.log(
   created.length
     ? `Created:\n${created.map((f) => `  ${f}`).join('\n')}`

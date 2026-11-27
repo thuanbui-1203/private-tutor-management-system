@@ -5,6 +5,7 @@ import type { Prisma } from '../generated/prisma/client';
 import { CopiesService, NotYetKnownError } from '../copies/copies.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { dateOnly, day, lastDayOf, LedgerService } from '../invoices/ledger.service';
+import { WorkService } from '../payroll/work.service';
 
 type Tx = Prisma.TransactionClient;
 const asTx = (tx: SqlExecutor) => tx as unknown as Tx;
@@ -47,15 +48,20 @@ export class ChargesService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly copies: CopiesService,
     private readonly ledger: LedgerService,
+    private readonly work: WorkService,
   ) {}
 
+  /** One queue per event and service, so the Tutor's pay is updated by the same consumer. */
   async onModuleInit(): Promise<void> {
-    await this.messaging.subscribe('AttendanceRecorded', (e, tx) =>
-      this.reconcile(asTx(tx), e.data),
-    );
-    await this.messaging.subscribe('AttendanceCorrected', (e, tx) =>
-      this.reconcile(asTx(tx), { ...e.data, status: e.data.newStatus }),
-    );
+    await this.messaging.subscribe('AttendanceRecorded', async (e, tx) => {
+      await this.reconcile(asTx(tx), e.data);
+      await this.work.onAttendance(asTx(tx), { ...e.data, occurredAt: e.occurredAt });
+    });
+    await this.messaging.subscribe('AttendanceCorrected', async (e, tx) => {
+      const status = e.data.newStatus;
+      await this.reconcile(asTx(tx), { ...e.data, status });
+      await this.work.onAttendance(asTx(tx), { ...e.data, status, occurredAt: e.occurredAt });
+    });
   }
 
   /**
