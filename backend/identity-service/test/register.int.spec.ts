@@ -113,10 +113,17 @@ describe('Identity: Tutor registration with Firebase Auth (#6)', () => {
     }
   });
 
-  it('refuses a password account and an e-mail Google has not verified', async () => {
+  it('refuses an unverified e-mail, from a password account or from Google', async () => {
     await register((await signUpWithPassword(uniqueEmail('password'))).idToken).expect(401);
     const unverified = await signIn(uniqueEmail('unverified'), false);
     await register(unverified.idToken).expect(401);
+  });
+
+  it('registers a password account once its e-mail is verified', async () => {
+    const email = uniqueEmail('verified-password');
+    const { idToken } = await signUpWithPassword(email, true);
+    const { body } = await register(idToken, 'PARENT').expect(201);
+    expect(body).toMatchObject({ email, role: 'PARENT', status: 'ACTIVE' });
   });
 
   it('a seeded Admin gets their account at the first Google sign-in, with the role it has', async () => {

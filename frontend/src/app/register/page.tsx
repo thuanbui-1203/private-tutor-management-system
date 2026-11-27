@@ -1,12 +1,13 @@
 'use client';
 /**
- * First sign-in: Google → choose a role → POST /auth/register with the ID token → forced token
+ * First sign-in: Google, or e-mail + password with a verified address → choose a role → POST /auth/register with the ID token → forced token
  * refresh to pick up the `role` claim → that role's home. An address in ADMIN_EMAILS becomes an
  * Admin whatever was chosen, and a known address gets its own account back.
  */
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { GoogleSignIn } from '@/components/google-sign-in';
+import { SignInPanel } from '@/components/sign-in';
 import { ActionButton, ErrorBox, Loading, Notice } from '@/components/ui';
 import { ApiError, describeError, request } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -46,16 +47,21 @@ export default function RegisterPage() {
   }
 
   if (auth.loading) return <Loading />;
-  if (!auth.session) {
+  if (!auth.session || !auth.session.emailVerified) {
     return (
       <main className="centered">
         <h1>Tạo tài khoản</h1>
-        <GoogleSignIn
-          label="Tiếp tục với Google"
-          onSignedIn={(s) => {
+        <p className="muted lead">Dùng Google hoặc email bất kỳ. Sau đó bạn chọn vai trò.</p>
+        <SignInPanel
+          initialMode="signup"
+          googleLabel="Tiếp tục với Google"
+          onReady={(s) => {
             if (s.role) router.replace(HOME_OF[s.role]);
           }}
         />
+        <p className="hint">
+          Đã có tài khoản? <Link href="/login">Đăng nhập</Link>
+        </p>
       </main>
     );
   }

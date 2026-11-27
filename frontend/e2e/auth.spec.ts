@@ -2,7 +2,19 @@
  * Sign-in, Tutor sign-up, invitations, sign-out and role routing (#23, "Đăng nhập và tài khoản").
  */
 import { expect, test } from '@playwright/test';
-import { createUser, expectBearer, meOf, setClaims, signIn, stubApi, uidOf } from './support';
+import {
+  createUser,
+  expectBearer,
+  meOf,
+  passwordUser,
+  resetMails,
+  setClaims,
+  signIn,
+  stubApi,
+  uidOf,
+  verificationMails,
+  verifyEmail,
+} from './support';
 
 test('a Tutor signs in and lands on the Tutor home; API calls carry the ID token', async ({
   page,
@@ -59,7 +71,7 @@ test('signed out: protected pages send you to sign in, and back afterwards', asy
   await stubApi(page, { 'GET /users/me': { body: meOf(tutor) } });
   await page.goto('/tutor');
   await expect(page).toHaveURL(/\/login\?next=%2Ftutor/);
-  await page.getByLabel('Email').fill(tutor.email);
+  await page.getByLabel('Email Google (giả lập)').fill(tutor.email);
   await page.getByRole('button', { name: 'Đăng nhập với Google' }).click();
   await expect(page).toHaveURL(/\/tutor$/);
   await page.reload(); // the session survives a reload
@@ -118,7 +130,7 @@ for (const [role, label, home] of [
       'GET /students/me': { status: 404, body: { message: 'none' } },
     });
     await page.goto('/login');
-    await page.getByLabel('Email').fill(email);
+    await page.getByLabel('Email Google (giả lập)').fill(email);
     await page.getByRole('button', { name: 'Đăng nhập với Google' }).click();
     await expect(page).toHaveURL(/\/register\?complete=1/);
     await page.getByRole('button', { name: label }).click();
@@ -127,15 +139,98 @@ for (const [role, label, home] of [
   });
 }
 
-test('there is no password anywhere, and no way to choose Admin', async ({ page }) => {
+test('there is no way to choose Admin', async ({ page }) => {
   const orphan = await createUser(null);
   await stubApi(page, {});
-  await page.goto('/login');
-  await expect(page.locator('input[type=password]')).toHaveCount(0);
   await signIn(page, orphan);
   await expect(page.getByRole('heading', { name: 'Hoàn tất đăng ký' })).toBeVisible();
-  await expect(page.locator('input[type=password]')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /quản trị/i })).toHaveCount(0);
+});
+
+test('sign-up with an e-mail: verify the address first, then choose a role', async ({ page }) => {
+  const email = `pw.${Date.now()}@example.com`;
+  const api = await stubApi(page, {
+    'POST /auth/register': async (req) => {
+      await setClaims(uidOf(req.authorization)!, { role: 'PARENT', userId: crypto.randomUUID() });
+      return { status: 201, body: { id: 'x', email, role: 'PARENT', status: 'ACTIVE' } };
+    },
+    'GET /users/me': { body: { id: 'x', email, role: 'PARENT', status: 'ACTIVE', createdAt: '' } },
+    'GET /parents/me/children': { body: [] },
+  });
+  await page.goto('/register');
+  await page.getByLabel('Email', { exact: true }).fill(email);
+  await page.getByLabel('Mật khẩu', { exact: true }).fill('short');
+  await expect(page.getByText('Mật khẩu cần ít nhất 8 ký tự.')).toBeVisible();
+  await page.getByLabel('Mật khẩu', { exact: true }).fill('mot-mat-khau-dai');
+  await page.getByLabel('Nhập lại mật khẩu').fill('mot-mat-khau-khac');
+  await expect(page.getByText('Hai mật khẩu chưa khớp.')).toBeVisible();
+  const create = page.getByRole('button', { name: 'Tạo tài khoản bằng email' });
+  await expect(create).toBeDisabled();
+  await page.getByLabel('Nhập lại mật khẩu').fill('mot-mat-khau-dai');
+  await create.click();
+
+  // Held until the address is verified; nothing reaches the API meanwhile.
+  await expect(page.getByRole('heading', { name: 'Xác minh email của bạn' })).toBeVisible();
+  await expect(page.getByText(email)).toBeVisible();
+  expect(await verificationMails(email)).toBe(1);
+  await page.getByRole('button', { name: 'Tôi đã xác minh xong' }).click();
+  await expect(page.getByText('Email vẫn chưa được xác minh')).toBeVisible();
+  await page.getByRole('button', { name: 'Gửi lại thư' }).click();
+  await expect(page.getByText('Đã gửi lại thư xác minh.')).toBeVisible();
+  expect(api.calls).toEqual([]);
+
+  await verifyEmail(email); // the person opens the link in the e-mail
+  await page.getByRole('button', { name: 'Tôi đã xác minh xong' }).click();
+  await expect(page.getByRole('heading', { name: 'Hoàn tất đăng ký' })).toBeVisible();
+  await page.getByRole('button', { name: 'Tôi là phụ huynh' }).click();
+  await expect(page).toHaveURL(/\/parent$/);
+});
+
+test('sign-in with an e-mail: wrong password, then the right one', async ({ page }) => {
+  const tutor = await passwordUser('TUTOR', 'mat-khau-gia-su-1');
+  await stubApi(page, { 'GET /users/me': { body: meOf(tutor) } });
+  await page.goto('/login');
+  await page.getByLabel('Email', { exact: true }).fill(tutor.email);
+  await page.getByLabel('Mật khẩu', { exact: true }).fill('sai-mat-khau');
+  await page.getByRole('button', { name: 'Đăng nhập bằng email' }).click();
+  await expect(page.getByRole('main').getByRole('alert')).toContainText(
+    'Email hoặc mật khẩu không đúng',
+  );
+  await page.getByLabel('Mật khẩu', { exact: true }).fill('mat-khau-gia-su-1');
+  await page.getByRole('button', { name: 'Đăng nhập bằng email' }).click();
+  await expect(page).toHaveURL(/\/tutor$/);
+});
+
+test('an unverified password account with a role is held at the verification step', async ({
+  page,
+}) => {
+  const tutor = await passwordUser('TUTOR', 'mat-khau-gia-su-2', false);
+  const api = await stubApi(page, { 'GET /users/me': { body: meOf(tutor) } });
+  await page.goto('/login');
+  await page.getByLabel('Email', { exact: true }).fill(tutor.email);
+  await page.getByLabel('Mật khẩu', { exact: true }).fill('mat-khau-gia-su-2');
+  await page.getByRole('button', { name: 'Đăng nhập bằng email' }).click();
+  await expect(page.getByRole('heading', { name: 'Xác minh email của bạn' })).toBeVisible();
+  await page.goto('/tutor'); // the app does not let it in either
+  await expect(page.getByRole('heading', { name: 'Xác minh email của bạn' })).toBeVisible();
+  expect(api.calls).toEqual([]);
+  await page.getByRole('button', { name: 'Dùng tài khoản khác' }).click();
+  await expect(page.getByRole('button', { name: 'Đăng nhập bằng email' })).toBeVisible();
+});
+
+test('forgot password sends a reset link without saying whether the address exists', async ({
+  page,
+}) => {
+  const tutor = await passwordUser('TUTOR', 'mat-khau-gia-su-3');
+  await stubApi(page, {});
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Quên mật khẩu?' }).click();
+  await page.getByLabel('Email', { exact: true }).fill(tutor.email);
+  await page.getByRole('button', { name: 'Gửi liên kết đặt lại' }).click();
+  await expect(page.getByText(/thư đặt lại mật khẩu đã được gửi/)).toBeVisible();
+  expect(await resetMails(tutor.email)).toBe(1);
+  await page.getByRole('button', { name: '← Quay lại đăng nhập' }).click();
+  await expect(page.getByRole('button', { name: 'Đăng nhập bằng email' })).toBeVisible();
 });
 
 test('an invited address is told to open its invitation', async ({ page }) => {
@@ -152,7 +247,7 @@ test('signing in never sends you to another site', async ({ page }) => {
   const tutor = await createUser('TUTOR');
   await stubApi(page, { 'GET /users/me': { body: meOf(tutor) } });
   await page.goto('/login?next=//evil.example/steal');
-  await page.getByLabel('Email').fill(tutor.email);
+  await page.getByLabel('Email Google (giả lập)').fill(tutor.email);
   await page.getByRole('button', { name: 'Đăng nhập với Google' }).click();
   await expect(page).toHaveURL(/localhost:\d+\/tutor$/);
 });
@@ -176,7 +271,7 @@ test('an invitation is accepted as the Google account chosen now, not as whoever
   await signIn(page, previous);
   await expect(page).toHaveURL(/\/tutor$/);
   await page.goto('/invite/abc123');
-  await page.getByLabel('Email').fill(invited.email);
+  await page.getByLabel('Email Google (giả lập)').fill(invited.email);
   await page.getByRole('button', { name: 'Kích hoạt bằng Google' }).click();
   await expect(page).toHaveURL(/\/parent$/);
   const [accept] = api.find('POST', '/auth/invitations/abc123/accept');
@@ -190,7 +285,7 @@ test('an invitation for another address, or a dead one, says so', async ({ page 
     'POST /auth/invitations/:token/accept': () => ({ status, body: { message: 'no' } }),
   });
   await page.goto('/invite/old-token');
-  await page.getByLabel('Email').fill(someone.email);
+  await page.getByLabel('Email Google (giả lập)').fill(someone.email);
   await page.getByRole('button', { name: 'Kích hoạt bằng Google' }).click();
   await expect(page.getByRole('main').getByRole('alert')).toContainText('địa chỉ email khác');
   status = 410;

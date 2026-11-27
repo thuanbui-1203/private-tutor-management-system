@@ -1,7 +1,7 @@
 'use client';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import { GoogleSignIn } from '@/components/google-sign-in';
+import { SignInPanel } from '@/components/sign-in';
 import { Loading, Notice } from '@/components/ui';
 import { HOME_OF } from '@/lib/labels';
 
@@ -19,18 +19,19 @@ function LoginForm() {
   const reason = REASONS[params.get('reason') ?? ''];
   return (
     <main className="centered">
-      <h1>Đăng nhập</h1>
+      <h1>Chào mừng bạn</h1>
+      <p className="muted lead">Đăng nhập để xem lịch học, học phí và lớp của bạn.</p>
       {reason && <Notice tone="warning">{reason}</Notice>}
-      <GoogleSignIn
-        onSignedIn={(s) =>
+      <SignInPanel
+        onReady={(s) =>
           router.replace(
             s.role ? (localPath(params.get('next')) ?? HOME_OF[s.role]) : '/register?complete=1',
           )
         }
       />
       <p className="hint">
-        Lần đầu đăng nhập, bạn sẽ chọn vai trò: gia sư, học sinh hoặc phụ huynh. Nếu đã nhận email
-        lời mời, hãy mở liên kết trong email đó.
+        Lần đầu vào, bạn sẽ chọn vai trò: gia sư, học sinh hoặc phụ huynh. Nếu đã nhận email lời
+        mời, hãy mở liên kết trong email đó.
       </p>
     </main>
   );

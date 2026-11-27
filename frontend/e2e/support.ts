@@ -65,6 +65,47 @@ export async function createUser(role: Role | null): Promise<TestUser> {
   return { email, uid, userId, role };
 }
 
+/** An e-mail and password account; `verified` as if its verification link had been opened. */
+export async function passwordUser(role: Role, password: string, verified = true) {
+  const email = `pw.${role.toLowerCase()}.${randomUUID().slice(0, 8)}@example.com`;
+  const { localId: uid } = await emulator(
+    `/identitytoolkit.googleapis.com/v1/accounts:signUp?key=${KEY}`,
+    { email, password, returnSecureToken: true },
+  );
+  if (verified) await markVerified(uid);
+  const userId = randomUUID();
+  await setClaims(uid, { role, userId });
+  return { email, uid, userId, role } satisfies TestUser;
+}
+
+const markVerified = (uid: string) =>
+  emulator(
+    `/identitytoolkit.googleapis.com/v1/projects/${PROJECT}/accounts:update`,
+    { localId: uid, emailVerified: true },
+    true,
+  );
+
+/** What opening the link in the verification e-mail does. */
+export async function verifyEmail(email: string) {
+  const { users } = await emulator(
+    `/identitytoolkit.googleapis.com/v1/projects/${PROJECT}/accounts:lookup`,
+    { email: [email] },
+    true,
+  );
+  await markVerified(users[0].localId);
+}
+
+/** The e-mails Firebase would have sent to `email` (the emulator keeps their codes). */
+async function mails(email: string, type: 'VERIFY_EMAIL' | 'PASSWORD_RESET') {
+  const res = await fetch(`${EMULATOR}/emulator/v1/projects/${PROJECT}/oobCodes`);
+  const { oobCodes } = (await res.json()) as {
+    oobCodes: { email: string; requestType: string }[];
+  };
+  return oobCodes.filter((c) => c.email === email && c.requestType === type).length;
+}
+export const verificationMails = (email: string) => mails(email, 'VERIFY_EMAIL');
+export const resetMails = (email: string) => mails(email, 'PASSWORD_RESET');
+
 /** The Firebase uid inside an ID token (no signature check: the emulator issued it). */
 export function uidOf(authorization: string | undefined): string | undefined {
   const token = authorization?.replace(/^Bearer /, '');
@@ -127,7 +168,7 @@ export async function stubApi(page: Page, handlers: Record<string, Handler | Rep
 
 export async function signIn(page: Page, user: TestUser) {
   await page.goto('/login');
-  await page.getByLabel('Email').fill(user.email);
+  await page.getByLabel('Email Google (giả lập)').fill(user.email);
   await page.getByRole('button', { name: 'Đăng nhập với Google' }).click();
   // Signed in: the app leaves the sign-in page (for a home, a role choice, or an error reason).
   await page.waitForURL((url) => url.pathname !== '/login' || url.search !== '');

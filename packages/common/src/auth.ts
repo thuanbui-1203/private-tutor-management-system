@@ -20,19 +20,21 @@ export interface AuthUser {
 }
 
 /**
- * Everyone signs in with Google (ADR-0004): a token from any other Firebase provider, or with
- * an e-mail Google has not verified, is refused. AUTH_SIGN_IN_PROVIDERS (comma-separated) widens
- * this, e.g. while accounts are being moved over.
+ * People sign in with Google or with an e-mail and password (ADR-0004), and only with a
+ * verified e-mail: Identity finds accounts and Admins (ADMIN_EMAILS) by address, so an
+ * unproven address must never reach it. Google verifies its own addresses; a password account
+ * is verified through the link Firebase e-mails. Any other provider (anonymous, phone) is
+ * refused. AUTH_SIGN_IN_PROVIDERS (comma-separated) narrows the list, e.g. `google.com`.
  */
 export function signInAllowed(token: {
   email_verified?: boolean;
   firebase?: { sign_in_provider?: string };
 }): boolean {
-  const allowed = (process.env.AUTH_SIGN_IN_PROVIDERS || 'google.com')
+  const allowed = (process.env.AUTH_SIGN_IN_PROVIDERS || 'google.com,password')
     .split(',')
     .map((p) => p.trim());
   const provider = token.firebase?.sign_in_provider ?? '';
-  return allowed.includes(provider) && (provider !== 'google.com' || token.email_verified === true);
+  return allowed.includes(provider) && token.email_verified === true;
 }
 
 const ROLES_KEY = 'tms:roles';
