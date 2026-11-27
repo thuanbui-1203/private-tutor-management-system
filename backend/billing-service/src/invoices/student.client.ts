@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { HttpError, InternalHttpClient } from '@tms/common';
-import { InternalStudentAccessResponse } from '@tms/contracts';
+import { InternalStudentAccessResponse, InternalTutorPayersResponse } from '@tms/contracts';
 
 /** student-service internal API (timeout 2 s, 2 retries, circuit breaker; docs/02 §1). */
 @Injectable()
@@ -22,5 +22,14 @@ export class StudentClient {
       }
       throw err;
     }
+  }
+
+  /** The users who settle the Invoices of this Tutor's Students. Throws when unavailable. */
+  async payersOf(tutorId: string): Promise<string[]> {
+    const { userIds } = await this.client.get(
+      `/internal/tutors/${tutorId}/payers`,
+      InternalTutorPayersResponse,
+    );
+    return userIds;
   }
 }

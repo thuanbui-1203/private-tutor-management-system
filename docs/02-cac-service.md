@@ -111,6 +111,7 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 | POST | `/parents`, PATCH `/parents/{id}` | Quản lý phụ huynh (đổi liên hệ của phụ huynh chính → phát lại `StudentUpdated`) | TUTOR, ADMIN |
 | GET | `/internal/students/{id}` | DTO `InternalStudentResponse` cho class-service | Nội bộ |
 | GET | `/internal/students/{id}/access?userId=` | Quan hệ của người dùng với học sinh (`tutor`, `primary-parent`, `secondary-parent`, `self` hoặc null) và `isPayer` (người đó có phải người thanh toán không, BR-ST-05), để class / schedule / billing áp cùng quy tắc xem | Nội bộ |
+| GET | `/internal/tutors/{id}/payers` | Tài khoản của những người thanh toán cho học sinh của giáo viên này (BR-ST-05), để billing chỉ cho giáo viên xem đúng tài khoản ngân hàng của họ | Nội bộ |
 
 **Quy tắc đã cài đặt:**
 - Dưới 18 tuổi (tính theo ngày ở Việt Nam) bắt buộc có phụ huynh chính và người thanh toán là phụ huynh chính (BR-ST-04, BR-ST-05); đủ 18 tuổi có thể tự thanh toán nhưng khi đó phải có email; đủ 18 tuổi không tự đổi người thanh toán. Vi phạm → 422.
@@ -216,7 +217,7 @@ Redis không hoạt động thì gateway bỏ qua giới hạn (ghi log) thay v�
 | GET | `/billing/bank-account` | Tài khoản ngân hàng của chính mình (số luôn ở dạng `••••1234`), trạng thái `ACTIVE` / `MASKED`, Consent và `policyVersion` hiện hành ([ADR-0006](adr/0006-bank-details-with-consent.md)) | TUTOR, ADMIN, PARENT, STUDENT |
 | PUT | `/billing/bank-account` | Lưu tài khoản; body phải có `consent: true` và `policyVersion` hiện hành, thiếu → 400 và không lưu gì; số tài khoản mã hóa AES-256-GCM bằng `BANK_DATA_KEY` (thiếu khóa → 503) | TUTOR, ADMIN, PARENT, STUDENT |
 | DELETE | `/billing/bank-account/consent` | Rút đồng ý: xóa số đầy đủ và tên chủ tài khoản, giữ BIN + 4 số cuối; Consent giữ lại với `withdrawn_at`; không có Consent đang hiệu lực → 404 | TUTOR, ADMIN, PARENT, STUDENT |
-| GET | `/billing/bank-accounts` | Tài khoản của người thanh toán để hoàn tiền: số đầy đủ khi Consent còn hiệu lực, chỉ bản đã che sau khi rút | TUTOR, ADMIN |
+| GET | `/billing/bank-accounts` | Tài khoản của người thanh toán để hoàn tiền (giáo viên: chỉ người thanh toán của học sinh mình; student-service lỗi thì 503): số đầy đủ khi Consent còn hiệu lực, chỉ bản đã che sau khi rút | TUTOR, ADMIN |
 | POST | `/billing/invoices/{id}/payments` | Ghi nhận thanh toán thủ công `{amount, method, paidAt?, note?}` trên hóa đơn `ISSUED` / `PARTIALLY_PAID` / `OVERDUE`; vượt số còn nợ → 422 kèm `outstanding`; `paidAt` ở tương lai → 422; phát `PaymentReceived` (BR-BI-07) | TUTOR, ADMIN |
 | POST | `/billing/payments/{id}/reversal` | Bút toán đảo cho khoản ghi sai (kèm `reason`), mỗi khoản chỉ đảo một lần, không đảo bút toán đảo; trạng thái hóa đơn tính lại (có thể về `ISSUED` / `OVERDUE`); không phát `PaymentReceived` | TUTOR, ADMIN |
 | POST | `/billing/invoices/{id}/void` | Hủy hóa đơn đã phát hành mà chưa thanh toán (kèm `reason`) và phát hành hóa đơn thay thế cùng các dòng phí, tên / người thanh toán mới nhất, `replaces_invoice_id`, hạn = max(hạn cũ, hôm nay + 7 ngày), phát `InvoiceIssued`. Hóa đơn nháp, đã hủy, hoặc đã có thanh toán → 409 (đảo thanh toán trước) (BR-BI-04) | TUTOR, ADMIN |

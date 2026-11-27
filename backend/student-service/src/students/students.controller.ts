@@ -136,3 +136,17 @@ export class InternalStudentsController {
     return this.students.access(id, userId);
   }
 }
+
+/** Service-to-service; the gateway never routes /internal/**. */
+@ApiTags('internal')
+@Public()
+@Controller('internal/tutors')
+export class InternalTutorPayersController {
+  constructor(private readonly students: StudentsService) {}
+
+  /** InternalTutorPayersResponse: who pays for this Tutor's Students. */
+  @Get(':id/payers')
+  payers(@Param('id', ParseUUIDPipe) id: string) {
+    return this.students.payersOf(id);
+  }
+}

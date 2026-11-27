@@ -2,13 +2,13 @@
 
 Đăng nhập tại http://localhost:5173. Tạo bằng `pnpm seed` (Admin) và `pnpm seed:demo` (còn lại), xem [scripts/seed-demo.mjs](scripts/seed-demo.mjs).
 
-Mật khẩu chung: `Demo@1234` (riêng Admin: `Admin@123`).
+Mật khẩu **không ghi trong repo** (repo công khai, project Firebase thật dùng chung với VPS). Khi seed vào project thật phải đặt `SEED_ADMIN_PASSWORD` và `DEMO_PASSWORD`; chỉ Auth Emulator mới có mật khẩu mặc định (xem [backend/identity-service/src/seed.ts](backend/identity-service/src/seed.ts)). Đổi mật khẩu các tài khoản dưới đây: `node scripts/rotate-demo-passwords.mjs`.
 
 ## Admin
 
-| Email           | Mật khẩu    | Dùng để demo                          |
-| --------------- | ----------- | ------------------------------------- |
-| admin@tms.local | `Admin@123` | Quản lý người dùng, xem mọi giáo viên |
+| Email           | Dùng để demo                          |
+| --------------- | ------------------------------------- |
+| admin@tms.local | Quản lý người dùng, xem mọi giáo viên |
 
 ## Giáo viên (TUTOR)
 

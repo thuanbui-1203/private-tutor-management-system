@@ -8,7 +8,8 @@
 //
 // Firebase: the Auth emulator when FIREBASE_AUTH_EMULATOR_HOST is set, otherwise the real
 // project with NEXT_PUBLIC_FIREBASE_API_KEY from .env / frontend/.env.local.
-// Env: DEMO_GATEWAY (default http://localhost:8080/api), DEMO_PASSWORD (default Demo@1234).
+// Env: DEMO_GATEWAY (default http://localhost:8080/api), DEMO_PASSWORD (required unless the
+// emulator is used).
 //
 // Re-running is safe: if the first demo Tutor already exists, it only prints the list.
 import { existsSync, readFileSync } from 'node:fs';
@@ -28,8 +29,13 @@ const readEnv = (file) =>
 const fileEnv = { ...readEnv(join(root, '.env')), ...readEnv(join(root, 'frontend/.env.local')) };
 
 const GATEWAY = process.env.DEMO_GATEWAY ?? 'http://localhost:8080/api';
-const PASSWORD = process.env.DEMO_PASSWORD ?? 'Demo@1234';
 const EMULATOR = process.env.FIREBASE_AUTH_EMULATOR_HOST;
+// No default on a real project: this repo is public, so a default password is a known one.
+const PASSWORD = process.env.DEMO_PASSWORD || (EMULATOR ? 'Demo@1234' : undefined);
+if (!PASSWORD) {
+  console.error('set DEMO_PASSWORD (there is no default on a real Firebase project)');
+  process.exit(1);
+}
 const API_KEY = EMULATOR
   ? 'demo-key'
   : (process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? fileEnv.NEXT_PUBLIC_FIREBASE_API_KEY);
@@ -366,7 +372,7 @@ async function main() {
     }
   }
   console.log(
-    `\nDone. ${TUTORS.length} tutors, ${logins.length} parent/student logins, password ${PASSWORD}`,
+    `\nDone. ${TUTORS.length} tutors, ${logins.length} parent/student logins (password: DEMO_PASSWORD)`,
   );
 }
 

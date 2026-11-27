@@ -229,6 +229,16 @@ ssh tms-vps "cd ~/tms && docker compose -f docker-compose.yml -f docker-compose.
 - Cổng 3030 được chọn để không trùng Grafana local (3000) và identity-service (3001), nên chạy song song được với stack local.
 - Container `vps-tunnel` tự kết nối lại khi mạng rớt (`restart: unless-stopped`). Nếu Grafana báo lỗi datasource, xem `docker logs tms-grafana-vps-vps-tunnel-1`.
 
+### 6.2 Chế độ bảo trì
+
+```bash
+ssh tms-vps "cd ~/tms && bash scripts/vps/maintenance.sh on"      # trang 503, tắt frontend + gateway + các service
+ssh tms-vps "cd ~/tms && bash scripts/vps/maintenance.sh status"
+ssh tms-vps "cd ~/tms && bash scripts/vps/maintenance.sh off"     # mở lại app
+```
+
+Tunnel trỏ `app.` và `api.` về container `tms-maintenance` ([infra/maintenance/server.mjs](../infra/maintenance/server.mjs)). PostgreSQL, RabbitMQ, Redis vẫn chạy nên backup hằng ngày vẫn hoạt động; không xóa dữ liệu nào. Trước khi `off`, hãy deploy bản vá cần thiết. `on` / `off` cần `infra/cloudflared/config.live.yml` (bản cấu hình thật được lưu lại) không bị xóa.
+
 ## 7. Kiểm tra sau khi triển khai
 
 ```bash

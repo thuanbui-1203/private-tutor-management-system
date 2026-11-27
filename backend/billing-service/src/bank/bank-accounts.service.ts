@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ServiceUnavailableException } from '@nes
 import { maskAccountNumber, recordChange, type AuthUser, type SqlExecutor } from '@tms/common';
 import { z } from 'zod';
 import type { BankAccount, Consent, Prisma } from '../generated/prisma/client';
+import { StudentClient } from '../invoices/student.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BankCipher } from './bank-cipher';
 
@@ -48,7 +49,10 @@ const consentView = (c: Consent) => ({
 export class BankAccountsService {
   private readonly cipher = BankCipher.fromEnv();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly students: StudentClient,
+  ) {}
 
   private requireCipher(): BankCipher {
     if (!this.cipher) {
@@ -175,11 +179,15 @@ export class BankAccountsService {
 
   /**
    * GET /billing/bank-accounts (Tutor, Admin): Payers' accounts, for refunds. The full
-   * number only while the Payer's consent is active; masked after withdrawal.
+   * number only while the Payer's consent is active; masked after withdrawal. A Tutor gets only
+   * the Payers of their own Students; when that cannot be checked, nothing is shown (503).
    */
-  async payerAccounts() {
+  async payerAccounts(actor: AuthUser) {
     const rows = await this.prisma.bankAccount.findMany({
-      where: { ownerRole: { in: ['PARENT', 'STUDENT'] } },
+      where: {
+        ownerRole: { in: ['PARENT', 'STUDENT'] },
+        ...(actor.role !== 'ADMIN' && { ownerId: { in: await this.payersOf(actor.id) } }),
+      },
       include: { consent: true },
       orderBy: { updatedAt: 'desc' },
     });
@@ -194,6 +202,14 @@ export class BankAccountsService {
       status: r.maskedAt ? ('MASKED' as const) : ('ACTIVE' as const),
       consent: consentView(r.consent),
     }));
+  }
+
+  private async payersOf(tutorId: string): Promise<string[]> {
+    try {
+      return await this.students.payersOf(tutorId);
+    } catch {
+      throw new ServiceUnavailableException('student service unavailable; try again shortly');
+    }
   }
 
   /** VietQR target: the Tutor's own account while their consent is active, else undefined. */

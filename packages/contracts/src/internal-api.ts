@@ -74,3 +74,14 @@ export const InternalStudentAccessResponse = z.object({
   isPayer: z.boolean().default(false),
 });
 export type InternalStudentAccessResponse = z.infer<typeof InternalStudentAccessResponse>;
+
+/**
+ * student-service `GET /internal/tutors/{id}/payers`: the users who settle the Invoices of this
+ * Tutor's Students (BR-ST-05), so billing-service shows a Tutor only their own Payers' bank
+ * details (ADR-0006).
+ */
+export const InternalTutorPayersResponse = z.object({
+  tutorId: Id,
+  userIds: z.array(Id),
+});
+export type InternalTutorPayersResponse = z.infer<typeof InternalTutorPayersResponse>;

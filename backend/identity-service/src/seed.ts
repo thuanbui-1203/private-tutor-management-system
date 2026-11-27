@@ -10,9 +10,15 @@ import { FirebaseAuthService } from './firebase/firebase-auth.service';
 import { PrismaService } from './prisma/prisma.service';
 
 const email = (process.env.SEED_ADMIN_EMAIL ?? 'admin@tms.local').toLowerCase();
-const password = process.env.SEED_ADMIN_PASSWORD ?? 'Admin@123';
+/** No default on a real project: this repo is public, so a default password is a known one. */
+const password =
+  process.env.SEED_ADMIN_PASSWORD ||
+  (process.env.FIREBASE_AUTH_EMULATOR_HOST ? 'Admin@123' : undefined);
 
 async function main(): Promise<void> {
+  if (!password) {
+    throw new Error('set SEED_ADMIN_PASSWORD (there is no default on a real Firebase project)');
+  }
   const firebase = new FirebaseAuthService();
   const prisma = new PrismaService();
   try {
