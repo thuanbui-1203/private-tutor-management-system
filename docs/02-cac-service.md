@@ -15,6 +15,7 @@
 | 6 | `billing-service` | 3006 | PostgreSQL `billing_db` | Hóa đơn, thanh toán, công nợ | ✔ |
 | 7 | `notification-service` | 3007 | PostgreSQL `notification_db` + Redis | Gửi email, SMS, Zalo, push | Tùy chọn (BR-SYS-03) |
 | 8 | `audit-service` | 3008 | PostgreSQL `audit_db` | Nhật ký kiểm toán: Access record, tra Change record ([ADR-0005](adr/0005-audit-log.md)) | ✔ |
+| 9 | `tutor-service` | 3009 | PostgreSQL `tutor_db` + Firebase Realtime Database (file) | Hồ sơ gia sư, minh chứng, Admin xác minh (§9c) | ✔ |
 
 **Hạ tầng dùng chung:**
 
@@ -274,6 +275,29 @@ Nhật ký kiểm toán ([ADR-0005](adr/0005-audit-log.md)). Chỉ Admin truy c�
 | GET | `/audit/changes?correlationId=&entityId=&actorId=&from=&to=&limit=` | Change record của mọi service, gộp theo thời gian; `unavailable` liệt kê service không trả lời | ADMIN |
 
 **Nhận:** Access record trên exchange `tms.audit`, routing key `access.recorded`, queue `audit.access-recorded` (bản ghi sai hợp đồng vào `audit.dlq`). Lưu theo `id` nên nhận trùng không tạo dòng mới.
+
+---
+
+## 9c. Tutor Service
+
+Hồ sơ gia sư và việc xác minh ([docs/07](07-gia-su-spec.md) §2). Cổng 3009, PostgreSQL `tutor_db`; nội dung file nằm ở Firebase Realtime Database (§5).
+
+| Method | Endpoint | Mô tả | Quyền |
+|---|---|---|---|
+| GET / PUT | `/tutors/me` | Hồ sơ của mình (lần đầu tạo bản `DRAFT`). PUT thay cả danh sách môn, khu vực, giờ rảnh; môn đã duyệt giữ trạng thái, môn mới `PENDING`. Đổi loại, tên, trường khi đã `VERIFIED` thì hồ sơ về `SUBMITTED` | TUTOR, ADMIN |
+| POST | `/tutors/me/credentials` | Minh chứng kèm file (base64 trong JSON): PDF / PNG / JPEG theo byte đầu, tối đa 5 MB (413), kho đầy 507 | TUTOR, ADMIN |
+| DELETE | `/tutors/me/credentials/{id}` | Xóa minh chứng và nội dung file | TUTOR, ADMIN |
+| GET | `/tutors/me/credentials/{id}/file` | Tải file (attachment) | Chủ hồ sơ |
+| POST | `/tutors/me/submit` | Gửi duyệt; thiếu gì thì 422 kèm `missing` (BR-TU-03) | TUTOR, ADMIN |
+| GET | `/tutors?status=&waiting=true` | Danh sách để duyệt | ADMIN |
+| GET | `/tutors/{id}`, `/tutors/{id}/credentials/{cid}/file` | Hồ sơ kèm lịch sử duyệt; file minh chứng | ADMIN |
+| POST | `/tutors/{id}/review` | `VERIFY`, `NEEDS_CHANGES`, `REJECT`, `SUSPEND`, `REINSTATE`, kèm quyết định từng minh chứng và môn; không ai duyệt hồ sơ của chính mình | ADMIN |
+
+**Trạng thái:** `DRAFT → SUBMITTED → VERIFIED | NEEDS_CHANGES | REJECTED`; `VERIFIED ↔ SUSPENDED`. Hồ sơ `SUBMITTED`, `REJECTED`, `SUSPENDED` không sửa được. Bảng `reviews` chỉ được thêm.
+
+**File:** port `FileStorage`; bản `RtdbFileStorage` chia phần 512 KB, mã hóa AES-256-GCM (`FILE_DATA_KEY`) trước khi ghi `/blobs/<2 ký tự đầu id>/<id>/<n>`. Mỗi file ghi `location`; đọc luôn ở đúng nơi đã ghi, nên thêm nơi lưu mới không phải chuyển file cũ. Tổng dung lượng giới hạn bởi `FILE_QUOTA_BYTES` (mặc định 700 MB). Job mỗi giờ dọn file tải dở.
+
+**Phát event:** `TutorStatusChanged`. **Biến môi trường:** `FIREBASE_DATABASE_URL`, `FIREBASE_DATABASE_EMULATOR_HOST` (emulator), `FILE_DATA_KEY`; thiếu thì không tải file lên được (503).
 
 ---
 

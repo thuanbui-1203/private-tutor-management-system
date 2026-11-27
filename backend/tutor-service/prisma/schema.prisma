@@ -1,0 +1,238 @@
+// tutor-service owns tutor_db (ADR-0003). No other service may connect to it.
+// Tutor profiles and their verification (docs/07-gia-su-spec.md §2).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Outbox (docs/02 §1, @tms/common). Same DDL as packages/common/sql/messaging.sql.
+model OutboxEvent {
+  id          String    @id @db.Uuid
+  eventType   String    @map("event_type")
+  routingKey  String    @map("routing_key")
+  payload     Json
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+
+  @@index([publishedAt, createdAt])
+  @@map("outbox_events")
+}
+
+/// Events this service has already handled (idempotent consumer, @tms/common).
+model ProcessedEvent {
+  eventId     String   @id @map("event_id") @db.Uuid
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+
+  @@map("processed_events")
+}
+
+/// Change records (ADR-0005). Insert-only. Same DDL as packages/common/sql/audit.sql.
+model AuditLog {
+  id            String   @id @db.Uuid
+  occurredAt    DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  correlationId String?  @map("correlation_id") @db.Uuid
+  actorId       String?  @map("actor_id") @db.Uuid
+  actorRole     String   @map("actor_role")
+  action        String
+  entityType    String   @map("entity_type")
+  entityId      String   @map("entity_id")
+  changes       Json
+
+  @@index([correlationId])
+  @@index([entityId, occurredAt])
+  @@index([actorId, occurredAt])
+  @@index([occurredAt])
+  @@map("audit_log")
+}
+
+enum TutorKind {
+  STUDENT
+  TEACHER
+  GRADUATE
+}
+
+enum ProfileStatus {
+  DRAFT
+  SUBMITTED
+  NEEDS_CHANGES
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+enum ItemStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum CredentialKind {
+  STUDENT_CARD
+  DEGREE
+  CERTIFICATE
+  TRANSCRIPT
+}
+
+enum AreaKind {
+  LOCAL
+  ONLINE
+  ABROAD
+}
+
+/// One per Tutor (`tutorId` = Identity users.id), created at the first visit.
+model TutorProfile {
+  tutorId             String         @id @map("tutor_id") @db.Uuid
+  kind                TutorKind?
+  displayName         String?        @map("display_name") @db.VarChar(100)
+  bio                 String?        @db.VarChar(2000)
+  /// University or school the Tutor studies or studied at, or teaches at.
+  school              String?        @db.VarChar(200)
+  /// ISO 3166-1 alpha-2 of the school.
+  schoolCountry       String?        @map("school_country") @db.Char(2)
+  /// TEACHER (BR-TU-03): told the principal, and teaches none of their own assigned pupils.
+  reportedToPrincipal Boolean        @default(false) @map("reported_to_principal")
+  noOwnPupils         Boolean        @default(false) @map("no_own_pupils")
+  gpa                 Decimal?       @db.Decimal(4, 2)
+  gpaScale            Decimal?       @map("gpa_scale") @db.Decimal(4, 2)
+  transcriptPublic    Boolean        @default(false) @map("transcript_public")
+  status              ProfileStatus  @default(DRAFT)
+  submittedAt         DateTime?      @map("submitted_at") @db.Timestamptz(6)
+  verifiedAt          DateTime?      @map("verified_at") @db.Timestamptz(6)
+  createdAt           DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  credentials         Credential[]
+  subjects            TutorSubject[]
+  areas               ServiceArea[]
+  availability        Availability[]
+  reviews             Review[]
+
+  @@index([status, submittedAt])
+  @@map("tutor_profiles")
+}
+
+/// A degree, certificate, student card or transcript, with its file. Reviewed one by one.
+model Credential {
+  id         String         @id @default(uuid()) @db.Uuid
+  tutorId    String         @map("tutor_id") @db.Uuid
+  profile    TutorProfile   @relation(fields: [tutorId], references: [tutorId])
+  kind       CredentialKind
+  title      String         @db.VarChar(200)
+  issuer     String         @db.VarChar(200)
+  country    String         @db.Char(2)
+  /// Personal: shown only to the owner and Admins.
+  number     String?        @db.VarChar(100)
+  issuedOn   DateTime?      @map("issued_on") @db.Date
+  expiresOn  DateTime?      @map("expires_on") @db.Date
+  fileId     String?        @unique @map("file_id") @db.Uuid
+  file       StoredFile?    @relation(fields: [fileId], references: [id])
+  status     ItemStatus     @default(PENDING)
+  reviewNote String?        @map("review_note") @db.VarChar(500)
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tutorId])
+  @@map("credentials")
+}
+
+model TutorSubject {
+  id           String       @id @default(uuid()) @db.Uuid
+  tutorId      String       @map("tutor_id") @db.Uuid
+  profile      TutorProfile @relation(fields: [tutorId], references: [tutorId])
+  subject      String       @db.VarChar(50)
+  /// School grades 1–12; null = not tied to a grade (adults, languages...).
+  gradeFrom    Int?         @map("grade_from") @db.SmallInt
+  gradeTo      Int?         @map("grade_to") @db.SmallInt
+  /// Suggested fee per session, VND.
+  suggestedFee Int?         @map("suggested_fee")
+  status       ItemStatus   @default(PENDING)
+  reviewNote   String?      @map("review_note") @db.VarChar(500)
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([tutorId, subject, gradeFrom, gradeTo])
+  @@index([subject, status])
+  @@map("tutor_subjects")
+}
+
+model ServiceArea {
+  id           String       @id @default(uuid()) @db.Uuid
+  tutorId      String       @map("tutor_id") @db.Uuid
+  profile      TutorProfile @relation(fields: [tutorId], references: [tutorId])
+  kind         AreaKind
+  /// LOCAL: Vietnamese province and ward codes (provinces.open-api.vn v2).
+  provinceCode Int?         @map("province_code")
+  wardCode     Int?         @map("ward_code")
+  /// ABROAD: ISO 3166-1 alpha-2, city, IANA time zone.
+  country      String?      @db.Char(2)
+  city         String?      @db.VarChar(100)
+  timezone     String?      @db.VarChar(50)
+
+  @@index([provinceCode, wardCode])
+  @@map("service_areas")
+}
+
+model Availability {
+  id        String       @id @default(uuid()) @db.Uuid
+  tutorId   String       @map("tutor_id") @db.Uuid
+  profile   TutorProfile @relation(fields: [tutorId], references: [tutorId])
+  /// ISO weekday: 1 = Monday … 7 = Sunday.
+  weekday   Int          @db.SmallInt
+  startTime String       @map("start_time") @db.Char(5)
+  endTime   String       @map("end_time") @db.Char(5)
+  timezone  String       @default("Asia/Ho_Chi_Minh") @db.VarChar(50)
+
+  @@map("availabilities")
+}
+
+enum Decision {
+  VERIFY
+  NEEDS_CHANGES
+  REJECT
+  SUSPEND
+  REINSTATE
+}
+
+/// Every Admin decision on a profile, kept as evidence (insert-only, like audit_log).
+model Review {
+  id         String       @id @default(uuid()) @db.Uuid
+  tutorId    String       @map("tutor_id") @db.Uuid
+  profile    TutorProfile @relation(fields: [tutorId], references: [tutorId])
+  reviewerId String       @map("reviewer_id") @db.Uuid
+  decision   Decision
+  reason     String?      @db.VarChar(1000)
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([tutorId, createdAt])
+  @@map("reviews")
+}
+
+enum FileStatus {
+  UPLOADING
+  READY
+}
+
+/// A file's metadata. Its content lives in the FileStorage named by `location` (docs/07 §5).
+model StoredFile {
+  id         String      @id @default(uuid()) @db.Uuid
+  ownerId    String      @map("owner_id") @db.Uuid
+  name       String      @db.VarChar(200)
+  mime       String      @db.VarChar(100)
+  size       Int
+  sha256     String      @db.Char(64)
+  /// `<backend>:<instance>`, e.g. `rtdb:default`; reads always go where the file was written.
+  location   String      @db.VarChar(100)
+  chunks     Int
+  keyVersion String      @map("key_version") @db.VarChar(10)
+  status     FileStatus  @default(UPLOADING)
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  credential Credential?
+
+  @@index([status, createdAt])
+  @@index([ownerId])
+  @@map("stored_files")
+}

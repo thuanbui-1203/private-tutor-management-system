@@ -255,4 +255,6 @@ Sửa `prometheus.yml` xong thì nạp lại không cần restart: `curl -X POST
 | Hóa đơn không cập nhật sau khi điểm danh | Billing chưa nhận event | Xem queue trong RabbitMQ UI; kiểm tra DLQ `billing.dlq` |
 | `exec format error` / `\r` trong script | File `.sh` bị đổi line ending thành CRLF trên Windows | `git config core.autocrlf input`, chuyển file về LF |
 | audit-service không khởi động, log báo `role "audit" does not exist` | Volume PostgreSQL tạo trước khi có audit-service (`init.sql` chỉ chạy với volume rỗng) | `docker compose exec -T postgres psql -U tms -d postgres < infra/postgres/add-audit-db.sql` rồi `pnpm migrate:all` |
+| tutor-service không khởi động, log báo `role "tutor" does not exist` | Volume PostgreSQL tạo trước khi có tutor-service | `docker compose exec -T postgres psql -U tms -d postgres < infra/postgres/add-tutor-db.sql` rồi `pnpm migrate:all` |
+| Tải minh chứng báo 503 | Chưa cấu hình nơi lưu file | Đặt `FILE_DATA_KEY` (`pnpm setup:env`) và `FIREBASE_DATABASE_URL`; khi dùng emulator thêm `FIREBASE_DATABASE_EMULATOR_HOST` (docs/02 §9c) |
 | Docker chạy chậm, hết RAM | Quá nhiều container | Tăng RAM trong Docker Desktop, hoặc chỉ bật các service cần thiết |

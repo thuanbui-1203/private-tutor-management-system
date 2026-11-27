@@ -239,7 +239,25 @@ services:
       CLASS_SERVICE_URL: http://class-service:3003
       SCHEDULE_SERVICE_URL: http://schedule-service:3004
       BILLING_SERVICE_URL: http://billing-service:3006
+      TUTOR_SERVICE_URL: http://tutor-service:3009
     ports: ['3008:3008']
+
+  # Tutor profiles and their verification (docs/07 §2). Files go to Firebase Realtime Database
+  # (docs/07 §5): FIREBASE_DATABASE_URL, plus FIREBASE_DATABASE_EMULATOR_HOST for the emulator.
+  tutor-service:
+    <<: [*backend, *firebase-key]
+    build: { context: ., dockerfile: backend/tutor-service/Dockerfile }
+    environment:
+      <<: *common-env
+      PORT: '3009'
+      DATABASE_URL: ${TUTOR_DB_URL}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS}
+      FIREBASE_DATABASE_URL: ${FIREBASE_DATABASE_URL:-}
+      FIREBASE_DATABASE_EMULATOR_HOST: ${FIREBASE_DATABASE_EMULATOR_HOST:-}
+      # 32 random bytes, base64: encrypts stored files. Empty = no uploads (503).
+      FILE_DATA_KEY: ${FILE_DATA_KEY:-}
+    ports: ['3009:3009']
 
   # academic-service (:3005, MongoDB) and notification-service (:3007) are added
   # only if time allows (BR-SYS-03).

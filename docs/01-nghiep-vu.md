@@ -179,6 +179,7 @@
 | `InvoiceIssued` | `invoice.issued` | Billing | invoiceId, kind, studentId, enrollmentId?, period, total, dueDate | Notification |
 | `PaymentReceived` | `payment.received` | Billing | invoiceId, invoiceKind, enrollmentId?, amount, method, invoiceStatus | Class (kích hoạt ghi danh `AWAITING_PAYMENT`), Notification |
 | `InvoiceOverdue` | `invoice.overdue` | Billing | invoiceId, daysOverdue | Notification |
+| `TutorStatusChanged` | `tutor.status-changed` | Tutor | tutorId, from, to |  |
 
 Nguồn chuẩn của bảng này là package `@tms/contracts` (`packages/contracts`): mỗi event có kiểu dữ liệu, routing key và bộ kiểm tra (zod). Một test đọc bảng này và báo lỗi nếu hai bên lệch nhau, nên khi đổi event phải sửa cả hai trong cùng một PR.
 

@@ -24,7 +24,8 @@ const dotenv = Object.fromEntries(
     .filter(Boolean)
     .map(([, k, v]) => [k, v]),
 );
-const db = (key) => dotenv[key].replace('@postgres:5432', '@127.0.0.1:25432');
+const DEFAULT_DB = { TUTOR_DB_URL: 'postgresql://tutor:tutor@postgres:5432/tutor_db' };
+const db = (key) => (dotenv[key] ?? DEFAULT_DB[key]).replace('@postgres:5432', '@127.0.0.1:25432');
 const onHost = (port) => `http://127.0.0.1:${port}`;
 
 const hooks = { E2E_HOOKS: 'true' };
@@ -80,6 +81,17 @@ const APPS = {
       CLASS_SERVICE_URL: onHost(23003),
       SCHEDULE_SERVICE_URL: onHost(23004),
       BILLING_SERVICE_URL: onHost(23006),
+      TUTOR_SERVICE_URL: onHost(23009),
+    },
+  },
+  // The same settings as docker-compose.e2e.yml.
+  tutor: {
+    port: 23009,
+    env: {
+      DATABASE_URL: db('TUTOR_DB_URL'),
+      FIREBASE_DATABASE_URL: 'http://127.0.0.1:29002?ns=demo-tms-default-rtdb',
+      FIREBASE_DATABASE_EMULATOR_HOST: '127.0.0.1:29002',
+      FILE_DATA_KEY: 'ZTJlLWZpbGUta2V5LW9ubHktMzItYnl0ZXMtbG9uZyE=',
     },
   },
   gateway: {
@@ -94,6 +106,7 @@ const APPS = {
       SCHEDULE_SERVICE_URL: onHost(23004),
       BILLING_SERVICE_URL: onHost(23006),
       AUDIT_SERVICE_URL: onHost(23008),
+      TUTOR_SERVICE_URL: onHost(23009),
     },
   },
 };
@@ -118,8 +131,10 @@ const sh = (cmd, args, env = {}) =>
     env: { ...process.env, COMPOSE_BAKE: 'false', ...env },
     shell: process.platform === 'win32' && cmd === 'pnpm',
   }).status ?? 1;
+// Through `pnpm compose` (scripts/compose.mjs), as e2e.mjs does: started straight from Git Bash,
+// Compose's Bake builder asks for an extra `--allow=fs.read=<Dockerfile>` and the build stops.
 const compose = (...a) =>
-  sh('docker', [
+  sh('pnpm', [
     'compose',
     '-p',
     'tms-e2e',
@@ -188,6 +203,7 @@ await must(
 for (const name of Object.keys(APPS)) {
   await must(sh('pnpm', ['--filter', `@tms/${dirOf(name)}`, 'build']), `building ${name}`);
 }
+await must(compose('build', 'firebase-emulator'), 'building the emulator');
 await must(
   compose('up', '-d', '--wait', 'postgres', 'rabbitmq', 'redis', 'firebase-emulator'),
   'starting infrastructure',

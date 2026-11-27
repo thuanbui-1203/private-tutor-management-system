@@ -43,6 +43,7 @@ services:
   schedule-service: { <<: *prod, ports: !reset [] }
   billing-service: { <<: *prod, ports: !reset [] }
   audit-service: { <<: *prod, ports: !reset [] }
+  tutor-service: { <<: *prod, ports: !reset [] }
   frontend: { <<: *prod, ports: !reset [] }
 
   # Cloudflare Tunnel, created from the CLI (docs/06-trien-khai-vps.md §4.2). infra/cloudflared/
