@@ -34,6 +34,7 @@ const APPS = [
   'schedule-service',
   'billing-service',
   'audit-service',
+  'tutor-service',
   'api-gateway',
 ];
 const DATABASES = {
@@ -43,6 +44,7 @@ const DATABASES = {
   schedule: 'SCHEDULE_DB_URL',
   billing: 'BILLING_DB_URL',
   audit: 'AUDIT_DB_URL',
+  tutor: 'TUTOR_DB_URL',
 };
 
 function run(cmd, cmdArgs, extraEnv = {}) {

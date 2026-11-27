@@ -33,5 +33,10 @@ CREATE ROLE audit LOGIN CREATEDB PASSWORD 'audit';
 CREATE DATABASE audit_db OWNER audit;
 REVOKE CONNECT ON DATABASE audit_db FROM PUBLIC;
 
+-- tutor-service (docs/07 §2). On an older data volume run infra/postgres/add-tutor-db.sql once.
+CREATE ROLE tutor LOGIN CREATEDB PASSWORD 'tutor';
+CREATE DATABASE tutor_db OWNER tutor;
+REVOKE CONNECT ON DATABASE tutor_db FROM PUBLIC;
+
 -- The default `postgres` database must not be a back door either.
 REVOKE CONNECT ON DATABASE postgres FROM PUBLIC;

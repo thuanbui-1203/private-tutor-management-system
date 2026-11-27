@@ -20,6 +20,8 @@ describe('gateway route table (docs/02 §2)', () => {
     ['GET', '/billing/payroll/runs', 'billing', 'role'],
     ['POST', '/billing/payroll/runs', 'billing', 'role'],
     ['POST', '/billing/sandbox/payments/tok', 'billing', 'public'],
+    ['GET', '/tutors/me', 'tutor', 'role'],
+    ['POST', '/tutors/1/review', 'tutor', 'role'],
   ])('%s %s → %s (%s)', (method, path, service, access) => {
     expect(resolveRoute(method, path)).toEqual({ kind: 'service', service, access });
   });

@@ -10,6 +10,7 @@ export function changeSources(env: NodeJS.ProcessEnv = process.env): Record<stri
     class: env.CLASS_SERVICE_URL ?? 'http://class-service:3003',
     schedule: env.SCHEDULE_SERVICE_URL ?? 'http://schedule-service:3004',
     billing: env.BILLING_SERVICE_URL ?? 'http://billing-service:3006',
+    tutor: env.TUTOR_SERVICE_URL ?? 'http://tutor-service:3009',
   };
 }
 

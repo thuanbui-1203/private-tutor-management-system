@@ -102,6 +102,31 @@ export const api = {
   delete: <T>(path: string) => request<T>('DELETE', path),
 };
 
+/** Downloads a protected file (an attachment) with the signed-in user's token, and saves it. */
+export async function downloadFile(path: string, fallbackName = 'tep-tin'): Promise<void> {
+  const token = await hooks.idToken();
+  let res: Response;
+  try {
+    res = await fetch(`${config.apiUrl}${path}`, {
+      headers: token ? { authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    throw new ApiError(0, 'unavailable', 'network error', null);
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new ApiError(res.status, kindOf(res.status), messageOf(body), body);
+  }
+  const name =
+    decodeURIComponent(
+      res.headers.get('content-disposition')?.match(/filename\*=UTF-8''([^;]+)/)?.[1] ?? '',
+    ) || fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 /** A Vietnamese sentence for an error, with the API's own detail for business rules. */
 export function describeError(err: unknown, byStatus?: Partial<Record<number, string>>): string {
   if (!(err instanceof ApiError)) return 'Đã có lỗi không mong muốn. Vui lòng thử lại.';

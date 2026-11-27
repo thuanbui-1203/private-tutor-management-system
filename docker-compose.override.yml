@@ -66,6 +66,14 @@ services:
       - ./backend/billing-service/prisma:/repo/backend/billing-service/prisma
       - /repo/backend/billing-service/src/generated
 
+  tutor-service:
+    <<: *dev-backend
+    command: sh -c "pnpm --filter @tms/tutor-service prisma:generate && pnpm --filter @tms/tutor-service dev"
+    volumes:
+      - ./backend/tutor-service/src:/repo/backend/tutor-service/src
+      - ./backend/tutor-service/prisma:/repo/backend/tutor-service/prisma
+      - /repo/backend/tutor-service/src/generated
+
   audit-service:
     <<: *dev-backend
     command: sh -c "pnpm --filter @tms/audit-service prisma:generate && pnpm --filter @tms/audit-service dev"

@@ -58,6 +58,16 @@ if (existsSync(frontendEnv)) {
   }
 }
 
+// Encrypts tutor-service files (docs/07 §5): generated once, never overwritten.
+{
+  const text = readFileSync(rootEnv, 'utf8');
+  if (/^FILE_DATA_KEY=[ \t]*$/m.test(text)) {
+    const key = randomBytes(32).toString('base64');
+    writeFileSync(rootEnv, text.replace(/^FILE_DATA_KEY=[ \t]*$/m, `FILE_DATA_KEY=${key}`));
+    console.log('Generated FILE_DATA_KEY in .env (keep it secret; do not change it later).');
+  }
+}
+
 // Signs payroll payment notices (docs/07 §6): generated once, never overwritten.
 {
   const text = readFileSync(rootEnv, 'utf8');

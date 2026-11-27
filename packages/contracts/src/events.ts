@@ -22,8 +22,19 @@ export const ServiceName = z.enum([
   'academic',
   'billing',
   'notification',
+  'tutor',
 ]);
 export type ServiceName = z.infer<typeof ServiceName>;
+
+/** A Tutor profile's verification status (tutor-service, docs/07 §2). */
+export const TutorProfileStatus = z.enum([
+  'DRAFT',
+  'SUBMITTED',
+  'NEEDS_CHANGES',
+  'VERIFIED',
+  'REJECTED',
+  'SUSPENDED',
+]);
 
 interface EventDefinition<D extends z.ZodType> {
   /** `<aggregate>.<action>` on exchange `tms.events` (docs/02-cac-service.md §10). */
@@ -280,6 +291,15 @@ export const EVENT_CATALOG = {
     producer: 'billing',
     consumers: ['notification'],
     data: z.object({ invoiceId: Id, daysOverdue: z.number().int().positive() }),
+  }),
+  TutorStatusChanged: define({
+    routingKey: 'tutor.status-changed',
+    producer: 'tutor',
+    // Read later by class (BR-TU-01: only VERIFIED Tutors take Students) and billing (pay).
+    consumers: [],
+    data: z
+      .object({ tutorId: Id, from: TutorProfileStatus, to: TutorProfileStatus })
+      .refine((d) => d.from !== d.to, { message: 'from and to must differ' }),
   }),
 } as const;
 

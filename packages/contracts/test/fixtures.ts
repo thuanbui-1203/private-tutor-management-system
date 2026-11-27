@@ -125,6 +125,7 @@ export const validData: { [K in EventType]: EventData<K> } = {
     invoiceStatus: 'PARTIALLY_PAID',
   },
   InvoiceOverdue: { invoiceId: ids.invoice, daysOverdue: 5 },
+  TutorStatusChanged: { tutorId: ids.tutor, from: 'SUBMITTED', to: 'VERIFIED' },
 };
 
 /** One payload per event that breaks its contract, with the reason. */
@@ -209,5 +210,9 @@ export const invalidData: { [K in EventType]: { reason: string; data: unknown } 
   InvoiceOverdue: {
     reason: 'daysOverdue is zero',
     data: { ...validData.InvoiceOverdue, daysOverdue: 0 },
+  },
+  TutorStatusChanged: {
+    reason: 'from and to are the same',
+    data: { ...validData.TutorStatusChanged, from: 'VERIFIED' },
   },
 };
