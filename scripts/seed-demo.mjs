@@ -245,7 +245,11 @@ async function newTutor(t, admin) {
     displayName: t.name,
     school: 'Đại học Sư phạm Hà Nội',
     schoolCountry: 'VN',
-    subjects: t.classes.map((c) => ({ subject: c.subject, gradeFrom: 6, gradeTo: 12 })),
+    subjects: [...new Set(t.classes.map((c) => c.subject))].map((subject) => ({
+      subject,
+      gradeFrom: 6,
+      gradeTo: 12,
+    })),
     areas: [{ kind: 'LOCAL', provinceCode: 1, wardCode: null }, { kind: 'ONLINE' }],
     availability: [{ weekday: 2, startTime: '17:00', endTime: '21:00' }],
   });

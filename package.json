@@ -19,6 +19,7 @@
     "emulators": "firebase emulators:start --only auth,database --project demo-tms --import .emulator-data --export-on-exit",
     "seed": "pnpm -r --if-present seed",
     "seed:demo": "node scripts/seed-demo.mjs",
+    "dev:host": "node scripts/dev-host.mjs",
     "test:e2e": "node scripts/e2e.mjs",
     "test:e2e:host": "node scripts/e2e-host.mjs",
     "test:e2e:down": "docker compose -p tms-e2e -f docker-compose.yml -f docker-compose.e2e.yml down -v"
